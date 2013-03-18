@@ -1,4 +1,7 @@
+module Normalization where
+
 import qualified Data.Map as M
+import Test.HUnit
 
 infixl 5 `App`
 data Term = Var String | Lam String Term (String -> Term) | App Term Term | Zero
@@ -7,6 +10,51 @@ data Term = Var String | Lam String Term (String -> Term) | App Term Term | Zero
 
 arr :: Term -> Term -> Term
 arr a b = Pi "_" a (\_ -> b)
+
+freeVars :: Term -> M.Map String ()
+freeVars Zero = M.empty
+freeVars Suc = M.empty
+freeVars Top = M.empty
+freeVars Bot = M.empty
+freeVars Unit = M.empty
+freeVars Nat = M.empty
+freeVars (Var "_") = M.empty
+freeVars (Var x) = M.singleton x ()
+freeVars (Lam _ t f) = freeVars t `M.union` freeVars (f "_")
+freeVars (Pi _ t f) = freeVars t `M.union` freeVars (f "_")
+freeVars (App t s) = freeVars t `M.union` freeVars s
+freeVars (Id t s) = freeVars t `M.union` freeVars s
+freeVars (Refl t) = freeVars t
+freeVars (Repl t) = freeVars t
+freeVars (Cong t) = freeVars t
+freeVars (R _ t z s n) =
+    freeVars (t (Var "_")) `M.union` freeVars z `M.union` freeVars s `M.union` freeVars n
+
+instance Eq Term where
+    t == t' = eq (freeVars t `M.union` freeVars t') t t'
+      where
+        eq _ Zero Zero = True
+        eq _ Suc Suc = True
+        eq _ Top Top = True
+        eq _ Bot Bot = True
+        eq _ Unit Unit = True
+        eq _ Nat Nat = True
+        eq _ (Var x) (Var x') = x == x'
+        eq m (Refl t) (Refl t') = eq m t t'
+        eq m (Repl t) (Repl t') = eq m t t'
+        eq m (Cong t) (Cong t') = eq m t t'
+        eq m (Id t s) (Id t' s') = eq m t t' && eq m s s'
+        eq m (App t s) (App t' s') = eq m t t' && eq m s s'
+        eq m (Lam _ t f) (Lam x t' f') = if M.member x m
+            then eq m (Lam x t f) (Lam (x ++ "'") t' f')
+            else eq m t t' && eq (M.insert x () m) (f x) (f x)
+        eq m (Pi _ t f) (Pi x t' f') = if M.member x m
+            then eq m (Pi x t f) (Pi (x ++ "'") t' f')
+            else eq m t t' && eq (M.insert x () m) (f x) (f x)
+        eq m (R _ t z s n) (R x t' z' s' n') = if M.member x m
+            then eq m (R x t z s n) (R (x ++ "'") t' z' s' n')
+            else and [eq (M.insert x () m) (t (Var x)) (t' (Var x)), eq m z z', eq m s s', eq m n n']
+        eq _ _ _ = False
 
 {-
 typeOf :: M.Map String Term -> Term -> Maybe Term
@@ -83,7 +131,7 @@ subst (\X -> X) N-Z-iso 0
 
 app :: Ctx -> Base -> Sem -> Base
 app _ (Fun _ _ f) x = f x 0
-app m (Tm t) x = Tm $ t `App` reify (x 0) m
+app c (Tm t) x = Tm $ t `App` reify (x 0) c
 
 rec :: Ctx -> String -> (Term -> Term) -> Base -> Base -> Base -> Sem
 rec _ _ _ _ _ _ n | n < 0 = error "ERROR: rec"
@@ -94,11 +142,6 @@ rec m x t z s (Tm (Refl p)) n | n > 0 = Tm $ Refl $ reify (rec m x t z s (Tm p) 
 rec m x t z s (Tm e) n = Tm $ genCong (Lam "e" Nat $ R x t (reify z m) (reify s m) . Var) n `App` e
     -- TODO: cong-dep
 
-genRefl :: Term -> Integer -> Term
-genRefl c n | n < 0 = error "ERROR: genRefl"
-genRefl c 0 = c
-genRefl c n = Refl (genRefl c (n - 1))
-
 genRefl' :: Base -> Integer -> Base
 genRefl' (Tm t) n = Tm (genRefl t n)
 genRefl' (Fun x t f) n = Fun x t (\s k -> genRefl' (f s k) n)
@@ -107,6 +150,11 @@ genCong :: Term -> Integer -> Term
 genCong c n | n < 0 = error "ERROR: genCong"
 genCong c 0 = c
 genCong c n = Cong $ genCong c (n - 1)
+
+genRefl :: Term -> Integer -> Term
+genRefl c n | n < 0 = error "ERROR: genRefl"
+genRefl c 0 = c
+genRefl c n = Refl (genRefl c (n - 1))
 
 eval :: Term -> Ctx -> Sem
 eval _ _ n | n < 0 = error "ERROR: eval"
@@ -142,9 +190,7 @@ nat n = Suc `App` nat (n - 1)
 
 reify :: Base -> Ctx -> Term
 reify (Tm t) _ = t
-reify (Fun x t f) m = if M.member x m
-    then reify (Fun (x ++ "'") t f) m
-    else Lam x t $ \x -> let s = f (Tm . genRefl (Var x)) 0 in reify s (M.insert x (const s) m)
+reify (Fun x t f) c = Lam x t $ \x -> let s = f (Tm . genRefl (Var x)) 0 in reify s (M.insert x (const s) c)
 
 normCtx :: Ctx -> Term -> Term
 normCtx c t = reify (eval t c 0) c
@@ -152,11 +198,13 @@ normCtx c t = reify (eval t c 0) c
 norm :: Term -> Term
 norm = normCtx M.empty
 
+---------------------------------------------------------------------------------------------------
+
 omega = Lam "x" Nat $ \x -> Var x `App` Var x
-one = Lam "x" (Nat `arr` Nat) $ \x -> Lam "y" Nat $ \y -> Var x `App` Var y
-i = Lam "x" Nat Var
+one t = Lam "x" (t `arr` t) $ \x -> Lam "y" t $ \y -> Var x `App` Var y
+i t = Lam "x" t Var
 k = Lam "x" Nat $ \x -> Lam "y" Nat $ \y -> Var x
-test2 = App one one
+alphaTest = App (one $ Nat `arr` Nat) (one Nat)
 cR t = R "_" (\_ -> t)
 plus = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat (Var x) (k `App` Suc) . Var
     -- \x y. R x (K suc) y
@@ -165,7 +213,25 @@ mul = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat Zero (k `App` (plus `App` Var x))
 exp' = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat (nat 1) (k `App` (mul `App` Var x)) . Var
     -- \x y. R 1 (K (mul x)) y
 
-main = do
-    print (norm test2)
-    print $ norm $ exp' `App` nat 3 `App` nat 4
-    print $ norm $ Cong (plus `App` nat 0) `App` Refl (nat 0)
+main = fmap (\_ -> ()) $ runTestTT $ test
+    $    label "alpha conversion"
+    [ norm alphaTest ~?= one Nat
+    ] ++ label "plus"
+    [ norm (plus `App` nat 3 `App` nat 4) ~?= nat 7
+    , norm (plus `App` nat 4 `App` nat 3) ~?= nat 7
+    ] ++ label "mul"
+    [ norm (mul `App` nat 3 `App` nat 4) ~?= nat 12
+    , norm (mul `App` nat 4 `App` nat 3) ~?= nat 12
+    ] ++ label "exp"
+    [ norm (exp' `App` nat 3 `App` nat 4) ~?= nat 81
+    , norm (exp' `App` nat 4 `App` nat 3) ~?= nat 64
+    ] ++ label "cong"
+    [ norm (Cong (i Nat) `App` nat 7) ~?= nat 7
+    , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
+    , norm (Cong (plus `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong (plus `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
+    ]
+  where
+    label :: String -> [Test] -> [Test]
+    label l = map (\(i,t) -> TestLabel (l ++ " [" ++ show i ++ "]") t) . zip [1..]
