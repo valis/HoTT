@@ -109,8 +109,9 @@ instance Show Term where
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
         show' par (Cong t) = addParens par $ "cong " ++ show' True t
 
--- data BaseMap = DegMap Integer | FaceMap Integer
--- type SimpMap = [BaseMap]
+-- data D = Ld | Rd | Ud
+-- type GlobMap = [D]
+-- data Base = Tm Term | Fun String Term (Integer -> GlobMap -> Base -> Base)
 data Base = Tm Term | Fun String Term (Sem -> Sem)
 type Sem = Integer -> Base
 type Ctx = M.Map String Sem
@@ -127,6 +128,10 @@ subst c p e = error "TODO"
 sym {a} p = subst (\c -> c = a) p (refl a) = repl (cong (\c -> c = a) p) (refl a)
 
 subst (\X -> X) N-Z-iso 0
+
+action :: GlobMap -> Base -> Base
+action a (Fun x t f) = Fun x t $ \z b -> f z (b ++ a)
+action _ t = t
 -}
 
 app :: Ctx -> Base -> Sem -> Base
@@ -157,7 +162,6 @@ genRefl c 0 = c
 genRefl c n = Refl (genRefl c (n - 1))
 
 eval :: Term -> Ctx -> Sem
-eval _ _ n | n < 0 = error "ERROR: eval"
 eval Suc _ n = Fun "n" Nat $ \t k -> case t k of
     Tm t' -> Tm $ genRefl (genCong Suc k `App` t') n
     _ -> error "ERROR"
@@ -169,9 +173,11 @@ eval (App a b) c n = app c (eval a c n) (eval b c)
 eval (Lam x t f) c n = if M.member x c
     then eval (Lam (x ++ "'") t f) c n
     else Fun x (normCtx c t) $ \s -> eval (f x) (M.insert x s c)
-eval (Cong t) c n = eval t c (n + 1) {- case eval t c 0 of
-    Fun x t' f -> Fun x t' $ \s k -> genRefl' (f (s . succ) (succ k)) n
-    _ -> error "ERROR" -}
+eval (Cong t) c n = case eval t c 0 of
+    Fun x t' f -> Fun x t' $ \s k -> genRefl' (f (\z -> s (z - 1)) (k + 1)) n
+    _ -> error "ERROR"
+eval (Refl t) c n | n < 0 = eval t c (n + 1)
+eval _ _ n | n < 0 = error "ERROR: eval"
 eval (Refl t) c n = Tm $ genRefl (Refl $ norm t) n
 eval Zero _ n = Tm (genRefl Zero n)
 eval Nat _ n = Tm (genRefl Nat n)
@@ -226,7 +232,7 @@ main = fmap (\_ -> ()) $ runTestTT $ test
     [ norm (exp' `App` nat 3 `App` nat 4) ~?= nat 81
     , norm (exp' `App` nat 4 `App` nat 3) ~?= nat 64
     ] ++ label "cong"
-    [ norm (Cong (i Nat) `App` nat 7) ~?= nat 7
+    [ norm (Cong (i Nat) `App` Var "x") ~?= Var "x"
     , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
     , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
     , norm (Cong (plus `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
