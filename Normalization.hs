@@ -2,6 +2,7 @@ module Normalization where
 
 import qualified Data.Map as M
 import Test.HUnit
+import Data.List
 
 infixl 5 `App`
 data Term = Var String | Lam String Term (String -> Term) | App Term Term | Zero
@@ -56,9 +57,10 @@ instance Eq Term where
             else and [eq (M.insert x () m) (t (Var x)) (t' (Var x)), eq m z z', eq m s s', eq m n n']
         eq _ _ _ = False
 
-{-
 typeOf :: M.Map String Term -> Term -> Maybe Term
 typeOf m (Var x) = M.lookup x m
+typeOf m (Refl x) = Just (Id x x)
+{-
 typeOf m (Lam x t f) = if M.member x m
     then typeOf (Lam (x ++ "'") t f) m
     else case typeOf (f x) (M.insert x t m) of
@@ -74,7 +76,6 @@ typeOf _ Zero = Just Nat
 typeOf _ Suc = Just (arr Nat Nat)
 typeOf _ (R t) = Just $ arr (App t Zero) $ arr (Pi "x" Nat $ \x -> arr (App t (Var x)) $ App t $ App Suc (Var x)) $ Pi "x" Nat (App t . Var)
 typeOf _ Unit = Just Top
-typeOf m (Refl x) = Just (Id x x)
 typeOf m (Repl _ _) = 
 typeOf m (Cong _ _)
 typeOf _ = Just Unit
@@ -109,12 +110,12 @@ instance Show Term where
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
         show' par (Cong t) = addParens par $ "cong " ++ show' True t
 
--- data D = Ld | Rd | Ud
--- type GlobMap = [D]
--- data Base = Tm Term | Fun String Term (Integer -> GlobMap -> Base -> Base)
-data Base = Tm Term | Fun String Term (Sem -> Sem)
-type Sem = Integer -> Base
-type Ctx = M.Map String Sem
+data D = Ld | Rd | Ud
+type GlobMap = [D]
+data Base = Tm Term | Fun String Term (Integer -> GlobMap -> Base -> Base)
+-- data Base = Tm Term | Fun String Term (Sem -> Sem)
+-- type Sem = Integer -> Base
+type Ctx = M.Map String Base
 
 {-
 subst :: Base -> Base -> Base -> Base
@@ -128,28 +129,35 @@ subst c p e = error "TODO"
 sym {a} p = subst (\c -> c = a) p (refl a) = repl (cong (\c -> c = a) p) (refl a)
 
 subst (\X -> X) N-Z-iso 0
+-}
 
 action :: GlobMap -> Base -> Base
 action a (Fun x t f) = Fun x t $ \z b -> f z (b ++ a)
-action _ t = t
--}
+action [] t = t
+action (Ud : a) (Tm t) = action a $ Tm (Refl t)
+action (d : a) (Tm t) = case (d, typeOf M.empty t) of
+    (Ld, Just (Id l r)) -> Tm l
+    (Rd, Just (Id l r)) -> Tm r
+    _ -> error "ERROR"
 
-app :: Ctx -> Base -> Sem -> Base
-app _ (Fun _ _ f) x = f x 0
-app c (Tm t) x = Tm $ t `App` reify (x 0) c
+leftMap :: Integer -> Base -> Base
+leftMap n = action (genericReplicate n Ld)
 
-rec :: Ctx -> String -> (Term -> Term) -> Base -> Base -> Base -> Sem
-rec _ _ _ _ _ _ n | n < 0 = error "ERROR: rec"
-rec _ _ _ _ _ (Fun _ _ _) _ = error "ERROR"
-rec m x t z s (Tm Zero) 0 = z
-rec m x t z s (Tm (App Suc p)) 0 = app m (app m s (Tm . genRefl p)) (rec m x t z s (Tm p))
-rec m x t z s (Tm (Refl p)) n | n > 0 = Tm $ Refl $ reify (rec m x t z s (Tm p) (n - 1)) m
-rec m x t z s (Tm e) n = Tm $ genCong (Lam "e" Nat $ R x t (reify z m) (reify s m) . Var) n `App` e
+app :: Integer -> Base -> Base -> Base
+app n (Fun _ _ f) x = f n [] x
+app n (Tm t) x = Tm $ t `App` reify n x
+
+rec :: Integer -> String -> (Term -> Term) -> Base -> Base -> Base -> Base
+rec 0 _ _ z _ (Tm Zero) = z
+rec 0 x t z s (Tm (App Suc p)) = app 0 (app 0 s (Tm p)) (rec 0 x t z s (Tm p))
+rec n x t z s (Tm (Refl p)) | n > 0 = Tm $ Refl $ reify n (rec (n - 1) x t z s (Tm p))
+rec n x t z s (Tm e) = Tm $ genCong (Lam "e" Nat $ R x t (reify 0 z) (reify 0 s) . Var) n `App` e
     -- TODO: cong-dep
+rec _ _ _ _ _ _ = error "ERROR"
 
 genRefl' :: Base -> Integer -> Base
 genRefl' (Tm t) n = Tm (genRefl t n)
-genRefl' (Fun x t f) n = Fun x t (\s k -> genRefl' (f s k) n)
+genRefl' (Fun x t f) n = Fun x t $ \k m s -> genRefl' (f k m s) n
 
 genCong :: Term -> Integer -> Term
 genCong c n | n < 0 = error "ERROR: genCong"
@@ -161,50 +169,51 @@ genRefl c n | n < 0 = error "ERROR: genRefl"
 genRefl c 0 = c
 genRefl c n = Refl (genRefl c (n - 1))
 
-eval :: Term -> Ctx -> Sem
-eval Suc _ n = Fun "n" Nat $ \t k -> case t k of
-    Tm t' -> Tm $ genRefl (genCong Suc k `App` t') n
-    _ -> error "ERROR"
-eval (R x t z s p) c n = if M.member x c
-    then eval (R (x ++ "'") t z s p) c n
-    else rec c x t (eval z c 0) (eval s c 0) (eval p c n) n
-eval v@(Var x) c n = maybe (Tm v) (\s -> s n) (M.lookup x c)
-eval (App a b) c n = app c (eval a c n) (eval b c)
-eval (Lam x t f) c n = if M.member x c
-    then eval (Lam (x ++ "'") t f) c n
-    else Fun x (normCtx c t) $ \s -> eval (f x) (M.insert x s c)
-eval (Cong t) c n = case eval t c 0 of
-    Fun x t' f -> Fun x t' $ \s k -> genRefl' (f (\z -> s (z - 1)) (k + 1)) n
-    _ -> error "ERROR"
-eval (Refl t) c n | n < 0 = eval t c (n + 1)
-eval _ _ n | n < 0 = error "ERROR: eval"
-eval (Refl t) c n = Tm $ genRefl (Refl $ norm t) n
-eval Zero _ n = Tm (genRefl Zero n)
-eval Nat _ n = Tm (genRefl Nat n)
-eval Top _ n = Tm (genRefl Top n)
-eval Bot _ n = Tm (genRefl Bot n)
-eval Unit _ n = Tm (genRefl Unit n)
-eval (Pi x t f) c n = if M.member x c
-    then eval (Pi (x ++ "'") t f) c n
-    else Tm $ genRefl (Pi x (normCtx c t) (normCtx c . f)) n
-eval (Id a b) c n = Tm $ genRefl (Id (normCtx c a) (normCtx c b)) n
+eval :: Term -> Integer -> Ctx -> Base
+eval Zero n _ = Tm (genRefl Zero n)
+eval Nat n _ = Tm (genRefl Nat n)
+eval Top n _ = Tm (genRefl Top n)
+eval Bot n _ = Tm (genRefl Bot n)
+eval Unit n _ = Tm (genRefl Unit n)
+eval Suc n _ = Fun "n" Nat $ \k _ t -> Tm (suc k t)
+  where
+    suc k _ | k < 0 = error "ERROR: suc"
+    suc k (Tm (Refl t)) = Refl $ suc (k - 1) (Tm t)
+    suc k (Tm e) = genCong Suc k `App` e
+    suc _ _ = error "ERROR"
+eval v@(Var x) n c = maybe (Tm v) (\s -> s) (M.lookup x c)
+eval (Refl t) n c = genRefl' (eval t n c) 1
+eval (App a b) n c = app n (eval a n c) (eval b n c)
+eval (Lam x t f) n c = if M.member x c
+    then eval (Lam (x ++ "'") t f) n c
+    else Fun x (normCtx n c t) $ \k m s -> eval (f x) k $ M.insert x s (M.map (action m) c)
+eval (Id a b) n c = Tm $ genRefl (Id (normCtx n c a) (normCtx n c b)) n
     -- TODO: check if 'a' and 'b' have function type
+eval (Pi x t f) n c = if M.member x c
+    then eval (Pi (x ++ "'") t f) n c
+    else Tm $ genRefl (Pi x (normCtx n c t) (normCtx n c . f)) n
+eval (Cong t) n c = case eval t n c of
+    Fun x t' f -> Fun x t' $ \k m -> f (k + 1) (Ud : m)
+    _ -> error "ERROR"
+eval (R x t z s p) n c = if M.member x c
+    then eval (R (x ++ "'") t z s p) n c
+    else rec n x t (leftMap n $ eval z n c) (leftMap n $ eval s n c) (eval p n c)
+
+reify :: Integer -> Base -> Term
+reify _ (Tm t) = t
+reify n (Fun x t f) = Lam x t $ \x -> reify n $ f n [] $ Tm (Var x)
+
+normCtx :: Integer -> Ctx -> Term -> Term
+normCtx n c t = reify n (eval t n c)
+
+norm :: Term -> Term
+norm = normCtx 0 M.empty
+
+---------------------------------------------------------------------------------------------------
 
 nat :: Integer -> Term
 nat 0 = Zero
 nat n = Suc `App` nat (n - 1)
-
-reify :: Base -> Ctx -> Term
-reify (Tm t) _ = t
-reify (Fun x t f) c = Lam x t $ \x -> let s = f (Tm . genRefl (Var x)) 0 in reify s (M.insert x (const s) c)
-
-normCtx :: Ctx -> Term -> Term
-normCtx c t = reify (eval t c 0) c
-
-norm :: Term -> Term
-norm = normCtx M.empty
-
----------------------------------------------------------------------------------------------------
 
 omega = Lam "x" Nat $ \x -> Var x `App` Var x
 one t = Lam "x" (t `arr` t) $ \x -> Lam "y" t $ \y -> Var x `App` Var y
@@ -233,7 +242,9 @@ main = fmap (\_ -> ()) $ runTestTT $ test
     , norm (exp' `App` nat 4 `App` nat 3) ~?= nat 64
     ] ++ label "cong"
     [ norm (Cong (i Nat) `App` Var "x") ~?= Var "x"
-    , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong (i Nat) `App` nat 7) ~?= nat 7
+    , norm (Cong (Lam "x" Nat $ \x -> (Lam "y" Nat $ cR Nat (Var x) (k `App` Suc) . Var) `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong (Lam "x" Nat $ \x -> cR Nat (Var x) (k `App` Suc) (nat 0)) `App` Refl (nat 0)) ~?= Refl (nat 0)
     , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
     , norm (Cong (plus `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
     , norm (Cong (plus `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
