@@ -14,23 +14,21 @@ arr :: Term -> Term -> Term
 arr a b = Pi (Lam "_" a b)
 
 instance Eq Term where
-    (==) = eq M.empty M.empty
-      where
-        eq _ _ Zero Zero = True
-        eq _ _ Suc Suc = True
-        eq _ _ Top Top = True
-        eq _ _ Bot Bot = True
-        eq _ _ Unit Unit = True
-        eq _ _ Nat Nat = True
-        eq m m' (Var x) (Var x') = M.lookup x m == M.lookup x' m'
-        eq m m' (Refl t) (Refl t') = eq m m' t t'
-        eq m m' (Cong t) (Cong t') = eq m m' t t'
-        eq m m' (Id t s) (Id t' s') = eq m m' t t' && eq m m' s s'
-        eq m m' (App t s) (App t' s') = eq m m' t t' && eq m m' s s'
-        eq m m' (Lam x t s) (Lam x' t' s') = eq m m' t t' && eq (M.insert x x' m) (M.insert x' x' m') s s'
-        eq m m' (Pi t) (Pi t') = eq m m' t t'
-        eq m m' (R t z s n) (R t' z' s' n') = eq m m' t t' && eq m m' z z' && eq m m' s s' && eq m m' n n'
-        eq _ _ _ _ = False
+    Zero == Zero = True
+    Suc == Suc = True
+    Top == Top = True
+    Bot == Bot = True
+    Unit == Unit = True
+    Nat == Nat = True
+    Var x == Var x' = x == x'
+    Refl t == Refl t' = t == t'
+    Cong t == Cong t' = t == t'
+    Id t s == Id t' s' = t == t' && s == s'
+    App t s == App t' s' = t == t' && s == s'
+    Lam x t s == Lam x' t' s' = t == t' && s == s'
+    Pi t == Pi t' = t == t'
+    R t z s n == R t' z' s' n' = t == t' && z == z' && s == s' && n == n'
+    _ == _ = False
 
 typeOf :: M.Map String Term -> Term -> Maybe Term
 typeOf m (Var x) = M.lookup x m
@@ -215,6 +213,8 @@ nat 0 = Zero
 nat n = Suc `App` nat (n - 1)
 
 cR t = R (Lam "_" Nat t)
+eqTest1 = Lam "x" Nat $ Lam "y" Nat $ Var "x" `App` Var "y"
+eqTest2 = Lam "x" Nat $ Lam "x" Nat $ Var "x" `App` Var "x"
 omega = Lam "x" Nat $ Var "x" `App` Var "x"
 one t = Lam "x" (t `arr` t) $ Lam "y" t $ Var "x" `App` Var "y"
 i t = Lam "x" t (Var "x")
@@ -236,8 +236,13 @@ congTest2 = Lam "x" Nat $ plus `App` Var "x" `App` nat 3 -- \x. plus x 3
 congTest3 = plus `App` nat 0
 congTest4 = plus `App` nat 3
 
+(~?/=) :: (Eq a, Show a) => a -> a -> Test
+x ~?/= y = TestCase $ assertBool (show x ++ " shoud not be equal to " ++ show y) (x /= y)
+
 main = fmap (\_ -> ()) $ runTestTT $ test
-    $    label "alpha conversion"
+    $    label "(==)"
+    [ eqTest1 ~?/= eqTest2
+    ] ++ label "alpha conversion"
     [ norm alphaTest ~?= one Nat
     ] ++ label "plus"
     [ norm (plus `App` nat 3 `App` nat 4) ~?= nat 7
