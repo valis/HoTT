@@ -5,57 +5,32 @@ import Test.HUnit
 import Data.List
 
 infixl 5 `App`
-data Term = Var String | Lam String Term (String -> Term) | App Term Term | Zero
-    | Suc | R String (Term -> Term) Term Term Term | Top | Bot | Unit | Pi String Term (String -> Term)
-    | Id Term Term | Refl Term | Repl Term | Cong Term | Nat
+data Term = Var String | Lam String Term Term | App Term Term | Zero
+    | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term
+    | Id Term Term | Refl Term | Cong Term | Nat
+newtype Norm = Norm Term deriving (Eq, Show)
 
 arr :: Term -> Term -> Term
-arr a b = Pi "_" a (\_ -> b)
-
-freeVars :: Term -> M.Map String ()
-freeVars Zero = M.empty
-freeVars Suc = M.empty
-freeVars Top = M.empty
-freeVars Bot = M.empty
-freeVars Unit = M.empty
-freeVars Nat = M.empty
-freeVars (Var "_") = M.empty
-freeVars (Var x) = M.singleton x ()
-freeVars (Lam _ t f) = freeVars t `M.union` freeVars (f "_")
-freeVars (Pi _ t f) = freeVars t `M.union` freeVars (f "_")
-freeVars (App t s) = freeVars t `M.union` freeVars s
-freeVars (Id t s) = freeVars t `M.union` freeVars s
-freeVars (Refl t) = freeVars t
-freeVars (Repl t) = freeVars t
-freeVars (Cong t) = freeVars t
-freeVars (R _ t z s n) =
-    freeVars (t (Var "_")) `M.union` freeVars z `M.union` freeVars s `M.union` freeVars n
+arr a b = Pi (Lam "_" a b)
 
 instance Eq Term where
-    t == t' = eq (freeVars t `M.union` freeVars t') t t'
+    (==) = eq M.empty M.empty
       where
-        eq _ Zero Zero = True
-        eq _ Suc Suc = True
-        eq _ Top Top = True
-        eq _ Bot Bot = True
-        eq _ Unit Unit = True
-        eq _ Nat Nat = True
-        eq _ (Var x) (Var x') = x == x'
-        eq m (Refl t) (Refl t') = eq m t t'
-        eq m (Repl t) (Repl t') = eq m t t'
-        eq m (Cong t) (Cong t') = eq m t t'
-        eq m (Id t s) (Id t' s') = eq m t t' && eq m s s'
-        eq m (App t s) (App t' s') = eq m t t' && eq m s s'
-        eq m (Lam _ t f) (Lam x t' f') = if M.member x m
-            then eq m (Lam x t f) (Lam (x ++ "'") t' f')
-            else eq m t t' && eq (M.insert x () m) (f x) (f x)
-        eq m (Pi _ t f) (Pi x t' f') = if M.member x m
-            then eq m (Pi x t f) (Pi (x ++ "'") t' f')
-            else eq m t t' && eq (M.insert x () m) (f x) (f x)
-        eq m (R _ t z s n) (R x t' z' s' n') = if M.member x m
-            then eq m (R x t z s n) (R (x ++ "'") t' z' s' n')
-            else and [eq (M.insert x () m) (t (Var x)) (t' (Var x)), eq m z z', eq m s s', eq m n n']
-        eq _ _ _ = False
+        eq _ _ Zero Zero = True
+        eq _ _ Suc Suc = True
+        eq _ _ Top Top = True
+        eq _ _ Bot Bot = True
+        eq _ _ Unit Unit = True
+        eq _ _ Nat Nat = True
+        eq m m' (Var x) (Var x') = M.lookup x m == M.lookup x' m'
+        eq m m' (Refl t) (Refl t') = eq m m' t t'
+        eq m m' (Cong t) (Cong t') = eq m m' t t'
+        eq m m' (Id t s) (Id t' s') = eq m m' t t' && eq m m' s s'
+        eq m m' (App t s) (App t' s') = eq m m' t t' && eq m m' s s'
+        eq m m' (Lam x t s) (Lam x' t' s') = eq m m' t t' && eq (M.insert x x' m) (M.insert x' x' m') s s'
+        eq m m' (Pi t) (Pi t') = eq m m' t t'
+        eq m m' (R t z s n) (R t' z' s' n') = eq m m' t t' && eq m m' z z' && eq m m' s s' && eq m m' n n'
+        eq _ _ _ _ = False
 
 typeOf :: M.Map String Term -> Term -> Maybe Term
 typeOf m (Var x) = M.lookup x m
@@ -88,7 +63,7 @@ instance Show Term where
         addParens False s = s
         
         showArrow e@(Lam _ _ _) = show' True e
-        showArrow e@(Pi _ _ _) = show' True e
+        showArrow e@(Pi _) = show' True e
         showArrow e = show e
         
         show' _ x | Just n <- getNat x = show n
@@ -101,11 +76,13 @@ instance Show Term where
         show' _ Bot = "Bot"
         show' _ Unit = "Unit"
         show' _ Nat = "Nat"
-        show' par (Lam x t f) = addParens par $ "\\" ++ x ++ ":" ++ showArrow t ++ ". " ++ show (f x)
+        show' par (Lam x t s) = addParens par $ "\\" ++ x ++ ":" ++ showArrow t ++ ". " ++ show s
         show' par (App a b) = addParens par $ show a ++ " " ++ show' True b
-        show' par (R x t z s n) = addParens par $ "R (\\" ++ x ++ ":Nat. " ++ show (t (Var x)) ++ ") "
-            ++ show' True z ++ " " ++ show' True s ++ " " ++ show' True n
-        show' par (Pi x t f) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") -> " ++ show (f x)
+        show' par (R t z s n) = addParens par $
+            "R " ++ show' True t ++ " " ++ show' True z ++ " " ++ show' True s ++ " " ++ show' True n
+        show' par (Pi (Lam "_" t s)) = addParens par $ show' True t ++ " -> " ++ show s
+        show' par (Pi (Lam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") -> " ++ show s
+        show' par (Pi _) = error "show: Pi without Lam"
         show' par (Id a b) = addParens par $ show' True a ++ " = " ++ show' True b
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
         show' par (Cong t) = addParens par $ "cong " ++ show' True t
@@ -138,7 +115,7 @@ action (Ud : a) (Tm t) = action a $ Tm (Refl t)
 action (d : a) (Tm t) = case (d, typeOf M.empty t) of
     (Ld, Just (Id l r)) -> Tm l
     (Rd, Just (Id l r)) -> Tm r
-    _ -> error "ERROR"
+    _ -> error "action: ERROR"
 
 leftMap :: Integer -> Base -> Base
 leftMap n = action (genericReplicate n Ld)
@@ -147,13 +124,13 @@ app :: Integer -> Base -> Base -> Base
 app n (Fun _ _ f) x = f n [] x
 app n (Tm t) x = Tm $ t `App` reify n x
 
-rec :: Integer -> String -> (Term -> Term) -> Base -> Base -> Base -> Base
-rec 0 _ _ z _ (Tm Zero) = z
-rec 0 x t z s (Tm (App Suc p)) = app 0 (app 0 s (Tm p)) (rec 0 x t z s (Tm p))
-rec n x t z s (Tm (Refl p)) | n > 0 = Tm $ Refl $ reify n (rec (n - 1) x t z s (Tm p))
-rec n x t z s (Tm e) = Tm $ genCong (Lam "e" Nat $ R x t (reify 0 z) (reify 0 s) . Var) n `App` e
+rec :: Integer -> Term -> Base -> Base -> Base -> Base
+rec 0 _ z _ (Tm Zero) = z
+rec 0 t z s (Tm (App Suc p)) = app 0 (app 0 s (Tm p)) (rec 0 t z s (Tm p))
+rec n t z s (Tm (Refl p)) | n > 0 = Tm $ Refl $ reify n (rec (n - 1) t z s (Tm p))
+rec n t z s (Tm e) = Tm $ genCong (Lam "e" Nat $ R t (reify 0 z) (reify 0 s) (Var "e")) n `App` e
     -- TODO: cong-dep
-rec _ _ _ _ _ _ = error "ERROR"
+rec _ _ _ _ _ = error "rec: ERROR"
 
 genRefl' :: Base -> Integer -> Base
 genRefl' (Tm t) n = Tm (genRefl t n)
@@ -169,6 +146,31 @@ genRefl c n | n < 0 = error "ERROR: genRefl"
 genRefl c 0 = c
 genRefl c n = Refl (genRefl c (n - 1))
 
+chooseName :: String -> M.Map String a -> String
+chooseName x m = if M.member x m then chooseName (x ++ "'") m else x
+
+rename :: Term -> String -> String -> Term
+rename q x r | x == r = q
+rename Zero _ _ = Zero
+rename Nat _ _ = Nat
+rename Top _ _ = Top
+rename Bot _ _ = Bot
+rename Unit _ _ = Unit
+rename Suc _ _ = Suc
+rename (Var y) x r | x == y = Var r
+rename q@(Var _) _ _ = q
+rename (Refl t) x r = Refl (rename t x r)
+rename (App a b) x r = App (rename a x r) (rename b x r)
+rename q@(Lam y _ _) x _ | x == y = q
+rename (Lam y t s) x r | y == r = let
+    y' = head $ dropWhile (\z -> z == x || z == r) $ iterate (++ "'") y
+    in Lam y' (rename t x r) $ rename (rename s y y') x r
+rename (Lam y t s) x r = Lam y (rename t x r) (rename s x r)
+rename (Id a b) x r = Id (rename a x r) (rename b x r)
+rename (Pi t) x r = Pi (rename t x r)
+rename (Cong t) x r = Cong (rename t x r)
+rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
+
 eval :: Term -> Integer -> Ctx -> Base
 eval Zero n _ = Tm (genRefl Zero n)
 eval Nat n _ = Tm (genRefl Nat n)
@@ -180,28 +182,25 @@ eval Suc n _ = Fun "n" Nat $ \k _ t -> Tm (suc k t)
     suc k _ | k < 0 = error "ERROR: suc"
     suc k (Tm (Refl t)) = Refl $ suc (k - 1) (Tm t)
     suc k (Tm e) = genCong Suc k `App` e
-    suc _ _ = error "ERROR"
+    suc _ _ = error "suc: ERROR"
 eval v@(Var x) n c = maybe (Tm v) (\s -> s) (M.lookup x c)
 eval (Refl t) n c = genRefl' (eval t n c) 1
 eval (App a b) n c = app n (eval a n c) (eval b n c)
-eval (Lam x t f) n c = if M.member x c
-    then eval (Lam (x ++ "'") t f) n c
-    else Fun x (normCtx n c t) $ \k m s -> eval (f x) k $ M.insert x s (M.map (action m) c)
+eval (Lam x t r) n c = let x' = chooseName x c in Fun x' (normCtx n c t) $
+    \k m s -> eval (rename r x x') k $ M.insert x' s (M.map (action m) c)
 eval (Id a b) n c = Tm $ genRefl (Id (normCtx n c a) (normCtx n c b)) n
     -- TODO: check if 'a' and 'b' have function type
-eval (Pi x t f) n c = if M.member x c
-    then eval (Pi (x ++ "'") t f) n c
-    else Tm $ genRefl (Pi x (normCtx n c t) (normCtx n c . f)) n
+eval (Pi (Lam x t r)) n c = let x' = chooseName x c
+    in Tm $ genRefl (Pi $ Lam x' (normCtx n c t) (normCtx n c (rename r x x'))) n
+eval (Pi _) _ _ = error "eval: Pi without Lam"
 eval (Cong t) n c = case eval t n c of
     Fun x t' f -> Fun x t' $ \k m -> f (k + 1) (Ud : m)
-    _ -> error "ERROR"
-eval (R x t z s p) n c = if M.member x c
-    then eval (R (x ++ "'") t z s p) n c
-    else rec n x t (leftMap n $ eval z n c) (leftMap n $ eval s n c) (eval p n c)
+    _ -> error "eval: ERROR"
+eval (R t z s p) n c = rec n t (leftMap n $ eval z n c) (leftMap n $ eval s n c) (eval p n c)
 
 reify :: Integer -> Base -> Term
 reify _ (Tm t) = t
-reify n (Fun x t f) = Lam x t $ \x -> reify n $ f n [] $ Tm (Var x)
+reify n (Fun x t f) = Lam x t $ reify n $ f n [] $ Tm (Var x)
 
 normCtx :: Integer -> Ctx -> Term -> Term
 normCtx n c t = reify n (eval t n c)
@@ -215,18 +214,27 @@ nat :: Integer -> Term
 nat 0 = Zero
 nat n = Suc `App` nat (n - 1)
 
-omega = Lam "x" Nat $ \x -> Var x `App` Var x
-one t = Lam "x" (t `arr` t) $ \x -> Lam "y" t $ \y -> Var x `App` Var y
-i t = Lam "x" t Var
-k = Lam "x" Nat $ \x -> Lam "y" Nat $ \y -> Var x
-alphaTest = App (one $ Nat `arr` Nat) (one Nat)
-cR t = R "_" (\_ -> t)
-plus = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat (Var x) (k `App` Suc) . Var
+cR t = R (Lam "_" Nat t)
+omega = Lam "x" Nat $ Var "x" `App` Var "x"
+one t = Lam "x" (t `arr` t) $ Lam "y" t $ Var "x" `App` Var "y"
+i t = Lam "x" t (Var "x")
+k = Lam "x" Nat $ Lam "y" Nat (Var "x")
+-- alphaTest = App (one $ Nat `arr` Nat) (one Nat)
+alphaTest = let t = Nat `arr` Nat in App
+   (Lam "x" (t `arr` t) $ Lam "y" t $ Var "x" `App` Var "y")
+   (Lam "x" (Nat `arr` Nat) $ Lam "y" Nat $ Var "x" `App` Var "y")
+-- alphaTest = let t = Nat `arr` Nat in
+--     Lam "y" t $ (Lam "x" (Nat `arr` Nat) $ Lam "y" Nat $ Var "x" `App` Var "y") `App` Var "y"
+plus = Lam "x" Nat $ Lam "y" Nat $ cR Nat (Var "x") (k `App` Suc) (Var "y")
     -- \x y. R x (K suc) y
-mul = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat Zero (k `App` (plus `App` Var x)) . Var
+mul = Lam "x" Nat $ Lam "y" Nat $ cR Nat Zero (k `App` (plus `App` Var "x")) (Var "y")
     -- \x y. R 0 (K (plus x)) y
-exp' = Lam "x" Nat $ \x -> Lam "y" Nat $ cR Nat (nat 1) (k `App` (mul `App` Var x)) . Var
+exp' = Lam "x" Nat $ Lam "y" Nat $ cR Nat (nat 1) (k `App` (mul `App` Var "x")) (Var "y")
     -- \x y. R 1 (K (mul x)) y
+congTest1 = Lam "x" Nat $ cR Nat (Var "x") (k `App` Suc) (nat 0) -- \x. R x (K suc) 0
+congTest2 = Lam "x" Nat $ plus `App` Var "x" `App` nat 3 -- \x. plus x 3
+congTest3 = plus `App` nat 0
+congTest4 = plus `App` nat 3
 
 main = fmap (\_ -> ()) $ runTestTT $ test
     $    label "alpha conversion"
@@ -243,11 +251,10 @@ main = fmap (\_ -> ()) $ runTestTT $ test
     ] ++ label "cong"
     [ norm (Cong (i Nat) `App` Var "x") ~?= Var "x"
     , norm (Cong (i Nat) `App` nat 7) ~?= nat 7
-    , norm (Cong (Lam "x" Nat $ \x -> (Lam "y" Nat $ cR Nat (Var x) (k `App` Suc) . Var) `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
-    , norm (Cong (Lam "x" Nat $ \x -> cR Nat (Var x) (k `App` Suc) (nat 0)) `App` Refl (nat 0)) ~?= Refl (nat 0)
-    , norm (Cong (Lam "x" Nat $ \x -> plus `App` Var x `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
-    , norm (Cong (plus `App` nat 0) `App` Refl (nat 0)) ~?= Refl (nat 0)
-    , norm (Cong (plus `App` nat 3) `App` Refl (nat 4)) ~?= Refl (nat 7)
+    , norm (Cong congTest1 `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong congTest2 `App` Refl (nat 4)) ~?= Refl (nat 7)
+    , norm (Cong congTest3 `App` Refl (nat 0)) ~?= Refl (nat 0)
+    , norm (Cong congTest4 `App` Refl (nat 4)) ~?= Refl (nat 7)
     ]
   where
     label :: String -> [Test] -> [Test]
