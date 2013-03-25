@@ -92,30 +92,98 @@ instance Show Term where
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
         show' par (Cong t s) = addParens par $ "cong " ++ show' True t ++ " " ++ show' True s
 
-data D = Ld | Rd | Ud
+data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
 data Sem
     = Slam String Sem (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
     | Szero | Ssuc Sem -- Constructors for Nat
     | Sunit -- Constructor for Top
     | Spi Sem | Snat | Stop | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
+    | Svar String | Sapp Integer Sem Sem | Srec Integer Sem Sem Sem | Scong Sem Sem | Saction GlobMap Sem
 type Ctx = M.Map String Sem
 
+instance Eq Sem where
+    (==) = eq 0
+      where
+        eq n (Slam _ t s) (Slam _ t' s') = eq n t t' &&
+            eq (n + 1) (s 0 [] $ Svar $ "x_" ++ show n) (s' 0 [] $ Svar $ "x_" ++ show n)
+        eq _ Szero Szero = True
+        eq n (Ssuc t) (Ssuc t') = eq n t t'
+        eq _ Sunit Sunit = True
+        eq n (Spi t) (Spi t') = eq n t t'
+        eq _ Snat Snat = True
+        eq _ Stop Stop = True
+        eq _ Sbot Sbot = True
+        eq n (Sid a b) (Sid a' b') = eq n a a' && eq n b b'
+        eq _ (Stype k) (Stype k') = k == k'
+        eq _ (Svar x) (Svar x') = x == x'
+        eq n (Sapp k t s) (Sapp k' t' s') = k == k' && eq n t t' && eq n s s'
+        eq n (Srec k t s p) (Srec k' t' s' p') = k == k' && eq n t t' && eq n s s' && eq n p p'
+        eq n (Scong t s) (Scong t' s') = eq n t t' && eq n s s'
+        eq n (Saction m t) (Saction m' t') = m == m' && eq n t t'
+        eq _ _ _ = False
+
+instance Show Sem where
+    show = show' 0 False
+      where
+        addParens True s = "(" ++ s ++ ")"
+        addParens False s = s
+        
+        showArrow n e@(Slam _ _ _) = show' n True e
+        showArrow n e@(Spi _) = show' n True e
+        showArrow n e = show' n False e
+        
+        show' _ _ x | Just p <- getNat x = show p
+          where getNat Szero = Just 0
+                getNat (Ssuc x) = fmap succ (getNat x)
+                getNat _ = Nothing
+        show' _ _ (Svar x) = x
+        show' n par (Ssuc p) = addParens par $ "S " ++ show' n True p
+        show' _ _ Stop = "Top"
+        show' _ _ Sbot = "Bot"
+        show' _ _ Sunit = "Unit"
+        show' _ _ Snat = "Nat"
+        show' _ _ (Stype k) = "Type_" ++ show k
+        show' n par (Sid a b) = addParens par $ show' n True a ++ " = " ++ show' n True b
+        show' n par (Spi (Slam "_" t s)) = addParens par
+            $ show' n True t ++ " -> " ++ show' n False (s 0 [] (error "Show Sem"))
+        show' n par (Spi (Slam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show' n False t
+            ++ ") -> " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
+        show' _ _ (Spi _) = error "show: Pi without Lam"
+        show' n par (Sapp k a b) = addParens par
+            $ "App " ++ show k ++ " " ++ show' n True a ++ " " ++ show' n True b
+        show' n par (Srec k z s p) = addParens par $
+            "R " ++ show k ++ " " ++ show' n True z ++ " " ++ show' n True s ++ " " ++ show' n True p
+        show' n par (Scong t s) = addParens par $ "cong " ++ show' n True t ++ " " ++ show' n True s
+        show' n par (Slam _ t s) = addParens par $ "\\x_" ++ show n ++ ":" ++ showArrow n t
+            ++ ". " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
+        show' n par (Saction m t) = addParens par $ "Action " ++ show m ++ " " ++ show' n True t
+
 action :: GlobMap -> Sem -> Sem
+action [] t = t
 action a (Slam x t f) = Slam x t $ \z b -> f z (b ++ a)
-action _ t = t
+action _ Szero = Szero
+action _ t@(Ssuc _) = t
+action _ Sunit = Sunit
+action _ t@(Spi _) = t
+action _ Snat = Snat
+action _ Stop = Stop
+action _ Sbot = Sbot
+action _ t@(Sid _ _) = t
+action _ t@(Stype _) = t
+action a t = Saction a t
 
 leftMap :: Integer -> Sem -> Sem
 leftMap n = action (genericReplicate n Ld)
 
 app :: Integer -> Ctx -> Sem -> Sem -> Sem
 app n _ (Slam _ _ f) x = f n [] x
+app n c t x = Sapp n t x
 
 rec :: Integer -> Ctx -> Term -> Sem -> Sem -> Sem -> Sem
-rec 0 _ _ z _ Szero = z
-rec 0 c t z s (Ssuc p) = app 0 c (app 0 c s p) (rec 0 c t z s p)
-rec n c t z s p | n > 0 = rec (n - 1) c t z s p
-rec _ _ _ _ _ _ = error "rec: ERROR"
+rec _ _ _ z _ Szero = z
+rec _ c t z s (Ssuc p) = app 0 c (app 0 c s p) (rec 0 c t z s p)
+rec n c _ z s p = Srec n z s p
 
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
@@ -161,9 +229,16 @@ eval (R t z s p) n c = rec n c t (leftMap n $ eval z n c) (leftMap n $ eval s n 
 
 ---------------------------------------------------------------------------------------------------
 
+norm :: Term -> Sem
+norm t = eval t 0 M.empty
+
 nat :: Integer -> Term
 nat 0 = Zero
 nat n = Suc `App` nat (n - 1)
+
+snat :: Integer -> Sem
+snat 0 = Szero
+snat n = Ssuc $ snat (n - 1)
 
 cR t = R (Lam "_" Nat t)
 eqTest1 = Lam "x" Nat $ Lam "y" Nat $ Var "x" `App` Var "y"
@@ -183,7 +258,7 @@ plus = Lam "x" Nat $ Lam "y" Nat $ cR Nat (Var "x") (k `App` Suc) (Var "y")
     -- \x y. R x (K suc) y
 mul = Lam "x" Nat $ Lam "y" Nat $ cR Nat Zero (k `App` (plus `App` Var "x")) (Var "y")
     -- \x y. R 0 (K (plus x)) y
-exp' = Lam "x" Nat $ Lam "y" Nat $ cR Nat (nat 1) (k `App` (mul `App` Var "x")) (Var "y")
+exp' = Lam "x" Nat $ Lam "y" Nat $ cR Nat (Suc `App` Zero) (k `App` (mul `App` Var "x")) (Var "y")
     -- \x y. R 1 (K (mul x)) y
 congTest1 = Lam "x" Nat $ cR Nat (Var "x") (k `App` Suc) (nat 0) -- \x. R x (K suc) 0
 congTest2 = Lam "x" Nat $ plus `App` Var "x" `App` nat 3 -- \x. plus x 3
@@ -198,31 +273,27 @@ congTest5b = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (na
 (~?/=) :: (Eq a, Show a) => a -> a -> Test
 x ~?/= y = TestCase $ assertBool (show x ++ " shoud not be equal to " ++ show y) (x /= y)
 
-main = putStrLn "OK"
-
-{-
 main = fmap (\_ -> ()) $ runTestTT $ test
     $    label "(==)"
     [ eqTest1 ~?= eqTest3
     , eqTest1 ~?/= eqTest2
     ] ++ label "alpha conversion"
-    [ norm alphaTest ~?= one Nat
+    [ norm alphaTest ~?= norm (one Nat)
     ] ++ label "plus"
-    [ norm (plus `App` nat 3 `App` nat 4) ~?= nat 7
-    , norm (plus `App` nat 4 `App` nat 3) ~?= nat 7
+    [ norm (plus `App` nat 3 `App` nat 4) ~?= snat 7
+    , norm (plus `App` nat 4 `App` nat 3) ~?= snat 7
     ] ++ label "mul"
-    [ norm (mul `App` nat 3 `App` nat 4) ~?= nat 12
-    , norm (mul `App` nat 4 `App` nat 3) ~?= nat 12
+    [ norm (mul `App` nat 3 `App` nat 4) ~?= snat 12
+    , norm (mul `App` nat 4 `App` nat 3) ~?= snat 12
     ] ++ label "exp"
-    [ norm (exp' `App` nat 3 `App` nat 4) ~?= nat 81
-    , norm (exp' `App` nat 4 `App` nat 3) ~?= nat 64
+    [ norm (exp' `App` nat 3 `App` nat 4) ~?= snat 81
+    , norm (exp' `App` nat 4 `App` nat 3) ~?= snat 64
     ] ++ label "cong"
-    [ norm (Cong (i Nat) `App` Var "x") ~?= Var "x"
-    , norm (Cong (i Nat) `App` nat 7) ~?= nat 7
-    , norm (Cong congTest1 `App` Refl (nat 0)) ~?= Refl (nat 0)
-    , norm (Cong congTest2 `App` Refl (nat 4)) ~?= Refl (nat 7)
-    , norm (Cong congTest3 `App` Refl (nat 0)) ~?= Refl (nat 0)
-    , norm (Cong congTest4 `App` Refl (nat 4)) ~?= Refl (nat 7)
+    [ norm (Cong (i Nat) (nat 7)) ~?= snat 7
+    , norm (Cong congTest1 (Refl (nat 0))) ~?= snat 0
+    , norm (Cong congTest2 (Refl (nat 4))) ~?= snat 7
+    , norm (Cong congTest3 (Refl (nat 0))) ~?= snat 0
+    , norm (Cong congTest4 (Refl (nat 4))) ~?= snat 7
 --    , norm congTest5b ~?= congTest5b
 --    , norm congTest5a ~?= congTest5b
     , norm congTest5a ~?= norm congTest5b
@@ -230,4 +301,3 @@ main = fmap (\_ -> ()) $ runTestTT $ test
   where
     label :: String -> [Test] -> [Test]
     label l = map (\(i,t) -> TestLabel (l ++ " [" ++ show i ++ "]") t) . zip [1..]
--}
