@@ -8,7 +8,7 @@ import Data.Maybe
 infixl 5 `App`
 data Term = Var String | Lam String Term Term | App Term Term | Zero
     | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term
-    | Id Term Term | Refl Term | Cong Term | Nat
+    | Id Term | Refl Term | Cong Term Term | Nat | Type Integer
 newtype Norm = Norm Term deriving (Eq, Show)
 
 arr :: Term -> Term -> Term
@@ -17,16 +17,17 @@ arr a b = Pi (Lam "_" a b)
 instance Eq Term where
     (==) = eq 0
       where
-        eq n Zero Zero = True
-        eq n Suc Suc = True
-        eq n Top Top = True
-        eq n Bot Bot = True
-        eq n Unit Unit = True
-        eq n Nat Nat = True
-        eq n (Var x) (Var x') = x == x'
+        eq _ Zero Zero = True
+        eq _ Suc Suc = True
+        eq _ Top Top = True
+        eq _ Bot Bot = True
+        eq _ Unit Unit = True
+        eq _ Nat Nat = True
+        eq _ (Type k) (Type k') = k == k'
+        eq _ (Var x) (Var x') = x == x'
         eq n (Refl t) (Refl t') = eq n t t'
-        eq n (Cong t) (Cong t') = eq n t t'
-        eq n (Id t s) (Id t' s') = eq n t t' && eq n s s'
+        eq n (Cong t s) (Cong t' s') = eq n t t' && eq n s s'
+        eq n (Id t) (Id t') = eq n t t'
         eq n (App t s) (App t' s') = eq n t t' && eq n s s'
         eq n (Lam x t s) (Lam x' t' s') = eq n t t' &&
             eq (n + 1) (rename s x (' ':show n)) (rename s' x' (' ':show n))
@@ -36,7 +37,7 @@ instance Eq Term where
 
 typeOf :: M.Map String Term -> Term -> Maybe Term
 typeOf m (Var x) = M.lookup x m
-typeOf m (Refl x) = Just (Id x x)
+typeOf m (Refl x) = Just (Id x `App` x)
 {-
 typeOf m (Lam x t f) = if M.member x m
     then typeOf (Lam (x ++ "'") t f) m
@@ -78,16 +79,18 @@ instance Show Term where
         show' _ Bot = "Bot"
         show' _ Unit = "Unit"
         show' _ Nat = "Nat"
+        show' _ (Type k) = "Type_" ++ show k
         show' par (Lam x t s) = addParens par $ "\\" ++ x ++ ":" ++ showArrow t ++ ". " ++ show s
+        show' par (Id a) = "_=_ " ++ show' True a
+        show' par (App (Id a) b) = addParens par $ show' True a ++ " = " ++ show' True b
         show' par (App a b) = addParens par $ show a ++ " " ++ show' True b
         show' par (R t z s n) = addParens par $
             "R " ++ show' True t ++ " " ++ show' True z ++ " " ++ show' True s ++ " " ++ show' True n
         show' par (Pi (Lam "_" t s)) = addParens par $ show' True t ++ " -> " ++ show s
         show' par (Pi (Lam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") -> " ++ show s
         show' par (Pi _) = error "show: Pi without Lam"
-        show' par (Id a b) = addParens par $ show' True a ++ " = " ++ show' True b
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
-        show' par (Cong t) = addParens par $ "cong " ++ show' True t
+        show' par (Cong t s) = addParens par $ "cong " ++ show' True t ++ " " ++ show' True s
 
 data D = Ld | Rd | Ud
 type GlobMap = [D]
@@ -95,7 +98,7 @@ data Sem
     = Slam String Sem (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
     | Szero | Ssuc Sem -- Constructors for Nat
     | Sunit -- Constructor for Top
-    | Spi Sem | Snat | Stop | Sbot | Sid Sem Sem -- Constructors for Type_k
+    | Spi Sem | Snat | Stop | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
 type Ctx = M.Map String Sem
 
 action :: GlobMap -> Sem -> Sem
@@ -122,6 +125,7 @@ rename Top _ _ = Top
 rename Bot _ _ = Bot
 rename Unit _ _ = Unit
 rename Suc _ _ = Suc
+rename q@(Type _) _ _ = q
 rename (Var y) x r | x == y = Var r
 rename q@(Var _) _ _ = q
 rename (Refl t) x r = Refl (rename t x r)
@@ -131,9 +135,9 @@ rename (Lam y t s) x r | y == r = let
     y' = head $ dropWhile (\z -> z == x || z == r) $ iterate (++ "'") y
     in Lam y' (rename t x r) $ rename (rename s y y') x r
 rename (Lam y t s) x r = Lam y (rename t x r) (rename s x r)
-rename (Id a b) x r = Id (rename a x r) (rename b x r)
+rename (Id a) x r = Id (rename a x r)
 rename (Pi t) x r = Pi (rename t x r)
-rename (Cong t) x r = Cong (rename t x r)
+rename (Cong t s) x r = Cong (rename t x r) (rename s x r)
 rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
 
 eval :: Term -> Integer -> Ctx -> Sem
@@ -142,15 +146,16 @@ eval Nat _ _ = Snat
 eval Top _ _ = Stop
 eval Bot _ _ = Sbot
 eval Unit _ _ = Sunit
+eval (Type k) _ _ = Stype k
 eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
 eval (Refl t) n c = eval t n c
 eval (App a b) n c = app n c (eval a n c) (eval b n c)
 eval (Lam x t r) n c = Slam x (eval t n c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
-eval (Id a b) n c = Sid (eval a n c) (eval b n c)
+eval (Id a) n c = Slam "b" Snat {- TODO: typeOf a -} $ \_ _ -> Sid (eval a n c)
 eval (Pi t) n c = Spi (eval t n c)
-eval (Cong t) n c = case eval t n c of
-    Slam x t' f -> Slam x t' $ \k m -> f (k + 1) (Ud : m)
+eval (Cong t s) n c = case eval t n c of
+    Slam _ _ f -> f (n + 1) [Ud] (eval s n c)
     _ -> error "eval: ERROR"
 eval (R t z s p) n c = rec n c t (leftMap n $ eval z n c) (leftMap n $ eval s n c) (eval p n c)
 
@@ -184,11 +189,11 @@ congTest1 = Lam "x" Nat $ cR Nat (Var "x") (k `App` Suc) (nat 0) -- \x. R x (K s
 congTest2 = Lam "x" Nat $ plus `App` Var "x" `App` nat 3 -- \x. plus x 3
 congTest3 = plus `App` nat 0
 congTest4 = plus `App` nat 3
-congTest5a = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) (nat 1))
-    $ Cong (Lam "t" Nat $ Var "x" `App` (Var "y" `App` Var "t")) `App` Var "z"
-congTest5b = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) (nat 1))
+congTest5a = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) `App` nat 1)
+    $ Cong (Lam "t" Nat $ Var "x" `App` (Var "y" `App` Var "t")) (Var "z")
+congTest5b = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) `App` nat 1)
     $ Cong (Lam "t" Nat $ Var "x" `App` Var "y")
-    `App` (Cong (Lam "t" Nat $ Var "y" `App` Var "t") `App` (Var "z"))
+    $ (Cong (Lam "t" Nat $ Var "y" `App` Var "t") (Var "z"))
 
 (~?/=) :: (Eq a, Show a) => a -> a -> Test
 x ~?/= y = TestCase $ assertBool (show x ++ " shoud not be equal to " ++ show y) (x /= y)
