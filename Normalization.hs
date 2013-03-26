@@ -171,6 +171,12 @@ action _ Stop = Stop
 action _ Sbot = Sbot
 action _ t@(Sid _ _) = t
 action _ t@(Stype _) = t
+action a (Saction b t) = Saction (simplify $ b ++ a) t
+  where
+    simplify (Ud : Ld : a) = simplify a
+    simplify (Ud : Rd : a) = simplify a
+    simplify (x : a) = x : simplify a
+    simplify [] = []
 action a t = Saction a t
 
 leftMap :: Integer -> Sem -> Sem
@@ -267,12 +273,15 @@ congTest4 = plus `App` nat 3
 congTest5a = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) `App` nat 1)
     $ Cong (Lam "t" Nat $ Var "x" `App` (Var "y" `App` Var "t")) (Var "z")
 congTest5b = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (nat 0) `App` nat 1)
-    $ Cong (Lam "t" Nat $ Var "x" `App` Var "y")
+    $ Cong (Lam "t" Nat $ Var "x" `App` Var "t")
     $ (Cong (Lam "t" Nat $ Var "y" `App` Var "t") (Var "z"))
 
 (~?/=) :: (Eq a, Show a) => a -> a -> Test
 x ~?/= y = TestCase $ assertBool (show x ++ " shoud not be equal to " ++ show y) (x /= y)
 
+main = print (norm congTest5a)
+
+{-
 main = fmap (\_ -> ()) $ runTestTT $ test
     $    label "(==)"
     [ eqTest1 ~?= eqTest3
@@ -294,10 +303,9 @@ main = fmap (\_ -> ()) $ runTestTT $ test
     , norm (Cong congTest2 (Refl (nat 4))) ~?= snat 7
     , norm (Cong congTest3 (Refl (nat 0))) ~?= snat 0
     , norm (Cong congTest4 (Refl (nat 4))) ~?= snat 7
---    , norm congTest5b ~?= congTest5b
---    , norm congTest5a ~?= congTest5b
     , norm congTest5a ~?= norm congTest5b
     ]
   where
     label :: String -> [Test] -> [Test]
     label l = map (\(i,t) -> TestLabel (l ++ " [" ++ show i ++ "]") t) . zip [1..]
+-}
