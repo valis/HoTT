@@ -99,12 +99,21 @@ data Sem
     | Szero | Ssuc Sem -- Constructors for Nat
     | Sunit -- Constructor for Top
     | Spi Sem | Snat | Stop | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Svar String | Sapp Integer Sem Sem | Srec Integer Sem Sem Sem | Scong Sem Sem | Saction GlobMap Sem
+    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Saction GlobMap Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
     (==) = eq 0
       where
+        eqAction [] [] = True
+        eqAction (Ud : Ld : xs) ys = eqAction xs ys
+        eqAction (Ud : Rd : xs) ys = eqAction xs ys
+        eqAction xs (Ud : Ld : ys) = eqAction xs ys
+        eqAction xs (Ud : Rd : ys) = eqAction xs ys
+        eqAction (Ld : Ld : xs) (Rd : Ld : ys) = xs == ys
+        eqAction (Ld : Rd : xs) (Rd : Rd : ys) = xs == ys
+        eqAction (x:xs) (y:ys) = x == y && xs == ys
+        
         eq n (Slam _ t s) (Slam _ t' s') = eq n t t' &&
             eq (n + 1) (s 0 [] $ Svar $ "x_" ++ show n) (s' 0 [] $ Svar $ "x_" ++ show n)
         eq _ Szero Szero = True
@@ -117,10 +126,13 @@ instance Eq Sem where
         eq n (Sid a b) (Sid a' b') = eq n a a' && eq n b b'
         eq _ (Stype k) (Stype k') = k == k'
         eq _ (Svar x) (Svar x') = x == x'
-        eq n (Sapp k t s) (Sapp k' t' s') = k == k' && eq n t t' && eq n s s'
-        eq n (Srec k t s p) (Srec k' t' s' p') = k == k' && eq n t t' && eq n s s' && eq n p p'
-        eq n (Scong t s) (Scong t' s') = eq n t t' && eq n s s'
-        eq n (Saction m t) (Saction m' t') = m == m' && eq n t t'
+        eq n (Sapp t s) (Sapp t' s') = eq n t t' && eq n s s'
+        eq n (Srec t s p) (Srec t' s' p') = eq n t t' && eq n s s' && eq n p p'
+        eq n (Saction m (Saction m' t)) t' = eq n (Saction (m' ++ m) t) t'
+        eq n t (Saction m (Saction m' t')) = eq n t (Saction (m' ++ m) t')
+        eq n (Saction m t) (Saction m' t') = eqAction m m' && eq n t t'
+        eq n (Saction m t) t' = eq n (Saction m t) (Saction [] t')
+        eq n t (Saction m t') = eq n (Saction [] t) (Saction m t')
         eq _ _ _ = False
 
 instance Show Sem where
@@ -150,11 +162,9 @@ instance Show Sem where
         show' n par (Spi (Slam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show' n False t
             ++ ") -> " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
         show' _ _ (Spi _) = error "show: Pi without Lam"
-        show' n par (Sapp k a b) = addParens par
-            $ "App " ++ show k ++ " " ++ show' n True a ++ " " ++ show' n True b
-        show' n par (Srec k z s p) = addParens par $
-            "R " ++ show k ++ " " ++ show' n True z ++ " " ++ show' n True s ++ " " ++ show' n True p
-        show' n par (Scong t s) = addParens par $ "cong " ++ show' n True t ++ " " ++ show' n True s
+        show' n par (Sapp a b) = addParens par $ show' n False a ++ " " ++ show' n True b
+        show' n par (Srec z s p) = addParens par $
+            "R " ++ show' n True z ++ " " ++ show' n True s ++ " " ++ show' n True p
         show' n par (Slam _ t s) = addParens par $ "\\x_" ++ show n ++ ":" ++ showArrow n t
             ++ ". " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
         show' n par (Saction m t) = addParens par $ "Action " ++ show m ++ " " ++ show' n True t
@@ -171,12 +181,7 @@ action _ Stop = Stop
 action _ Sbot = Sbot
 action _ t@(Sid _ _) = t
 action _ t@(Stype _) = t
-action a (Saction b t) = Saction (simplify $ b ++ a) t
-  where
-    simplify (Ud : Ld : a) = simplify a
-    simplify (Ud : Rd : a) = simplify a
-    simplify (x : a) = x : simplify a
-    simplify [] = []
+action a (Saction b t) = Saction (b ++ a) t
 action a t = Saction a t
 
 leftMap :: Integer -> Sem -> Sem
@@ -184,12 +189,12 @@ leftMap n = action (genericReplicate n Ld)
 
 app :: Integer -> Ctx -> Sem -> Sem -> Sem
 app n _ (Slam _ _ f) x = f n [] x
-app n c t x = Sapp n t x
+app _ c t x = Sapp t x
 
 rec :: Integer -> Ctx -> Term -> Sem -> Sem -> Sem -> Sem
 rec _ _ _ z _ Szero = z
 rec _ c t z s (Ssuc p) = app 0 c (app 0 c s p) (rec 0 c t z s p)
-rec n c _ z s p = Srec n z s p
+rec _ c _ z s p = Srec z s p
 
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
@@ -279,9 +284,6 @@ congTest5b = Lam "x" (Nat `arr` Nat) $ Lam "y" (Nat `arr` Nat) $ Lam "z" (Id (na
 (~?/=) :: (Eq a, Show a) => a -> a -> Test
 x ~?/= y = TestCase $ assertBool (show x ++ " shoud not be equal to " ++ show y) (x /= y)
 
-main = print (norm congTest5a)
-
-{-
 main = fmap (\_ -> ()) $ runTestTT $ test
     $    label "(==)"
     [ eqTest1 ~?= eqTest3
@@ -308,4 +310,3 @@ main = fmap (\_ -> ()) $ runTestTT $ test
   where
     label :: String -> [Test] -> [Test]
     label l = map (\(i,t) -> TestLabel (l ++ " [" ++ show i ++ "]") t) . zip [1..]
--}
