@@ -36,30 +36,6 @@ instance Eq Term where
         eq n (Repl t) (Repl t') = eq n t t'
         eq _ _ _ = False
 
-typeOf :: M.Map String Term -> Term -> Maybe Term
-typeOf m (Var x) = M.lookup x m
-typeOf m (Refl x) = Just (Id x x)
-{-
-typeOf m (Lam x t f) = if M.member x m
-    then typeOf (Lam (x ++ "'") t f) m
-    else case typeOf (f x) (M.insert x t m) of
-        Nothing -> Nothing
-        Just s -> Just $ Pi x t (\y -> rename x y s)
-  where
-    rename :: String -> String -> Term -> Term
-    rename = undefined
-typeOf m (App x y) = case (typeOf m x, typeOf m y) of
-    (Just (Pi v t f), Just r) | t == r -> App (Lam v t f) y
-    _ -> Nothing
-typeOf _ Zero = Just Nat
-typeOf _ Suc = Just (arr Nat Nat)
-typeOf _ (R t) = Just $ arr (App t Zero) $ arr (Pi "x" Nat $ \x -> arr (App t (Var x)) $ App t $ App Suc (Var x)) $ Pi "x" Nat (App t . Var)
-typeOf _ Unit = Just Top
-typeOf m (Repl _ _) = 
-typeOf m (Cong _ _)
-typeOf _ = Just Unit
--}
-
 instance Show Term where
     show = show' False
       where
@@ -185,9 +161,6 @@ action _ t@(Sid _ _) = t
 action _ t@(Stype _) = t
 action a (Saction b t) = Saction (b ++ a) t
 action a t = Saction a t
-
-leftMap :: Integer -> Sem -> Sem
-leftMap n = action (genericReplicate n Ld)
 
 app :: Integer -> Sem -> Sem -> Sem
 app n (Slam _ _ f) x = f n [] x
