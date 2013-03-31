@@ -6,8 +6,8 @@ import Data.List
 import Data.Maybe
 
 infixl 5 `App`
-data Term = Var String | Lam String Term Term | App Term Term | Zero
-    | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term
+data Term = Var String | Lam String Term Term | App Term Term | Zero | Proj1 Term | Proj2 Term
+    | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term | Sigma Term
     | Id Term Term | Refl Term | Cong Term Term | Nat | Type Integer | Repl Term
 newtype Norm = Norm Term deriving (Eq, Show)
 
@@ -34,6 +34,9 @@ instance Eq Term where
         eq n (Pi t) (Pi t') = eq n t t'
         eq n (R t z s p) (R t' z' s' p') = eq n t t' && eq n z z' && eq n s s' && eq n p p'
         eq n (Repl t) (Repl t') = eq n t t'
+        eq n (Proj1 t) (Proj1 t') = eq n t t'
+        eq n (Proj2 t) (Proj2 t') = eq n t t'
+        eq n (Sigma t) (Sigma t') = eq n t t'
         eq _ _ _ = False
 
 instance Show Term where
@@ -57,17 +60,23 @@ instance Show Term where
         show' _ Unit = "Unit"
         show' _ Nat = "Nat"
         show' _ (Type k) = "Type_" ++ show k
-        show' par (Lam x t s) = addParens par $ "\\" ++ x ++ ":" ++ showArrow t ++ ". " ++ show s
+        show' par (Lam x t s) = addParens par $ "λ" ++ x ++ ":" ++ showArrow t ++ ". " ++ show s
         show' par (Id a b) = addParens par $ show' True a ++ " = " ++ show' True b
         show' par (App a b) = addParens par $ show a ++ " " ++ show' True b
         show' par (R t z s n) = addParens par $
             "R " ++ show' True t ++ " " ++ show' True z ++ " " ++ show' True s ++ " " ++ show' True n
-        show' par (Pi (Lam "_" t s)) = addParens par $ show' True t ++ " -> " ++ show s
-        show' par (Pi (Lam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") -> " ++ show s
-        show' par (Pi _) = error "show: Pi without Lam"
+        show' par (Pi (Lam "_" t s)) = addParens par $ show' True t ++ " → " ++ show s
+        show' par (Pi (Lam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") → " ++ show s
+        show' par (Pi _) = error "show: Π without λ"
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
         show' par (Cong t s) = addParens par $ "cong " ++ show' True t ++ " " ++ show' True s
         show' par (Repl t) = addParens par $ "repl " ++ show' True t
+        show' par (Sigma (Lam "_" t s)) = addParens par $ show' True t ++ " × " ++ show' True s
+        show' par (Sigma (Lam x t s)) = addParens par $
+            "Σ(" ++ x ++ " : " ++ show' True t ++ ") " ++ show' True s
+        show' par (Sigma _) = error "show: Σ without λ"
+        show' par (Proj1 t) = addParens par $ "proj₁ " ++ show' True t
+        show' par (Proj2 t) = addParens par $ "proj₂ " ++ show' True t
 
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
@@ -75,8 +84,10 @@ data Sem
     = Slam String Sem (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
     | Szero | Ssuc Sem -- Constructors for Nat
     | Sunit -- Constructor for Top
-    | Spi Sem | Snat | Stop | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Saction GlobMap Sem | Srepl Sem
+    | Sprod Sem Sem -- Constructor for Sigma
+    | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
+    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Saction GlobMap Sem
+    | Srepl Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
@@ -111,6 +122,9 @@ instance Eq Sem where
         eq n (Saction m t) (Saction m' t') = eqAction m m' && eq n t t'
         eq n (Saction m t) t' = eq n (Saction m t) (Saction [] t')
         eq n t (Saction m t') = eq n (Saction [] t) (Saction m t')
+        eq n (Ssigma t) (Ssigma t') = eq n t t'
+        eq n (Sproj1 t) (Sproj1 t') = eq n t t'
+        eq n (Sproj2 t) (Sproj2 t') = eq n t t'
         eq _ _ _ = False
 
 instance Show Sem where
@@ -135,8 +149,8 @@ instance Show Sem where
         show' _ _ Snat = "Nat"
         show' _ _ (Stype k) = "Type_" ++ show k
         show' n par (Sid a b) = addParens par $ show' n True a ++ " = " ++ show' n True b
-        show' n par (Spi (Slam "_" t s)) = addParens par
-            $ show' n True t ++ " -> " ++ show' n False (s 0 [] (error "Show Sem"))
+        show' n par (Spi (Slam "_" t s)) = addParens par $
+            show' n True t ++ " -> " ++ show' n False (s 0 [] (error "Show Sem"))
         show' n par (Spi (Slam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show' n False t
             ++ ") -> " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
         show' _ _ (Spi _) = error "show: Pi without Lam"
@@ -146,6 +160,13 @@ instance Show Sem where
         show' n par (Slam _ t s) = addParens par $ "\\x_" ++ show n ++ ":" ++ showArrow n t
             ++ ". " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
         show' n par (Saction m t) = addParens par $ "Action " ++ show m ++ " " ++ show' n True t
+        show' n par (Ssigma (Slam "_" t s)) = addParens par $
+            show' n True t ++ " × " ++ show' n True (s 0 [] (error "Show Sem"))
+        show' n par (Ssigma (Slam x t s)) = addParens par $ "Σ(x_" ++ show n ++ " : "
+            ++ show' n True t ++ ") " ++ show' (n + 1) True (s 0 [] $ Svar $ "x_" ++ show n)
+        show' n par (Ssigma _) = error "show: Σ without λ"
+        show' n par (Sproj1 t) = addParens par $ "proj₁ " ++ show' n True t
+        show' n par (Sproj2 t) = addParens par $ "proj₂ " ++ show' n True t
 
 action :: GlobMap -> Sem -> Sem
 action [] t = t
@@ -154,12 +175,14 @@ action _ Szero = Szero
 action _ t@(Ssuc _) = t
 action _ Sunit = Sunit
 action _ t@(Spi _) = t
+action _ t@(Ssigma _) = t
 action _ Snat = Snat
 action _ Stop = Stop
 action _ Sbot = Sbot
 action _ t@(Sid _ _) = t
 action _ t@(Stype _) = t
 action a (Saction b t) = Saction (b ++ a) t
+-- TODO: add more elaborate behaviour
 action a t = Saction a t
 
 app :: Integer -> Sem -> Sem -> Sem
@@ -170,6 +193,14 @@ rec :: Integer -> Sem -> Sem -> Sem -> Sem
 rec n z _ Szero = z
 rec n z s (Ssuc p) = app n (app n s p) (rec n z s p)
 rec _ z s p = Srec z s p
+
+proj1 :: Sem -> Sem
+proj1 (Sprod x _) = x
+proj1 t = Sproj1 t
+
+proj2 :: Sem -> Sem
+proj2 (Sprod _ y) = y
+proj2 t = Sproj2 t
 
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
@@ -194,6 +225,9 @@ rename (Pi t) x r = Pi (rename t x r)
 rename (Cong t s) x r = Cong (rename t x r) (rename s x r)
 rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
 rename (Repl t) x r = Repl (rename t x r)
+rename (Sigma t) x r = Sigma (rename t x r)
+rename (Proj1 t) x r = Proj1 (rename t x r)
+rename (Proj2 t) x r = Proj2 (rename t x r)
 
 eval :: Term -> Integer -> Ctx -> Sem
 eval Zero _ _ = Szero
@@ -209,11 +243,14 @@ eval (App a b) n c = app n (eval a n c) (eval b n c)
 eval (Lam x t r) n c = Slam x (eval t n c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
 eval (Id a b) n c = Sid (eval a n c) (eval b n c)
 eval (Pi t) n c = Spi (eval t n c)
+eval (Sigma t) n c = Ssigma (eval t n c)
 eval (Cong t s) n c = case eval t n c of
     Slam _ _ f -> f (n + 1) [Ud] (eval s n c)
     _ -> error "eval: ERROR"
 eval (R _ z s p) n c = rec n (eval z n c) (eval s n c) (eval p n c)
 eval (Repl t) n c = Srepl (eval t n c)
+eval (Proj1 t) n c = proj1 (eval t n c)
+eval (Proj2 t) n c = proj2 (eval t n c)
 
 ---------------------------------------------------------------------------------------------------
 
