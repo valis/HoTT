@@ -87,7 +87,7 @@ data Sem
     | Sprod Sem Sem -- Constructor for Sigma
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
     | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Saction GlobMap Sem
-    | Srepl Sem
+    | Srepl Sem | Siso Sem Sem Sem Sem -- | Strans Sem Sem | Ssym Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
@@ -125,6 +125,9 @@ instance Eq Sem where
         eq n (Ssigma t) (Ssigma t') = eq n t t'
         eq n (Sproj1 t) (Sproj1 t') = eq n t t'
         eq n (Sproj2 t) (Sproj2 t') = eq n t t'
+        eq n (Sprod t s) (Sprod t' s') = eq n t t' && eq n s s'
+        eq n (Srepl t) (Srepl t') = eq n t t'
+        eq n (Siso f g p q) (Siso f' g' p' q') = eq n f f' && eq n g g' && eq n p p' && eq n q q'
         eq _ _ _ = False
 
 instance Show Sem where
@@ -164,9 +167,13 @@ instance Show Sem where
             show' n True t ++ " × " ++ show' n True (s 0 [] (error "Show Sem"))
         show' n par (Ssigma (Slam x t s)) = addParens par $ "Σ(x_" ++ show n ++ " : "
             ++ show' n True t ++ ") " ++ show' (n + 1) True (s 0 [] $ Svar $ "x_" ++ show n)
-        show' n par (Ssigma _) = error "show: Σ without λ"
+        show' _ _ (Ssigma _) = error "show: Σ without λ"
         show' n par (Sproj1 t) = addParens par $ "proj₁ " ++ show' n True t
         show' n par (Sproj2 t) = addParens par $ "proj₂ " ++ show' n True t
+        show' n par (Sprod t s) = addParens par $ show' n True t ++ ", " ++ show' n False s
+        show' n par (Srepl t) = addParens par $ "repl " ++ show' n True t
+        show' n par (Siso f g p q) = addParens par $ "iso " ++ show' n True f
+            ++ " " ++ show' n True g ++ " " ++ show' n True p ++ " " ++ show' n True q
 
 action :: GlobMap -> Sem -> Sem
 action [] t = t
@@ -202,6 +209,21 @@ proj2 :: Sem -> Sem
 proj2 (Sprod _ y) = y
 proj2 t = Sproj2 t
 
+{-
+sym :: Sem -> Sem
+sym (Siso f g p q) = Siso g f q p
+sym (Sprod x y) = Sprod (sym x) (sym y)
+sym (Slam x t s) = Slam x t $ \k m y -> case k of
+    0 -> sym (s 0 m y)
+    _ -> error "TODO: sym"
+sym t = Ssym t
+-}
+
+repl :: Integer -> Sem -> Sem
+repl 0 (Siso f _ _ _) = f
+repl 0 t = Srepl t
+repl _ p = p
+
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
 rename Zero _ _ = Zero
@@ -230,25 +252,52 @@ rename (Proj1 t) x r = Proj1 (rename t x r)
 rename (Proj2 t) x r = Proj2 (rename t x r)
 
 eval :: Term -> Integer -> Ctx -> Sem
+eval Top 0 _ = Stop
+eval Top n _ = if n == 1 then Siso p p p p else p
+  where p = Slam "x" Stop $ \_ _ -> id
+eval Nat 0 _ = Snat
+eval Nat n _ = if n == 1 then Siso p p p p else p
+  where p = Slam "x" Snat $ \_ _ -> id
+eval Bot 0 _ = Sbot
+eval Bot n _ = if n == 1 then Siso p p p p else p
+  where p = Slam "x" Sbot $ \_ _ -> id
+eval (Type k) 0 _ = Stype k
+eval (Type k) n _ = if n == 1 then Siso f f p p else p
+  where f = Slam "x" (Stype k) $ \_ _ -> id
+        p = Slam "x" (Stype k) $ \_ _ s -> Siso (g s) (g s) (q s) (q s)
+        g s = Slam "y" s $ \_ _ -> id
+        q s = Slam "y" s $ \_ _ -> action [Ud]
+{-
+eval (Sigma t) 0 c = Ssigma (eval t 0 c)
+eval (Sigma (Lam z t s)) 1 c = let
+    cl = M.map (action [Ld]) c
+    cr = M.map (action [Rd]) c
+    pl = eval p 0 cl
+    pr = eval p 0 cr
+    tl = eval t 0 cl
+    tr = eval t 0 cr
+    Siso tf tg tp tq = eval t 1 c
+    rf = Slam "x" pl $ \kx mx x -> let
+        Siso sf sg sp sq = eval s (kx + 1) (M.insert z (action [Ud] (app kx (action mx tf) (proj1 x))) c)
+        in 
+    in Siso rf rg rp rq
+-}
+eval (Sigma t) n c = Ssigma (eval t n c)
+eval (Pi t) n c = Spi (eval t n c)
+eval (Id a b) n c = Sid (eval a n c) (eval b n c)
 eval Zero _ _ = Szero
-eval Nat _ _ = Snat
-eval Top _ _ = Stop
-eval Bot _ _ = Sbot
 eval Unit _ _ = Sunit
-eval (Type k) _ _ = Stype k
 eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
 eval (Refl t) n c = eval t (n + 1) (M.map (action [Ud]) c)
 eval (App a b) n c = app n (eval a n c) (eval b n c)
-eval (Lam x t r) n c = Slam x (eval t n c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
-eval (Id a b) n c = Sid (eval a n c) (eval b n c)
-eval (Pi t) n c = Spi (eval t n c)
-eval (Sigma t) n c = Ssigma (eval t n c)
-eval (Cong t s) n c = case eval t n c of
-    Slam _ _ f -> f (n + 1) [Ud] (eval s n c)
-    _ -> error "eval: ERROR"
+eval (Lam x t r) n c = let t' m = eval t (n - 1) $ M.map (action [m]) c
+    in Slam x (Sid (t' Ld) (t' Rd)) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+-- eval (Lam x t r) n c = Slam x (eval t 0 $ M.map (action $ genericReplicate n Rd) c) $
+--     \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+eval (Cong t s) n c = app (n + 1) (action [Ud] (eval t n c)) (eval s n c)
 eval (R _ z s p) n c = rec n (eval z n c) (eval s n c) (eval p n c)
-eval (Repl t) n c = Srepl (eval t n c)
+eval (Repl t) n c = repl n (eval t n c)
 eval (Proj1 t) n c = proj1 (eval t n c)
 eval (Proj2 t) n c = proj2 (eval t n c)
 
