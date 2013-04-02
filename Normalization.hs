@@ -78,6 +78,33 @@ instance Show Term where
         show' par (Proj1 t) = addParens par $ "proj₁ " ++ show' True t
         show' par (Proj2 t) = addParens par $ "proj₂ " ++ show' True t
 
+rename :: Term -> String -> String -> Term
+rename q x r | x == r = q
+rename Zero _ _ = Zero
+rename Nat _ _ = Nat
+rename Top _ _ = Top
+rename Bot _ _ = Bot
+rename Unit _ _ = Unit
+rename Suc _ _ = Suc
+rename q@(Type _) _ _ = q
+rename (Var y) x r | x == y = Var r
+rename q@(Var _) _ _ = q
+rename (Refl t) x r = Refl (rename t x r)
+rename (App a b) x r = App (rename a x r) (rename b x r)
+rename q@(Lam y _ _) x _ | x == y = q
+rename (Lam y t s) x r | y == r = let
+    y' = head $ dropWhile (\z -> z == x || z == r) $ iterate (++ "'") y
+    in Lam y' (rename t x r) $ rename (rename s y y') x r
+rename (Lam y t s) x r = Lam y (rename t x r) (rename s x r)
+rename (Id a b) x r = Id (rename a x r) (rename b x r)
+rename (Pi t) x r = Pi (rename t x r)
+rename (Cong t s) x r = Cong (rename t x r) (rename s x r)
+rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
+rename (Repl t) x r = Repl (rename t x r)
+rename (Sigma t) x r = Sigma (rename t x r)
+rename (Proj1 t) x r = Proj1 (rename t x r)
+rename (Proj2 t) x r = Proj2 (rename t x r)
+
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
 data Sem
@@ -86,8 +113,9 @@ data Sem
     | Sunit -- Constructor for Top
     | Sprod Sem Sem -- Constructor for Sigma
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Saction GlobMap Sem
-    | Srepl Sem | Siso Sem Sem Sem Sem -- | Strans Sem Sem | Ssym Sem
+    | Siso Sem Sem Sem Sem -- | Strans Sem Sem | Ssym Sem
+    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem | Srefl Sem
+    | Sup Sem Sem Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
@@ -117,17 +145,14 @@ instance Eq Sem where
         eq _ (Svar x) (Svar x') = x == x'
         eq n (Sapp t s) (Sapp t' s') = eq n t t' && eq n s s'
         eq n (Srec t s p) (Srec t' s' p') = eq n t t' && eq n s s' && eq n p p'
-        eq n (Saction m (Saction m' t)) t' = eq n (Saction (m' ++ m) t) t'
-        eq n t (Saction m (Saction m' t')) = eq n t (Saction (m' ++ m) t')
-        eq n (Saction m t) (Saction m' t') = eqAction m m' && eq n t t'
-        eq n (Saction m t) t' = eq n (Saction m t) (Saction [] t')
-        eq n t (Saction m t') = eq n (Saction [] t) (Saction m t')
+        eq n (Sup _ _ t) (Sup _ _ t') = eq n t t'
         eq n (Ssigma t) (Ssigma t') = eq n t t'
         eq n (Sproj1 t) (Sproj1 t') = eq n t t'
         eq n (Sproj2 t) (Sproj2 t') = eq n t t'
         eq n (Sprod t s) (Sprod t' s') = eq n t t' && eq n s s'
         eq n (Srepl t) (Srepl t') = eq n t t'
         eq n (Siso f g p q) (Siso f' g' p' q') = eq n f f' && eq n g g' && eq n p p' && eq n q q'
+        eq n (Srefl t) (Srefl t') = eq n t t'
         eq _ _ _ = False
 
 instance Show Sem where
@@ -162,7 +187,7 @@ instance Show Sem where
             "R " ++ show' n True z ++ " " ++ show' n True s ++ " " ++ show' n True p
         show' n par (Slam _ t s) = addParens par $ "\\x_" ++ show n ++ ":" ++ showArrow n t
             ++ ". " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
-        show' n par (Saction m t) = addParens par $ "Action " ++ show m ++ " " ++ show' n True t
+        show' n par (Sup _ _ t) = show' n par t
         show' n par (Ssigma (Slam "_" t s)) = addParens par $
             show' n True t ++ " × " ++ show' n True (s 0 [] (error "Show Sem"))
         show' n par (Ssigma (Slam x t s)) = addParens par $ "Σ(x_" ++ show n ++ " : "
@@ -174,23 +199,40 @@ instance Show Sem where
         show' n par (Srepl t) = addParens par $ "repl " ++ show' n True t
         show' n par (Siso f g p q) = addParens par $ "iso " ++ show' n True f
             ++ " " ++ show' n True g ++ " " ++ show' n True p ++ " " ++ show' n True q
+        show' n par (Srefl t) = addParens par $ "refl " ++ show' n True t
 
 action :: GlobMap -> Sem -> Sem
 action [] t = t
 action a (Slam x t f) = Slam x t $ \z b -> f z (b ++ a)
+action a (Sprod t s) = Sprod (action a t) (action a s)
 action _ Szero = Szero
 action _ t@(Ssuc _) = t
 action _ Sunit = Sunit
-action _ t@(Spi _) = t
-action _ t@(Ssigma _) = t
-action _ Snat = Snat
-action _ Stop = Stop
-action _ Sbot = Sbot
-action _ t@(Sid _ _) = t
-action _ t@(Stype _) = t
-action a (Saction b t) = Saction (b ++ a) t
--- TODO: add more elaborate behaviour
-action a t = Saction a t
+action (Ud:as) Snat = action as $ Sup Snat Snat (Siso p p p p)
+  where p = Slam "x" Snat $ \_ _ -> id
+action (Ud:as) Stop = action as $ Sup Stop Stop (Siso p p p p)
+  where p = Slam "x" Stop $ \_ _ -> id
+action (Ud:as) Sbot = action as $ Sup Sbot Sbot (Siso p p p p)
+  where p = Slam "x" Sbot $ \_ _ -> id
+action (Ud:as) t@(Stype _) = action as $ Sup t t (Siso p p p p)
+  where p = Slam "x" t $ \_ _ -> id
+action (Ud:as) (Ssigma t) = error "action: TODO: Sigma"
+action (Ud:as) (Spi t) = error "action: TODO: Pi"
+action (Ud:as) (Sid t s) = error "action: TODO: Sid"
+action (Ud:as) t@(Siso f _ _ _) = action as $ Sup t t (action [Ud] f)
+action (Ld:as) (Sup l _ _) = l
+action (Rd:as) (Sup _ r _) = r
+action (Ud:as) t@(Sup _ _ s) = action as $ Sup t t (action [Ud] s)
+action (Ud:as) t@(Svar _) = action as (Srefl t)
+action as (Sapp t s) = Sapp (action as t) (action as s)
+action as (Srec z s p) = Srec (action as z) (action as s) (action as p)
+action as (Sproj1 t) = Sproj1 (action as t)
+action as (Sproj2 t) = Sproj2 (action as t)
+action as (Srepl t) = Srepl (action as t)
+action (Ud:as) t@(Srefl _) = action as (Srefl t)
+action (Ld:as) (Srefl t) = t
+action (Rd:as) (Srefl t) = t
+action _ _ = error "action: ERROR"
 
 app :: Integer -> Sem -> Sem -> Sem
 app n (Slam _ _ f) x = f n [] x
@@ -201,55 +243,27 @@ rec n z _ Szero = z
 rec n z s (Ssuc p) = app n (app n s p) (rec n z s p)
 rec _ z s p = Srec z s p
 
-proj1 :: Sem -> Sem
-proj1 (Sprod x _) = x
-proj1 t = Sproj1 t
+proj1 :: Integer -> Sem -> Sem
+proj1 _ (Sprod x _) = x
+proj1 _ t = Sproj1 t
 
-proj2 :: Sem -> Sem
-proj2 (Sprod _ y) = y
-proj2 t = Sproj2 t
+proj2 :: Integer -> Sem -> Sem
+proj2 _ (Sprod _ y) = y
+proj2 _ t = Sproj2 t
 
 {-
-sym :: Sem -> Sem
-sym (Siso f g p q) = Siso g f q p
-sym (Sprod x y) = Sprod (sym x) (sym y)
-sym (Slam x t s) = Slam x t $ \k m y -> case k of
-    0 -> sym (s 0 m y)
-    _ -> error "TODO: sym"
-sym t = Ssym t
+sym :: Integer -> Sem -> Sem
+sym 0 (Sup a b (Siso f g p q)) = Sup b a (Siso g f q p)
+sym n (Sprod x y) = undefined -- Sprod (sym n x) (sym n y)
+    -- (x,y) |-> (sym x, cong (subst B (sym x)) (sym y))
+sym n (Slam x t s) = Slam x t $ \k _ y -> sym k y
+sym n t = Ssym t
 -}
 
 repl :: Integer -> Sem -> Sem
 repl 0 (Siso f _ _ _) = f
-repl 0 t = Srepl t
-repl _ p = p
-
-rename :: Term -> String -> String -> Term
-rename q x r | x == r = q
-rename Zero _ _ = Zero
-rename Nat _ _ = Nat
-rename Top _ _ = Top
-rename Bot _ _ = Bot
-rename Unit _ _ = Unit
-rename Suc _ _ = Suc
-rename q@(Type _) _ _ = q
-rename (Var y) x r | x == y = Var r
-rename q@(Var _) _ _ = q
-rename (Refl t) x r = Refl (rename t x r)
-rename (App a b) x r = App (rename a x r) (rename b x r)
-rename q@(Lam y _ _) x _ | x == y = q
-rename (Lam y t s) x r | y == r = let
-    y' = head $ dropWhile (\z -> z == x || z == r) $ iterate (++ "'") y
-    in Lam y' (rename t x r) $ rename (rename s y y') x r
-rename (Lam y t s) x r = Lam y (rename t x r) (rename s x r)
-rename (Id a b) x r = Id (rename a x r) (rename b x r)
-rename (Pi t) x r = Pi (rename t x r)
-rename (Cong t s) x r = Cong (rename t x r) (rename s x r)
-rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
-rename (Repl t) x r = Repl (rename t x r)
-rename (Sigma t) x r = Sigma (rename t x r)
-rename (Proj1 t) x r = Proj1 (rename t x r)
-rename (Proj2 t) x r = Proj2 (rename t x r)
+repl n (Sup _ _ t) | n > 0 = repl (n - 1) t
+repl _ t = Srepl t
 
 eval :: Term -> Integer -> Ctx -> Sem
 eval Top 0 _ = Stop
@@ -262,11 +276,8 @@ eval Bot 0 _ = Sbot
 eval Bot n _ = if n == 1 then Siso p p p p else p
   where p = Slam "x" Sbot $ \_ _ -> id
 eval (Type k) 0 _ = Stype k
-eval (Type k) n _ = if n == 1 then Siso f f p p else p
-  where f = Slam "x" (Stype k) $ \_ _ -> id
-        p = Slam "x" (Stype k) $ \_ _ s -> Siso (g s) (g s) (q s) (q s)
-        g s = Slam "y" s $ \_ _ -> id
-        q s = Slam "y" s $ \_ _ -> action [Ud]
+eval (Type k) n _ = if n == 1 then Siso p p p p else p
+  where p = Slam "x" (Stype k) $ \_ _ -> id
 {-
 eval (Sigma t) 0 c = Ssigma (eval t 0 c)
 eval (Sigma (Lam z t s)) 1 c = let
@@ -282,24 +293,25 @@ eval (Sigma (Lam z t s)) 1 c = let
         in 
     in Siso rf rg rp rq
 -}
-eval (Sigma t) n c = Ssigma (eval t n c)
-eval (Pi t) n c = Spi (eval t n c)
-eval (Id a b) n c = Sid (eval a n c) (eval b n c)
+eval (Sigma t) 0 c = Ssigma (eval t 0 c)
+eval (Sigma t) n c = error "eval: TODO: Sigma"
+eval (Pi t) 0 c = Spi (eval t 0 c)
+eval (Pi t) n c = error "eval: TODO: Pi"
+eval (Id a b) 0 c = Sid (eval a 0 c) (eval b 0 c)
+eval (Id a b) n c = error "eval: TODO: Id"
 eval Zero _ _ = Szero
 eval Unit _ _ = Sunit
 eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
 eval (Refl t) n c = eval t (n + 1) (M.map (action [Ud]) c)
 eval (App a b) n c = app n (eval a n c) (eval b n c)
-eval (Lam x t r) n c = let t' m = eval t (n - 1) $ M.map (action [m]) c
-    in Slam x (Sid (t' Ld) (t' Rd)) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
--- eval (Lam x t r) n c = Slam x (eval t 0 $ M.map (action $ genericReplicate n Rd) c) $
---     \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+eval (Lam x t r) 0 c = Slam x (eval t 0 c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+eval (Lam x t r) n c = Slam x undefined {- TODO -} $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
 eval (Cong t s) n c = app (n + 1) (action [Ud] (eval t n c)) (eval s n c)
 eval (R _ z s p) n c = rec n (eval z n c) (eval s n c) (eval p n c)
 eval (Repl t) n c = repl n (eval t n c)
-eval (Proj1 t) n c = proj1 (eval t n c)
-eval (Proj2 t) n c = proj2 (eval t n c)
+eval (Proj1 t) n c = proj1 n (eval t n c)
+eval (Proj2 t) n c = proj2 n (eval t n c)
 
 ---------------------------------------------------------------------------------------------------
 
