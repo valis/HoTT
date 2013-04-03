@@ -115,7 +115,7 @@ data Sem
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
     | Siso Sem Sem Sem Sem -- | Strans Sem Sem | Ssym Sem
     | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem | Srefl Sem
-    | Sup Sem Sem Sem
+    | Sup Sem Sem Sem | UnknownOfType Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
@@ -153,6 +153,7 @@ instance Eq Sem where
         eq n (Srepl t) (Srepl t') = eq n t t'
         eq n (Siso f g p q) (Siso f' g' p' q') = eq n f f' && eq n g g' && eq n p p' && eq n q q'
         eq n (Srefl t) (Srefl t') = eq n t t'
+        eq n (UnknownOfType t) (UnknownOfType t') = eq n t t'
         eq _ _ _ = False
 
 instance Show Sem where
@@ -208,14 +209,18 @@ action a (Sprod t s) = Sprod (action a t) (action a s)
 action _ Szero = Szero
 action _ t@(Ssuc _) = t
 action _ Sunit = Sunit
-action (Ud:as) Snat = action as $ Sup Snat Snat (Siso p p p p)
-  where p = Slam "x" Snat $ \_ _ -> id
-action (Ud:as) Stop = action as $ Sup Stop Stop (Siso p p p p)
-  where p = Slam "x" Stop $ \_ _ -> id
-action (Ud:as) Sbot = action as $ Sup Sbot Sbot (Siso p p p p)
-  where p = Slam "x" Sbot $ \_ _ -> id
-action (Ud:as) t@(Stype _) = action as $ Sup t t (Siso p p p p)
-  where p = Slam "x" t $ \_ _ -> id
+action (Ud:as) Snat = action as $ Sup Snat Snat (Siso f f p p)
+  where f = Slam "x" Snat $ \_ _ -> id
+        p = Slam "x" (UnknownOfType (Sid Snat Snat)) $ \_ _ -> id
+action (Ud:as) Stop = action as $ Sup Stop Stop (Siso f f p p)
+  where f = Slam "x" Stop $ \_ _ -> id
+        p = Slam "x" (UnknownOfType (Sid Stop Stop)) $ \_ _ -> id
+action (Ud:as) Sbot = action as $ Sup Sbot Sbot (Siso f f p p)
+  where f = Slam "x" Sbot $ \_ _ -> id
+        p = Slam "x" (UnknownOfType (Sid Sbot Sbot)) $ \_ _ -> id
+action (Ud:as) t@(Stype _) = action as $ Sup t t (Siso f f p p)
+  where f = Slam "x" t $ \_ _ -> id
+        p = Slam "x" (UnknownOfType (Sid t t)) $ \_ _ -> id
 action (Ud:as) (Ssigma t) = error "action: TODO: Sigma"
 action (Ud:as) (Spi t) = error "action: TODO: Pi"
 action (Ud:as) (Sid t s) = error "action: TODO: Sid"
@@ -266,18 +271,10 @@ repl n (Sup _ _ t) | n > 0 = repl (n - 1) t
 repl _ t = Srepl t
 
 eval :: Term -> Integer -> Ctx -> Sem
-eval Top 0 _ = Stop
-eval Top n _ = if n == 1 then Siso p p p p else p
-  where p = Slam "x" Stop $ \_ _ -> id
-eval Nat 0 _ = Snat
-eval Nat n _ = if n == 1 then Siso p p p p else p
-  where p = Slam "x" Snat $ \_ _ -> id
-eval Bot 0 _ = Sbot
-eval Bot n _ = if n == 1 then Siso p p p p else p
-  where p = Slam "x" Sbot $ \_ _ -> id
-eval (Type k) 0 _ = Stype k
-eval (Type k) n _ = if n == 1 then Siso p p p p else p
-  where p = Slam "x" (Stype k) $ \_ _ -> id
+eval Top n _ = action (genericReplicate n Ud) Stop
+eval Nat n _ = action (genericReplicate n Ud) Snat
+eval Bot n _ = action (genericReplicate n Ud) Sbot
+eval (Type k) n _ = action (genericReplicate n Ud) (Stype k)
 {-
 eval (Sigma t) 0 c = Ssigma (eval t 0 c)
 eval (Sigma (Lam z t s)) 1 c = let
@@ -305,8 +302,9 @@ eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
 eval (Refl t) n c = eval t (n + 1) (M.map (action [Ud]) c)
 eval (App a b) n c = app n (eval a n c) (eval b n c)
-eval (Lam x t r) 0 c = Slam x (eval t 0 c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
-eval (Lam x t r) n c = Slam x undefined {- TODO -} $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+eval (Lam x t r) n c = Slam x (uot n c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+  where uot 0 c = eval t 0 c
+        uot n c = Sid (uot (n - 1) (M.map (action [Ld]) c)) (uot (n - 1) (M.map (action [Rd]) c))
 eval (Cong t s) n c = app (n + 1) (action [Ud] (eval t n c)) (eval s n c)
 eval (R _ z s p) n c = rec n (eval z n c) (eval s n c) (eval p n c)
 eval (Repl t) n c = repl n (eval t n c)
