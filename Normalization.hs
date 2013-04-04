@@ -113,7 +113,7 @@ data Sem
     | Sunit -- Constructor for Top
     | Sprod Sem Sem -- Constructor for Sigma
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Siso Sem Sem Sem Sem -- | Strans Sem Sem | Ssym Sem
+    | Siso Sem Sem Sem Sem | Strans Sem Sem | Ssym Sem
     | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem | Srefl Sem
     | Sup Sem Sem Sem | UnknownOfType Sem
 type Ctx = M.Map String Sem
@@ -154,6 +154,8 @@ instance Eq Sem where
         eq n (Siso f g p q) (Siso f' g' p' q') = eq n f f' && eq n g g' && eq n p p' && eq n q q'
         eq n (Srefl t) (Srefl t') = eq n t t'
         eq n (UnknownOfType t) (UnknownOfType t') = eq n t t'
+        eq n (Ssym t) (Ssym t') = eq n t t'
+        eq n (Strans t s) (Strans t' s') = eq n t t' && eq n s s'
         eq _ _ _ = False
 
 instance Show Sem where
@@ -201,6 +203,8 @@ instance Show Sem where
         show' n par (Siso f g p q) = addParens par $ "iso " ++ show' n True f
             ++ " " ++ show' n True g ++ " " ++ show' n True p ++ " " ++ show' n True q
         show' n par (Srefl t) = addParens par $ "refl " ++ show' n True t
+        show' n par (Ssym t) = addParens par $ "sym " ++ show' n True t
+        show' n par (Strans t s) = addParens par $ show' n True t ++ "; " ++ show' n False s
 
 action :: GlobMap -> Sem -> Sem
 action [] t = t
@@ -225,6 +229,8 @@ action (Ld:as) (Sup l _ _) = l
 action (Rd:as) (Sup _ r _) = r
 action (Ud:as) t@(Sup _ _ s) = action as $ Sup t t (action [Ud] s)
 action (Ud:as) t@(Svar _) = action as (Srefl t)
+action (Ud:as) t@(Ssym _) = action as (Srefl t)
+action (Ud:as) t@(Strans _ _) = action as (Srefl t)
 action as (Sapp t s) = Sapp (action as t) (action as s)
 action as (Srec z s p) = Srec (action as z) (action as s) (action as p)
 action as (Sproj1 t) = Sproj1 (action as t)
@@ -252,14 +258,25 @@ proj2 :: Integer -> Sem -> Sem
 proj2 _ (Sprod _ y) = y
 proj2 _ t = Sproj2 t
 
-{-
 sym :: Integer -> Sem -> Sem
+sym n (Slam x t s) = Slam x (UnknownOfType $ uot n t) $ \k m y -> sym k $ s k m (sym k y)
+  where uot (-1) a = a
+        uot n (Sid a b) = Sid (uot (n - 1) b) (uot (n - 1) a)
+        uot _ _ = error "sym: ERROR"
+sym _ Szero = Szero
+sym _ t@(Ssuc _) = t
+sym _ Sunit = Sunit
+sym 0 (Sprod t s) = undefined
+sym n (Sprod t s) = undefined
 sym 0 (Sup a b (Siso f g p q)) = Sup b a (Siso g f q p)
-sym n (Sprod x y) = undefined -- Sprod (sym n x) (sym n y)
-    -- (x,y) |-> (sym x, cong (subst B (sym x)) (sym y))
-sym n (Slam x t s) = Slam x t $ \k _ y -> sym k y
-sym n t = Ssym t
--}
+sym n (Sup a b t) = undefined
+sym 0 (Strans t s) = Strans (sym 0 t) (sym 0 s)
+sym n (Strans t s) = undefined
+sym 0 (Ssym t) = t
+sym n (Ssym t) = undefined
+sym 0 t@(Srefl _) = t
+sym n (Srefl t) = undefined
+sym _ t = Ssym t
 
 repl :: Integer -> Sem -> Sem
 repl 0 (Siso f _ _ _) = f
@@ -271,22 +288,16 @@ eval Top n _ = action (genericReplicate n Ud) Stop
 eval Nat n _ = action (genericReplicate n Ud) Snat
 eval Bot n _ = action (genericReplicate n Ud) Sbot
 eval (Type k) n _ = action (genericReplicate n Ud) (Stype k)
-{-
 eval (Sigma t) 0 c = Ssigma (eval t 0 c)
-eval (Sigma (Lam z t s)) 1 c = let
-    cl = M.map (action [Ld]) c
-    cr = M.map (action [Rd]) c
-    pl = eval p 0 cl
-    pr = eval p 0 cr
-    tl = eval t 0 cl
-    tr = eval t 0 cr
+eval (Sigma p@(Lam z t s)) 1 c = let
+    pl = eval p 0 (M.map (action [Ld]) c)
+    pr = eval p 0 (M.map (action [Rd]) c)
     Siso tf tg tp tq = eval t 1 c
-    rf = Slam "x" pl $ \kx mx x -> let
-        Siso sf sg sp sq = eval s (kx + 1) (M.insert z (action [Ud] (app kx (action mx tf) (proj1 x))) c)
-        in 
-    in Siso rf rg rp rq
--}
-eval (Sigma t) 0 c = Ssigma (eval t 0 c)
+    r tX sX = Slam "x" pl $ \kx mx x -> let
+        x1 = app kx (action mx tX) (proj1 kx x)
+        s' = eval s (kx + 1) $ M.insert z (action [Ud] x1) c
+        in Sprod x1 (app kx (repl kx (sX kx s')) (proj2 kx x))
+    in Siso (r tf (const id)) (r tg sym) undefined undefined
 eval (Sigma t) n c = error "eval: TODO: Sigma"
 eval (Pi t) 0 c = Spi (eval t 0 c)
 eval (Pi t) n c = error "eval: TODO: Pi"
@@ -298,7 +309,8 @@ eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
 eval (Refl t) n c = eval t (n + 1) (M.map (action [Ud]) c)
 eval (App a b) n c = app n (eval a n c) (eval b n c)
-eval (Lam x t r) n c = Slam x (uot n c) $ \k m s -> eval r k $ M.insert x s (M.map (action m) c)
+eval (Lam x t r) n c = Slam x (UnknownOfType $ uot n c) $
+    \k m s -> eval r k $ M.insert x s (M.map (action m) c)
   where uot 0 c = eval t 0 c
         uot n c = Sid (uot (n - 1) (M.map (action [Ld]) c)) (uot (n - 1) (M.map (action [Rd]) c))
 eval (Cong t s) n c = app (n + 1) (action [Ud] (eval t n c)) (eval s n c)
