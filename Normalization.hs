@@ -113,9 +113,9 @@ data Sem
     | Sunit -- Constructor for Top
     | Sprod Sem Sem -- Constructor for Sigma
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Siso Sem Sem Sem Sem | Strans Sem Sem | Ssym Sem
+    | Siso [Sem] | Strans Sem Sem | Ssym Sem
     | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem | Srefl Sem
-    | Sup Sem Sem Sem | UnknownOfType Sem
+    | UnknownOfType Sem
 type Ctx = M.Map String Sem
 
 instance Eq Sem where
@@ -145,13 +145,12 @@ instance Eq Sem where
         eq _ (Svar x) (Svar x') = x == x'
         eq n (Sapp t s) (Sapp t' s') = eq n t t' && eq n s s'
         eq n (Srec t s p) (Srec t' s' p') = eq n t t' && eq n s s' && eq n p p'
-        eq n (Sup _ _ t) (Sup _ _ t') = eq n t t'
         eq n (Ssigma t) (Ssigma t') = eq n t t'
         eq n (Sproj1 t) (Sproj1 t') = eq n t t'
         eq n (Sproj2 t) (Sproj2 t') = eq n t t'
         eq n (Sprod t s) (Sprod t' s') = eq n t t' && eq n s s'
         eq n (Srepl t) (Srepl t') = eq n t t'
-        eq n (Siso f g p q) (Siso f' g' p' q') = eq n f f' && eq n g g' && eq n p p' && eq n q q'
+        eq n (Siso ts) (Siso ts') = and $ zipWith (eq n) ts ts'
         eq n (Srefl t) (Srefl t') = eq n t t'
         eq n (UnknownOfType t) (UnknownOfType t') = eq n t t'
         eq n (Ssym t) (Ssym t') = eq n t t'
@@ -184,13 +183,12 @@ instance Show Sem where
             show' n True t ++ " -> " ++ show' n False (s 0 [] (error "Show Sem"))
         show' n par (Spi (Slam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show' n False t
             ++ ") -> " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
-        show' _ _ (Spi _) = error "show: Pi without Lam"
+        show' _ _ (Spi _) = error "show: Π without λ"
         show' n par (Sapp a b) = addParens par $ show' n False a ++ " " ++ show' n True b
         show' n par (Srec z s p) = addParens par $
             "R " ++ show' n True z ++ " " ++ show' n True s ++ " " ++ show' n True p
-        show' n par (Slam _ t s) = addParens par $ "\\x_" ++ show n ++ ":" ++ showArrow n t
+        show' n par (Slam _ t s) = addParens par $ "λx_" ++ show n ++ ":" ++ showArrow n t
             ++ ". " ++ show' (n + 1) False (s 0 [] $ Svar $ "x_" ++ show n)
-        show' n par (Sup _ _ t) = show' n par t
         show' n par (Ssigma (Slam "_" t s)) = addParens par $
             show' n True t ++ " × " ++ show' n True (s 0 [] (error "Show Sem"))
         show' n par (Ssigma (Slam x t s)) = addParens par $ "Σ(x_" ++ show n ++ " : "
@@ -200,7 +198,7 @@ instance Show Sem where
         show' n par (Sproj2 t) = addParens par $ "proj₂ " ++ show' n True t
         show' n par (Sprod t s) = addParens par $ show' n True t ++ ", " ++ show' n False s
         show' n par (Srepl t) = addParens par $ "repl " ++ show' n True t
-        show' n par (Siso f g p q) = addParens par $ "iso " ++ show' n True f
+        show' n par (Siso (_:_:f:g:p:q:_)) = addParens par $ "iso " ++ show' n True f
             ++ " " ++ show' n True g ++ " " ++ show' n True p ++ " " ++ show' n True q
         show' n par (Srefl t) = addParens par $ "refl " ++ show' n True t
         show' n par (Ssym t) = addParens par $ "sym " ++ show' n True t
@@ -213,9 +211,9 @@ action a (Sprod t s) = Sprod (action a t) (action a s)
 action _ Szero = Szero
 action _ t@(Ssuc _) = t
 action _ Sunit = Sunit
-action (Ud:as) t | isType t = action as $ Sup t t (Siso f f p p)
+action (Ud:as) t | isType t = action as $ Siso (t : t : f : f : list (Sid t t))
   where f = Slam "x" t $ \_ _ -> id
-        p = Slam "x" (UnknownOfType (Sid t t)) $ \_ _ -> id
+        list t = let p = Slam "x" (UnknownOfType t) $ \_ _ -> id in p : p : list (Sid t t)
         isType Snat = True
         isType Stop = True
         isType Sbot = True
@@ -224,10 +222,9 @@ action (Ud:as) t | isType t = action as $ Sup t t (Siso f f p p)
         isType (Spi _) = True
         isType (Sid _ _) = True
         isType _ = False
-action (Ud:as) t@(Siso f _ _ _) = action as $ Sup t t (action [Ud] f)
-action (Ld:as) (Sup l _ _) = l
-action (Rd:as) (Sup _ r _) = r
-action (Ud:as) t@(Sup _ _ s) = action as $ Sup t t (action [Ud] s)
+action (Ld:as) (Siso (t:_)) = action as t
+action (Rd:as) (Siso (_:t:_)) = action as t
+action (Ud:as) t@(Siso (_:_:l)) = action as $ Siso (t : t : map (action [Ud]) l)
 action (Ud:as) t@(Svar _) = action as (Srefl t)
 action (Ud:as) t@(Ssym _) = action as (Srefl t)
 action (Ud:as) t@(Strans _ _) = action as (Srefl t)
@@ -268,19 +265,20 @@ sym _ t@(Ssuc _) = t
 sym _ Sunit = Sunit
 sym 0 (Sprod t s) = undefined
 sym n (Sprod t s) = undefined
-sym 0 (Sup a b (Siso f g p q)) = Sup b a (Siso g f q p)
-sym n (Sup a b t) = undefined
+sym _ (Siso l) = Siso (sw l)
+  where sw (x:y:xs) = y:x:sw xs
 sym 0 (Strans t s) = Strans (sym 0 t) (sym 0 s)
 sym n (Strans t s) = undefined
 sym 0 (Ssym t) = t
 sym n (Ssym t) = undefined
 sym 0 t@(Srefl _) = t
-sym n (Srefl t) = undefined
+sym n (Srefl t) = action [Ud] $ sym (n - 1) t
 sym _ t = Ssym t
 
 repl :: Integer -> Sem -> Sem
-repl 0 (Siso f _ _ _) = f
-repl n (Sup _ _ t) | n > 0 = repl (n - 1) t
+repl _ (Siso (_:_:f:_)) = f
+repl 0 (Srefl t) = Slam "x" t $ \_ _ -> id
+repl n (Srefl t) = action [Ud] $ repl (n - 1) t
 repl _ t = Srepl t
 
 eval :: Term -> Integer -> Ctx -> Sem
@@ -289,6 +287,7 @@ eval Nat n _ = action (genericReplicate n Ud) Snat
 eval Bot n _ = action (genericReplicate n Ud) Sbot
 eval (Type k) n _ = action (genericReplicate n Ud) (Stype k)
 eval (Sigma t) 0 c = Ssigma (eval t 0 c)
+{-
 eval (Sigma p@(Lam z t s)) 1 c = let
     pl = eval p 0 (M.map (action [Ld]) c)
     pr = eval p 0 (M.map (action [Rd]) c)
@@ -298,6 +297,7 @@ eval (Sigma p@(Lam z t s)) 1 c = let
         s' = eval s (kx + 1) $ M.insert z (action [Ud] x1) c
         in Sprod x1 (app kx (repl kx (sX kx s')) (proj2 kx x))
     in Siso (r tf (const id)) (r tg sym) undefined undefined
+-}
 eval (Sigma t) n c = error "eval: TODO: Sigma"
 eval (Pi t) 0 c = Spi (eval t 0 c)
 eval (Pi t) n c = error "eval: TODO: Pi"
