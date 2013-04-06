@@ -7,7 +7,7 @@ import Data.Maybe
 
 infixl 5 `App`
 data Term = Var String | Lam String Term Term | App Term Term | Zero | Proj1 Term | Proj2 Term
-    | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term | Sigma Term
+    | Prod Term Term Term | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term | Sigma Term
     | Id Term Term | Refl Term | Cong Term Term | Nat | Type Integer | Repl Term
 newtype Norm = Norm Term deriving (Eq, Show)
 
@@ -37,6 +37,7 @@ instance Eq Term where
         eq n (Proj1 t) (Proj1 t') = eq n t t'
         eq n (Proj2 t) (Proj2 t') = eq n t t'
         eq n (Sigma t) (Sigma t') = eq n t t'
+        eq n (Prod b t s) (Prod b' t' s') = eq n b b' && eq n t t' && eq n s s'
         eq _ _ _ = False
 
 instance Show Term where
@@ -77,6 +78,7 @@ instance Show Term where
         show' par (Sigma _) = error "show: Σ without λ"
         show' par (Proj1 t) = addParens par $ "proj₁ " ++ show' True t
         show' par (Proj2 t) = addParens par $ "proj₂ " ++ show' True t
+        show' par (Prod _ t s) = addParens par $ show' True t ++ ", " ++ show' False s
 
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
@@ -104,6 +106,7 @@ rename (Repl t) x r = Repl (rename t x r)
 rename (Sigma t) x r = Sigma (rename t x r)
 rename (Proj1 t) x r = Proj1 (rename t x r)
 rename (Proj2 t) x r = Proj2 (rename t x r)
+rename (Prod b t s) x r = Prod (rename b x r) (rename t x r) (rename s x r)
 
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
@@ -111,9 +114,9 @@ data Sem
     = Slam String Sem (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
     | Szero | Ssuc Sem -- Constructors for Nat
     | Sunit -- Constructor for Top
-    | Sprod Sem Sem -- Constructor for Sigma
+    | Sprod Sem Sem Sem | SprodH Sem Sem Sem Sem Sem Sem -- Constructors for Sigma
     | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Siso [Sem] | Strans Sem Sem | Ssym Sem
+    | Siso Sem Sem Sem Sem Sem Sem Sem Sem | Strans Sem Sem | Ssym Sem
     | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem | Srefl Sem
     | UnknownOfType Sem
 type Ctx = M.Map String Sem
@@ -121,16 +124,6 @@ type Ctx = M.Map String Sem
 instance Eq Sem where
     (==) = eq 0
       where
-        eqAction [] [] = True
-        eqAction (Ud : Ld : xs) ys = eqAction xs ys
-        eqAction (Ud : Rd : xs) ys = eqAction xs ys
-        eqAction xs (Ud : Ld : ys) = eqAction xs ys
-        eqAction xs (Ud : Rd : ys) = eqAction xs ys
-        eqAction (Ld : Ld : xs) (Rd : Ld : ys) = xs == ys
-        eqAction (Ld : Rd : xs) (Rd : Rd : ys) = xs == ys
-        eqAction (x:xs) (y:ys) = x == y && xs == ys
-        eqAction _ _ = False
-        
         eq n (Slam _ t s) (Slam _ t' s') = eq n t t' &&
             eq (n + 1) (s 0 [] $ Svar $ "x_" ++ show n) (s' 0 [] $ Svar $ "x_" ++ show n)
         eq _ Szero Szero = True
@@ -148,9 +141,11 @@ instance Eq Sem where
         eq n (Ssigma t) (Ssigma t') = eq n t t'
         eq n (Sproj1 t) (Sproj1 t') = eq n t t'
         eq n (Sproj2 t) (Sproj2 t') = eq n t t'
-        eq n (Sprod t s) (Sprod t' s') = eq n t t' && eq n s s'
+        eq n (Sprod b t s) (Sprod b' t' s') = eq n b b' && eq n t t' && eq n s s'
+        eq n (SprodH _ _ b t s r) (SprodH _ _ b' t' s' r') =
+            eq n b b' && eq n t t' && eq n s s' && eq n r r'
         eq n (Srepl t) (Srepl t') = eq n t t'
-        eq n (Siso ts) (Siso ts') = and $ zipWith (eq n) ts ts'
+        eq n (Siso _ _ f g _ _ _ _) (Siso _ _ f' g' _ _ _ _) = eq n f f' && eq n g g'
         eq n (Srefl t) (Srefl t') = eq n t t'
         eq n (UnknownOfType t) (UnknownOfType t') = eq n t t'
         eq n (Ssym t) (Ssym t') = eq n t t'
@@ -196,9 +191,10 @@ instance Show Sem where
         show' _ _ (Ssigma _) = error "show: Σ without λ"
         show' n par (Sproj1 t) = addParens par $ "proj₁ " ++ show' n True t
         show' n par (Sproj2 t) = addParens par $ "proj₂ " ++ show' n True t
-        show' n par (Sprod t s) = addParens par $ show' n True t ++ ", " ++ show' n False s
+        show' n par (Sprod _ t s) = addParens par $ show' n True t ++ ", " ++ show' n False s
+        show' n par (SprodH _ _ _ t s _) = addParens par $ show' n True t ++ ", " ++ show' n False s
         show' n par (Srepl t) = addParens par $ "repl " ++ show' n True t
-        show' n par (Siso (_:_:f:g:p:q:_)) = addParens par $ "iso " ++ show' n True f
+        show' n par (Siso _ _ f g p q _ _) = addParens par $ "iso " ++ show' n True f
             ++ " " ++ show' n True g ++ " " ++ show' n True p ++ " " ++ show' n True q
         show' n par (Srefl t) = addParens par $ "refl " ++ show' n True t
         show' n par (Ssym t) = addParens par $ "sym " ++ show' n True t
@@ -207,13 +203,17 @@ instance Show Sem where
 action :: GlobMap -> Sem -> Sem
 action [] t = t
 action a (Slam x t f) = Slam x t $ \z b -> f z (b ++ a)
-action a (Sprod t s) = Sprod (action a t) (action a s)
+action (Ud:as) r@(Sprod b t s) = action as $ SprodH r r (refl b) (refl t) (refl s) (refl s)
+action (Ld:as) (SprodH t _ _ _ _ _) = action as t
+action (Rd:as) (SprodH _ t _ _ _ _) = action as t
+action (Ud:as) r@(SprodH _ _ b t s q) = action as $ SprodH r r (refl b) (refl t) (refl s) (refl q)
 action _ Szero = Szero
 action _ t@(Ssuc _) = t
 action _ Sunit = Sunit
-action (Ud:as) t | isType t = action as $ Siso (t : t : f : f : list (Sid t t))
+action (Ud:as) t | isType t = action as (Siso t t f f p p s s)
   where f = Slam "x" t $ \_ _ -> id
-        list t = let p = Slam "x" (UnknownOfType t) $ \_ _ -> id in p : p : list (Sid t t)
+        p = Slam "x" (UnknownOfType (Sid t t)) $ \_ _ -> id
+        s = Slam "x" (UnknownOfType (Sid (Sid t t) (Sid t t))) $ \_ _ -> id
         isType Snat = True
         isType Stop = True
         isType Sbot = True
@@ -222,9 +222,10 @@ action (Ud:as) t | isType t = action as $ Siso (t : t : f : f : list (Sid t t))
         isType (Spi _) = True
         isType (Sid _ _) = True
         isType _ = False
-action (Ld:as) (Siso (t:_)) = action as t
-action (Rd:as) (Siso (_:t:_)) = action as t
-action (Ud:as) t@(Siso (_:_:l)) = action as $ Siso (t : t : map (action [Ud]) l)
+action (Ld:as) (Siso t _ _ _ _ _ _ _) = action as t
+action (Rd:as) (Siso _ t _ _ _ _ _ _) = action as t
+action (Ud:as) t@(Siso _ _ f g p q r s) = action as $
+    Siso t t (refl f) (refl g) (refl p) (refl q) (refl r) (refl s)
 action (Ud:as) t@(Svar _) = action as (Srefl t)
 action (Ud:as) t@(Ssym _) = action as (Srefl t)
 action (Ud:as) t@(Strans _ _) = action as (Srefl t)
@@ -248,12 +249,20 @@ rec n z s (Ssuc p) = app n (app n s p) (rec n z s p)
 rec _ z s p = Srec z s p
 
 proj1 :: Integer -> Sem -> Sem
-proj1 _ (Sprod x _) = x
+proj1 _ (Sprod _ x _) = x
+proj1 _ (SprodH _ _ _ x _ _) = x
 proj1 _ t = Sproj1 t
 
 proj2 :: Integer -> Sem -> Sem
-proj2 _ (Sprod _ y) = y
+proj2 _ (Sprod _ _ y) = y
+proj2 _ (SprodH _ _ _ _ y _) = y
 proj2 _ t = Sproj2 t
+
+refl :: Sem -> Sem
+refl = action [Ud]
+
+cong :: Integer -> Sem -> Sem -> Sem
+cong n f = app (n + 1) (refl f)
 
 sym :: Integer -> Sem -> Sem
 sym n (Slam x t s) = Slam x (UnknownOfType $ uot n t) $ \k m y -> sym k $ s k m (sym k y)
@@ -263,22 +272,22 @@ sym n (Slam x t s) = Slam x (UnknownOfType $ uot n t) $ \k m y -> sym k $ s k m 
 sym _ Szero = Szero
 sym _ t@(Ssuc _) = t
 sym _ Sunit = Sunit
-sym 0 (Sprod t s) = undefined
-sym n (Sprod t s) = undefined
-sym _ (Siso l) = Siso (sw l)
-  where sw (x:y:xs) = y:x:sw xs
-sym 0 (Strans t s) = Strans (sym 0 t) (sym 0 s)
-sym n (Strans t s) = undefined
-sym 0 (Ssym t) = t
-sym n (Ssym t) = undefined
+-- sym 0 (Sprod b t s) = let t' = sym 0 t in Sprod b t' (cong 0 (repl 0 (cong 0 b t')) (sym 0 s))
+-- (t,s) |-> (sym t, ? : subst B (sym t) b' = b)
+-- sym s : b' = subst B t b
+-- cong (repl (cong B (sym t))) (sym s) : subst B (sym t) b' = subst B (sym t) (subst B t b)
+sym n (SprodH l r b t s q) = SprodH r l b (sym n t) (sym n q) (sym n s)
+sym n (Siso a b f g p q r s) = Siso b a g f q p s r
+sym n (Strans t s) = Strans (sym n t) (sym n s)
+sym _ (Ssym t) = t
 sym 0 t@(Srefl _) = t
-sym n (Srefl t) = action [Ud] $ sym (n - 1) t
+sym n (Srefl t) = refl $ sym (n - 1) t
 sym _ t = Ssym t
 
 repl :: Integer -> Sem -> Sem
-repl _ (Siso (_:_:f:_)) = f
+repl _ (Siso _ _ f _ _ _ _ _) = f
 repl 0 (Srefl t) = Slam "x" t $ \_ _ -> id
-repl n (Srefl t) = action [Ud] $ repl (n - 1) t
+repl n (Srefl t) = refl $ repl (n - 1) t
 repl _ t = Srepl t
 
 eval :: Term -> Integer -> Ctx -> Sem
@@ -294,7 +303,7 @@ eval (Sigma p@(Lam z t s)) 1 c = let
     Siso tf tg tp tq = eval t 1 c
     r tX sX = Slam "x" pl $ \kx mx x -> let
         x1 = app kx (action mx tX) (proj1 kx x)
-        s' = eval s (kx + 1) $ M.insert z (action [Ud] x1) c
+        s' = eval s (kx + 1) $ M.insert z (refl x1) c
         in Sprod x1 (app kx (repl kx (sX kx s')) (proj2 kx x))
     in Siso (r tf (const id)) (r tg sym) undefined undefined
 -}
@@ -307,17 +316,25 @@ eval Zero _ _ = Szero
 eval Unit _ _ = Sunit
 eval Suc _ _ = Slam "n" Snat $ \_ _ -> Ssuc
 eval (Var x) _ c = fromMaybe (error $ "Unknown variable: " ++ x) (M.lookup x c)
-eval (Refl t) n c = eval t (n + 1) (M.map (action [Ud]) c)
+eval (Refl t) n c = eval t (n + 1) (M.map refl c)
 eval (App a b) n c = app n (eval a n c) (eval b n c)
 eval (Lam x t r) n c = Slam x (UnknownOfType $ uot n c) $
     \k m s -> eval r k $ M.insert x s (M.map (action m) c)
   where uot 0 c = eval t 0 c
         uot n c = Sid (uot (n - 1) (M.map (action [Ld]) c)) (uot (n - 1) (M.map (action [Rd]) c))
-eval (Cong t s) n c = app (n + 1) (action [Ud] (eval t n c)) (eval s n c)
+eval (Cong t s) n c = cong n (eval t n c) (eval s n c)
 eval (R _ z s p) n c = rec n (eval z n c) (eval s n c) (eval p n c)
 eval (Repl t) n c = repl n (eval t n c)
 eval (Proj1 t) n c = proj1 n (eval t n c)
 eval (Proj2 t) n c = proj2 n (eval t n c)
+eval (Prod b t s) 0 c = Sprod (eval b 0 c) (eval t 0 c) (eval s 0 c)
+eval p@(Prod b t s) n c = let
+    l' = eval p (n - 1) (M.map (action [Ld]) c)
+    r' = eval p (n - 1) (M.map (action [Rd]) c)
+    b' = eval b n c
+    t' = eval t n c
+    s' = eval s n c
+    in SprodH l' r' b' t' s' (cong (n - 1) (repl (n - 1) (app n b' t')) s')
 
 ---------------------------------------------------------------------------------------------------
 
