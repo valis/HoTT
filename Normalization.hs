@@ -6,13 +6,14 @@ import Data.List
 import Data.Maybe
 
 infixl 5 `App`
-data Term = Var String | Lam String Term Term | App Term Term | Zero | Proj1 Term | Proj2 Term
-    | Prod Term Term Term | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term | Sigma Term
-    | Id Term Term | Refl Term | Cong Term Term | Nat | Type Integer | Repl Term
+data Term = Var String | Lam String Term | App Term Term | Zero | Proj1 Term | Proj2 Term | Prod Term Term
+    | ProdD Term Term Term | Suc | R Term Term Term Term | Top | Bot | Unit | Pi Term Term | Sigma Term Term
+    | Id Term Term | Refl Term | Cong2 Term Term | Cong1 Term | Nat | Type Integer | Repl Term
+    | Sym Term | Trans Term Term
 newtype Norm = Norm Term deriving (Eq, Show)
 
 arr :: Term -> Term -> Term
-arr a b = Pi (Lam "_" a b)
+arr a b = Pi a (Lam "_" b)
 
 instance Eq Term where
     (==) = eq 0
@@ -26,18 +27,21 @@ instance Eq Term where
         eq _ (Type k) (Type k') = k == k'
         eq _ (Var x) (Var x') = x == x'
         eq n (Refl t) (Refl t') = eq n t t'
-        eq n (Cong t s) (Cong t' s') = eq n t t' && eq n s s'
+        eq n (Cong1 t) (Cong1 t') = eq n t t'
+        eq n (Cong2 t s) (Cong2 t' s') = eq n t t' && eq n s s'
         eq n (Id t s) (Id t' s') = eq n t t' && eq n s s'
         eq n (App t s) (App t' s') = eq n t t' && eq n s s'
-        eq n (Lam x t s) (Lam x' t' s') = eq n t t' &&
-            eq (n + 1) (rename s x (' ':show n)) (rename s' x' (' ':show n))
-        eq n (Pi t) (Pi t') = eq n t t'
+        eq n (Lam x s) (Lam x' s') = eq (n + 1) (rename s x (' ':show n)) (rename s' x' (' ':show n))
+        eq n (Pi t s) (Pi t' s') = eq n t t' && eq n s s'
         eq n (R t z s p) (R t' z' s' p') = eq n t t' && eq n z z' && eq n s s' && eq n p p'
         eq n (Repl t) (Repl t') = eq n t t'
         eq n (Proj1 t) (Proj1 t') = eq n t t'
         eq n (Proj2 t) (Proj2 t') = eq n t t'
-        eq n (Sigma t) (Sigma t') = eq n t t'
-        eq n (Prod b t s) (Prod b' t' s') = eq n b b' && eq n t t' && eq n s s'
+        eq n (Sigma t s) (Sigma t' s') = eq n t t' && eq n s s'
+        eq n (Prod t s) (Prod t' s') = eq n t t' && eq n s s'
+        eq n (ProdD b t s) (ProdD b' t' s') = eq n b b' && eq n t t' && eq n s s'
+        eq n (Sym t) (Sym t') = eq n t t'
+        eq n (Trans t s) (Trans t' s') = eq n t t' && eq n s s'
         eq _ _ _ = False
 
 instance Show Term where
@@ -46,8 +50,8 @@ instance Show Term where
         addParens True s = "(" ++ s ++ ")"
         addParens False s = s
         
-        showArrow e@(Lam _ _ _) = show' True e
-        showArrow e@(Pi _) = show' True e
+        showArrow e@(Lam _ _) = show' True e
+        showArrow e@(Pi _ _) = show' True e
         showArrow e = show e
         
         show' _ x | Just n <- getNat x = show n
@@ -61,24 +65,28 @@ instance Show Term where
         show' _ Unit = "Unit"
         show' _ Nat = "Nat"
         show' _ (Type k) = "Type_" ++ show k
-        show' par (Lam x t s) = addParens par $ "λ" ++ x ++ ":" ++ showArrow t ++ ". " ++ show s
+        show' par (Lam x s) = addParens par $ "λ" ++ x ++ ". " ++ show s
         show' par (Id a b) = addParens par $ show' True a ++ " = " ++ show' True b
         show' par (App a b) = addParens par $ show a ++ " " ++ show' True b
         show' par (R t z s n) = addParens par $
             "R " ++ show' True t ++ " " ++ show' True z ++ " " ++ show' True s ++ " " ++ show' True n
-        show' par (Pi (Lam "_" t s)) = addParens par $ show' True t ++ " → " ++ show s
-        show' par (Pi (Lam x t s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") → " ++ show s
-        show' par (Pi _) = error "show: Π without λ"
+        show' par (Pi t (Lam "_" s)) = addParens par $ show' True t ++ " → " ++ show s
+        show' par (Pi t (Lam x s)) = addParens par $ "(" ++ x ++ " : " ++ show t ++ ") → " ++ show s
+        show' par (Pi _ _) = error "show: Π without λ"
         show' par (Refl x) = addParens par $ "refl " ++ show' True x
-        show' par (Cong t s) = addParens par $ "cong " ++ show' True t ++ " " ++ show' True s
+        show' par (Cong1 t) = addParens par $ "cong " ++ show' True t
+        show' par (Cong2 t s) = addParens par $ "cong " ++ show' True t ++ " " ++ show' True s
         show' par (Repl t) = addParens par $ "repl " ++ show' True t
-        show' par (Sigma (Lam "_" t s)) = addParens par $ show' True t ++ " × " ++ show' True s
-        show' par (Sigma (Lam x t s)) = addParens par $
+        show' par (Sigma t (Lam "_" s)) = addParens par $ show' True t ++ " × " ++ show' True s
+        show' par (Sigma t (Lam x s)) = addParens par $
             "Σ(" ++ x ++ " : " ++ show' True t ++ ") " ++ show' True s
-        show' par (Sigma _) = error "show: Σ without λ"
+        show' par (Sigma _ _) = error "show: Σ without λ"
         show' par (Proj1 t) = addParens par $ "proj₁ " ++ show' True t
         show' par (Proj2 t) = addParens par $ "proj₂ " ++ show' True t
-        show' par (Prod _ t s) = addParens par $ show' True t ++ ", " ++ show' False s
+        show' par (Prod t s) = addParens par $ show' True t ++ ", " ++ show' False s
+        show' par (ProdD b t s) = addParens par $ "Σext " ++ show' True b ++ show' True t ++ " " ++ show' True s
+        show' par (Sym t) = addParens par $ "sym " ++ show' True t
+        show' par (Trans t s) = addParens par $ show' True t ++ "; " ++ show' False s
 
 rename :: Term -> String -> String -> Term
 rename q x r | x == r = q
@@ -93,65 +101,68 @@ rename (Var y) x r | x == y = Var r
 rename q@(Var _) _ _ = q
 rename (Refl t) x r = Refl (rename t x r)
 rename (App a b) x r = App (rename a x r) (rename b x r)
-rename q@(Lam y _ _) x _ | x == y = q
-rename (Lam y t s) x r | y == r = let
+rename q@(Lam y _) x _ | x == y = q
+rename (Lam y s) x r | y == r = let
     y' = head $ dropWhile (\z -> z == x || z == r) $ iterate (++ "'") y
-    in Lam y' (rename t x r) $ rename (rename s y y') x r
-rename (Lam y t s) x r = Lam y (rename t x r) (rename s x r)
+    in Lam y' $ rename (rename s y y') x r
+rename (Lam y s) x r = Lam y (rename s x r)
 rename (Id a b) x r = Id (rename a x r) (rename b x r)
-rename (Pi t) x r = Pi (rename t x r)
-rename (Cong t s) x r = Cong (rename t x r) (rename s x r)
+rename (Pi t s) x r = Pi (rename t x r) (rename s x r)
+rename (Cong1 t) x r = Cong1 (rename t x r)
+rename (Cong2 t s) x r = Cong2 (rename t x r) (rename s x r)
 rename (R t z s p) x r = R (rename t x r) (rename z x r) (rename s x r) (rename p x r)
 rename (Repl t) x r = Repl (rename t x r)
-rename (Sigma t) x r = Sigma (rename t x r)
+rename (Sigma t s) x r = Sigma (rename t x r) (rename s x r)
 rename (Proj1 t) x r = Proj1 (rename t x r)
 rename (Proj2 t) x r = Proj2 (rename t x r)
-rename (Prod b t s) x r = Prod (rename b x r) (rename t x r) (rename s x r)
+rename (Prod t s) x r = Prod (rename t x r) (rename s x r)
+rename (ProdD b t s) x r = ProdD (rename b x r) (rename t x r) (rename s x r)
+rename (Sym t) x r = Sym (rename t x r)
+rename (Trans t s) x r = Trans (rename t x r) (rename s x r)
 
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
-data Sem
-    = Slam String Sem (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
-    | Szero | Ssuc Sem -- Constructors for Nat
+data Base
+    = Slam String (Integer -> GlobMap -> Sem -> Sem) -- Constructor for Pi-types
+    | Szero | Ssuc Base -- Constructors for Nat
     | Sunit -- Constructor for Top
-    | Sprod Sem Sem Sem | SprodH Sem Sem Sem Sem Sem Sem -- Constructors for Sigma
-    | Spi Sem | Ssigma Sem | Stop | Snat | Sbot | Sid Sem Sem | Stype Integer -- Constructors for Type_k
-    | Siso Sem Sem Sem Sem Sem Sem | Strans Sem Sem | Ssym Sem
-    | Svar String | Sapp Sem Sem | Srec Sem Sem Sem | Sproj1 Sem | Sproj2 Sem | Srepl Sem Sem | Srefl Sem
-    | UnknownOfType Sem
+    | Sprod Base Base Base -- Constructors for Sigma
+    | Spi Base Base | Ssigma Base Base | Stop | Snat | Sbot | Sid Base Base | Stype Integer -- Constructors for Type_k
+    | Siso Base Base Base Base Base Base | Strans Base Base | Ssym Base
+    | Ne Norm
+
+data Tree a = Leaf a | Node (Tree a) (Tree a) deriving Eq
+type Sem = Tree Base
 type Ctx = M.Map String Sem
 
-instance Eq Sem where
+type Error = String
+data TCResult = SuccessType Base | Success | Fail Error
+
+instance Eq Base where
     (==) = eq 0
       where
-        eq n (Slam _ t s) (Slam _ t' s') = eq n t t' &&
-            eq (n + 1) (s 0 [] $ Svar $ "x_" ++ show n) (s' 0 [] $ Svar $ "x_" ++ show n)
+        eq n (Slam _ t) (Slam _ t') = let
+            Leaf s  = t  0 [] $ Leaf $ Ne $ Norm $ Var $ "x_" ++ show n
+            Leaf s' = t' 0 [] $ Leaf $ Ne $ Norm $ Var $ "x_" ++ show n
+            in eq (n + 1) s s'
         eq _ Szero Szero = True
         eq n (Ssuc t) (Ssuc t') = eq n t t'
         eq _ Sunit Sunit = True
-        eq n (Spi t) (Spi t') = eq n t t'
+        eq n (Spi t s) (Spi t' s') = eq n t t' && eq n s s'
         eq _ Snat Snat = True
         eq _ Stop Stop = True
         eq _ Sbot Sbot = True
         eq n (Sid a b) (Sid a' b') = eq n a a' && eq n b b'
         eq _ (Stype k) (Stype k') = k == k'
-        eq _ (Svar x) (Svar x') = x == x'
-        eq n (Sapp t s) (Sapp t' s') = eq n t t' && eq n s s'
-        eq n (Srec t s p) (Srec t' s' p') = eq n t t' && eq n s s' && eq n p p'
-        eq n (Ssigma t) (Ssigma t') = eq n t t'
-        eq n (Sproj1 t) (Sproj1 t') = eq n t t'
-        eq n (Sproj2 t) (Sproj2 t') = eq n t t'
+        eq n (Ne t) (Ne t') = t == t'
+        eq n (Ssigma t s) (Ssigma t' s') = eq n t t' && eq n s s'
         eq n (Sprod b t s) (Sprod b' t' s') = eq n b b' && eq n t t' && eq n s s'
-        eq n (SprodH _ _ b t s r) (SprodH _ _ b' t' s' r') =
-            eq n b b' && eq n t t' && eq n s s' && eq n r r'
-        eq n (Srepl t s) (Srepl t' s') = eq n t t' && eq n s s'
         eq n (Siso _ _ f g _ _) (Siso _ _ f' g' _ _) = eq n f f' && eq n g g'
-        eq n (Srefl t) (Srefl t') = eq n t t'
-        eq n (UnknownOfType t) (UnknownOfType t') = eq n t t'
         eq n (Ssym t) (Ssym t') = eq n t t'
         eq n (Strans t s) (Strans t' s') = eq n t t' && eq n s s'
         eq _ _ _ = False
 
+{-
 instance Show Sem where
     show = show' 0 False
       where
@@ -159,7 +170,7 @@ instance Show Sem where
         addParens False s = s
         
         showArrow n e@(Slam _ _ _) = show' n True e
-        showArrow n e@(Spi _) = show' n True e
+        showArrow n e@(Spi _ _) = show' n True e
         showArrow n e = show' n False e
         
         show' _ _ x | Just p <- getNat x = show p
@@ -433,3 +444,6 @@ main = fmap (\_ -> ()) $ runTestTT $ test
   where
     label :: String -> [Test] -> [Test]
     label l = map (\(i,t) -> TestLabel (l ++ " [" ++ show i ++ "]") t) . zip [1..]
+-}
+
+main = putStrLn "OK"
