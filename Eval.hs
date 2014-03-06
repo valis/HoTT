@@ -1,6 +1,7 @@
 module Eval
     ( eval
     , evalOfType
+    , typeOf
     ) where
 
 import qualified Data.Map as M
@@ -15,10 +16,19 @@ type ErrorMsg = String
 data Value
     = Slam String (Integer -> GlobMap -> Value -> Value) -- Constructor for Pi-types
     | Szero | Ssuc Value -- Constructors for Nat
-    | Spi Value String Value | Ssigma Value String Value | Snat | Sid Value Value | Stype Level -- Constructors for Type_k
+    | Spi Value (Value -> Value) | Ssigma Value (Value -> Value) -- Constructors for Type_k
+    | Snat | Sid Value Value | Stype Level -- Constructors for Type_k
     | Svar String | Sapp Value Value | Srec Value Value Value | Serror [ErrorMsg]
     -- | Srepl Value | Siso Value Value Value Value | Scomp Value Value | Ssym Value
-type Ctx = M.Map String (Value,Value,Level)
+type Ctx  = M.Map String (Value,Value)
+type CtxT = M.Map String Value
+
+infixr 5 `sarr`, `Spi`
+sarr :: Value -> Value -> Value
+sarr a b = Spi a (const b)
+
+sprod :: Value -> Value -> Value
+sprod a b = Ssigma a (const b)
 
 instance Ord Level where
     compare (Finite x) (Finite y) = compare x y
@@ -55,19 +65,9 @@ checkValue2 f (Serror m) _ = Serror m
 checkValue2 f _ (Serror m) = Serror m
 checkValue2 f v1 v2 = f v1 v2
 
-maxType :: Bool -> Value -> Value -> Value
-maxType _ (Stype k1) (Stype k2) = Stype (max k1 k2)
-maxType True _ _ = Stype (Finite 0)
-maxType False _ _ = Serror ["Expected type"]
-
-checkError :: Value -> Value -> Level -> Level -> (Value,Value,Level)
-checkError e1@(Serror _) e2@(Serror _) l1 l2 = (e1,e2,max l1 l2)
-checkError e@(Serror _) _ l1 l2 = (e,e,max l1 l2)
-checkError _ e@(Serror _) l1 l2 = (e,e,max l1 l2)
-checkError v1 v2 l1 l2 = (v1,v2,max l1 l2)
-
-retError :: [ErrorMsg] -> (Value,Value,Level)
-retError errs = (Serror errs, Serror errs, maxBound)
+maxType :: Value -> Value -> Value
+maxType (Stype k1) (Stype k2) = Stype (max k1 k2)
+maxType _ _ = Serror ["Expected type"]
 
 action :: GlobMap -> Value -> Value
 action _ v = v -- TODO: Define it
@@ -76,68 +76,109 @@ parseLevel :: String -> Level
 parseLevel "Type" = Omega
 parseLevel ('T':'y':'p':'e':s) = Finite (read s)
 
-eval :: Expr -> Integer -> Ctx -> (Value,Value,Level)
-eval (Lam _ _) _ _ = retError ["Cannot infer type of lambda expression"]
-eval (Arr e1 e2) 0 ctx = let
-    (v1, k1, l1) = eval e1 0 ctx
-    (v2, k2, l2) = eval e2 0 ctx
-    in checkError (Spi v1 "_" v2) (checkValue2 (maxType False) k1 k2) l1 l2
+app :: Integer -> Value -> Value -> Value
+app n = checkValue2 $ \(Slam _ f) -> f n []
+
+ctxtToCtx :: CtxT -> Ctx
+ctxtToCtx = M.mapWithKey (\k v -> (Svar k, v))
+
+ctxToCtxt :: Ctx -> CtxT
+ctxToCtxt = M.map snd
+
+renameExpr :: M.Map String v -> String -> Expr -> (String,Expr)
+renameExpr m x e = (x', rename e x x')
+  where b = M.member x m
+        x' = if b then fresh 0 else x
+        fv = freeVars e ++ M.keys m
+        fresh n | elem y fv = fresh (n + 1)
+                | otherwise = y
+                where y = x ++ show n
+
+typeOf'nondepType :: CtxT -> Expr -> Expr -> Value
+typeOf'nondepType ctx e1 e2 = checkValue2 maxType (typeOf ctx e1) (typeOf ctx e2)
+
+typeOf'depType :: ([TypedVar] -> Expr -> Expr) -> CtxT -> [TypedVar] -> Expr -> Value
+typeOf'depType _ ctx [] e = typeOf ctx e
+typeOf'depType dt ctx (TypedVar (Var NoArg) t : vars) e = typeOf'nondepType ctx t (dt vars e)
+typeOf'depType dt ctx (TypedVar (Var (Arg (PIdent (_,x)))) t : vars) e =
+    let k1 = typeOf ctx t
+        (x',e') = renameExpr ctx x (dt vars e)
+        k2 = typeOf (M.insert x' (eval t 0 (ctxtToCtx ctx)) ctx) e'
+    in checkValue2 maxType k1 k2
+typeOf'depType _ _ (TypedVar _ _ : _) _ = Serror ["Expected identifier"]
+
+typeOf :: CtxT -> Expr -> Value
+typeOf _ (Lam _ _) = Serror ["Cannot infer type of lambda expression"]
+typeOf ctx (Arr e1 e2) = typeOf'nondepType ctx e1 e2
+typeOf ctx (Prod e1 e2) = typeOf'nondepType ctx e1 e2
+typeOf ctx (Pi tv e) = typeOf'depType Pi ctx tv e
+typeOf ctx (Sigma tv e) = typeOf'depType Sigma ctx tv e
+typeOf ctx (Id a b) = checkValue2 cmpTypes (typeOf ctx a) (typeOf ctx b)
+  where cmpTypes ta tb = maybe (Serror ["Types differ"]) id (maxTypeValue ta tb)
+typeOf _ Nat = Stype (Finite 0)
+typeOf _ (Universe (U t)) = Stype $ succ (parseLevel t)
+typeOf ctx (App e1 e2) = case typeOf ctx e1 of
+    Spi a b -> b $ evalOfType e2 a 0 (ctxtToCtx ctx)
+    t -> Serror $ either id (\r -> ["Expected pi type\nActual type: " ++ show r]) $ reify t (Stype maxBound)
+typeOf _ (Var NoArg) = Serror ["Expected identifier"]
+typeOf ctx (Var (Arg (PIdent (_,x)))) = maybe (Serror ["Unknown identifier " ++ x]) id (M.lookup x ctx)
+typeOf _ Suc = sarr Snat Snat
+typeOf _ (NatConst x) = Snat
+typeOf _ Rec = (Snat `sarr` Stype maxBound) `Spi` \p -> Sapp p Szero `sarr`
+    (Snat `Spi` \x -> Sapp p x `sarr` Sapp p (Ssuc x)) `sarr` Snat `Spi` Sapp p
+-- Rec : (p : Nat -> Type) -> p 0 -> ((x : Nat) -> p x -> p (Suc x)) -> (x : Nat) -> p x
+
+-- First argument must be well-typed
+eval :: Expr -> Integer -> Ctx -> Value
+eval (Lam _ _) _ _ = Serror ["Cannot infer type of lambda expression"]
+eval (Arr e1 e2) 0 ctx = sarr (eval e1 0 ctx) (eval e2 0 ctx)
+eval (Prod e1 e2) 0 ctx = sprod (eval e1 0 ctx) (eval e2 0 ctx)
 eval (Pi [] e) n ctx = eval e n ctx
-eval (Pi (TypedVar (Var NoArg) t : vars) e) n ctx = eval (Arr t (Pi vars e)) n ctx
-eval (Pi (TypedVar (Var (Arg (PIdent (_,x)))) t : vars) e) 0 ctx
-  | M.member x ctx = undefined -- TODO: Define it
-  | otherwise = case eval t 0 ctx of
-        (v1, Stype k1, l1) -> let (v2, k2, l2) = eval (Pi vars e) 0 (M.insert x (Svar x,v1,k1) ctx)
-                              in checkError (Spi v1 x v2) (checkValue2 (maxType False) (Stype k1) k2) l1 l2
-        _ -> retError ["Expected type"]
-eval (Pi (TypedVar _ t : vars) e) 0 ctx = retError ["Expected identifier"]
-eval (Prod e1 e2) 0 ctx = let
-    (v1, k1, l1) = eval e1 0 ctx
-    (v2, k2, l2) = eval e2 0 ctx
-    in checkError (Ssigma v1 "_" v2) (checkValue2 (maxType False) k1 k2) l1 l2
 eval (Sigma [] e) n ctx = eval e n ctx
+eval (Pi (TypedVar (Var NoArg) t : vars) e) n ctx = eval (Arr t (Pi vars e)) n ctx
 eval (Sigma (TypedVar (Var NoArg) t : vars) e) n ctx = eval (Prod t (Sigma vars e)) n ctx
-eval (Sigma (TypedVar (Var (Arg (PIdent (_,x)))) t : vars) e) 0 ctx
-  | M.member x ctx = undefined -- TODO: Define it
-  | otherwise = case eval t 0 ctx of
-        (v1, Stype k1, l1) -> let (v2, k2, l2) = eval (Pi vars e) 0 (M.insert x (Svar x,v1,k1) ctx)
-                              in checkError (Ssigma v1 x v2) (checkValue2 (maxType False) (Stype k1) k2) l1 l2
-        _ -> retError ["Expected type"]
-eval (Sigma (TypedVar _ t : vars) e) 0 ctx = retError ["Expected identifier"]
-eval (Id a b) 0 ctx = let
-    (va,ta,la) = eval a 0 ctx
-    (vb,tb,lb) = evalOfType b ta la 0 ctx
-    in (Sid va vb, maxType True tb ta, max la lb)
-eval Nat 0 _ = (Snat, Stype (Finite 0), Finite 1)
-eval (Universe (U t)) 0 _ = let lvl = parseLevel t in (Stype lvl, Stype (succ lvl), succ $ succ lvl)
-eval (App e1 e2) n ctx = undefined
+eval (Pi (TypedVar (Var (Arg (PIdent (_,x)))) t : vars) e) 0 ctx =
+  let v1 = eval t 0 ctx
+  in Spi v1 $ \a -> let (x',e') = renameExpr ctx x (Pi vars e)
+                    in eval e' 0 (M.insert x' (a,v1) ctx)
+eval (Sigma (TypedVar (Var (Arg (PIdent (_,x)))) t : vars) e) 0 ctx =
+  let v1 = eval t 0 ctx
+  in Ssigma v1 $ \a -> let (x',e') = renameExpr ctx x (Sigma vars e)
+                       in eval e' 0 (M.insert x' (a,v1) ctx)
+eval (Pi (TypedVar _ t : vars) e) 0 ctx = Serror ["Expected identifier"]
+eval (Sigma (TypedVar _ t : vars) e) 0 ctx = Serror ["Expected identifier"]
+eval (Id a b) 0 ctx = Sid (eval a 0 ctx) (eval b 0 ctx)
+eval Nat 0 _ = Snat
+eval (Universe (U t)) 0 _ = Stype (parseLevel t)
+eval (App e1 e2) n ctx = case typeOf (ctxToCtxt ctx) e1 of
+    Spi a _ -> app n (eval e1 n ctx) (evalOfType e2 a n ctx)
+    t -> Serror ["Expected pi type\nActual type: " ++ show (reify t $ Stype maxBound)]
 eval (Var x) n ctx = undefined
 eval Suc n ctx = undefined
 eval (NatConst x) n ctx = undefined
 eval Rec n ctx = undefined
 
-evalOfType :: Expr -> Value -> Level -> Integer -> Ctx -> (Value,Value,Level)
-evalOfType (Lam [] e) ty lvl n ctx = evalOfType e ty lvl n ctx
-evalOfType (Lam (Binder NoArg:xs) e) (Spi a _ b) lvl n ctx = (Slam "_" $ \k m _ -> let
-    (r,_,_) = evalOfType (Lam xs e) b lvl k $ M.map (\(v,t,l) -> (action m v,t,l)) ctx in r, Spi a "_" b, lvl)
-evalOfType (Lam (Binder (Arg (PIdent (_,x))):xs) e) (Spi a y b) lvl n ctx
-  | M.member x ctx = undefined -- TODO: Define it
-  | otherwise = (Slam x $ \k m v -> let
-        m' = M.insert x (v,a,lvl) $ M.map (\(v,t,l) -> (action m v,t,l)) ctx
-        (r,_,_) = evalOfType (Lam xs e) (renameValue b y x) lvl k m'
-        in r, Spi a y b, lvl)
-evalOfType (Lam _ _) ty _ _ _ = case reify ty (Stype maxBound) of
-    Left errs -> retError errs
-    Right e -> retError ["Expected pi type\nActual type: " ++ show e]
-evalOfType e ty lvl n ctx = let
-    (r,ty1,lvl1) = eval e n ctx
-    te = reify ty (Stype lvl)
-    te1 = reify ty1 (Stype lvl1)
+evalOfType :: Expr -> Value -> Integer -> Ctx -> Value
+evalOfType (Lam [] e) ty n ctx = evalOfType e ty n ctx
+evalOfType (Lam (Binder NoArg:xs) e) (Spi a b) n ctx = Slam "_" $ \k m v ->
+    evalOfType (Lam xs e) (b v) k $ M.map (\(v,t) -> (action m v,t)) ctx
+evalOfType (Lam (Binder (Arg (PIdent (_,x))):xs) e) (Spi a b) n ctx =
+    let (x',e') = renameExpr ctx x (Lam xs e)
+    in Slam x' $ \k m v -> evalOfType e' (b v) k $ M.insert x' (v,a) $ M.map (\(v,t) -> (action m v,t)) ctx
+evalOfType (Lam _ _) ty _ _ = case reify ty (Stype maxBound) of
+    Left errs -> Serror errs
+    Right e -> Serror ["Expected pi type\nActual type: " ++ show e]
+evalOfType e ty n ctx = let
+    te = reify ty (Stype maxBound)
+    te1 = reify (typeOf (ctxToCtxt ctx) e) (Stype maxBound)
     in case (te,te1) of
-        (Left errs,_) -> retError errs
-        (_,Left errs) -> retError errs
-        (Right te', Right te1') -> if te1' <= te' then (r,ty1,lvl1) else
-            retError ["Expected type: " ++ show te' ++ "\nActual type: " ++ show te1']
+        (Left errs,_) -> Serror errs
+        (_,Left errs) -> Serror errs
+        (Right te', Right te1') -> if te1' <= te' then eval e n ctx else
+            Serror ["Expected type: " ++ show te' ++ "\nActual type: " ++ show te1']
+
+maxTypeValue :: Value -> Value -> Maybe Value
+maxTypeValue = undefined
 
 newtype Norm = Norm Expr
 
@@ -153,10 +194,9 @@ instance Show Norm where
 reify :: Value -> Value -> Either [ErrorMsg] Norm
 reify = undefined
 
+freeVars :: Expr -> [String]
+freeVars = undefined
+
 rename :: Expr -> String -> String -> Expr
 rename e x y | x == y = e
 rename _ _ _ = undefined
-
-renameValue :: Value -> String -> String -> Value
-renameValue v x y | x == y = v
-renameValue _ _ _ = undefined
