@@ -4,6 +4,9 @@ module Eval
     , typeOf
     , hasType
     , reify
+    , Value(..)
+    , Norm(..)
+    , unBinder
     ) where
 
 import qualified Data.Map as M
@@ -246,6 +249,24 @@ typeOfLam ctx e ty = do
                 then Left ["Expected arrow type\nActual type: " ++ show (reify (M.keys ctx) (Spi x a b) $ Stype maxBound)]
                 else Right b'
         _ -> Left ["Expected pi type\nActual type: " ++ show (reify (M.keys ctx) t $ Stype maxBound)]
+
+{-
+depTypeOfLam :: CtxT -> Expr -> Value -> Err Value
+depTypeOfLam ctx (Lam [] e) t = depTypeOfLam ctx e t
+depTypeOfLam ctx (Lam (x:xs) e) t =
+    let (x',e') = renameExpr (M.keys ctx) (unBinder x) (Lam xs e)
+    in do
+        typeOf (M.insert x' t ctx) e'
+        Right $ SPi x' $ \v -> typeOf (M.insert) e'
+depTypeOfLam ctx e ty = do
+    t <- typeOf ctx e
+    case t of
+        r@(Spi x a b) -> if cmpTypes (M.keys ctx) a ty == Just EQ
+            then Right r
+            else Left ["Expected type: " ++ show (reify (M.keys ctx) a  $ Stype maxBound) ++
+                       "\nActual type: " ++ show (reify (M.keys ctx) ty $ Stype maxBound)]
+        _ -> Left ["Expected pi type\nActual type: " ++ show (reify (M.keys ctx) t $ Stype maxBound)]
+-}
 
 hasType :: CtxT -> Expr -> Value -> Err ()
 hasType ctx (Lam [] e) ty = hasType ctx e ty

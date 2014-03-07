@@ -1,5 +1,10 @@
-sucTest : (0 = 0 -> Nat) -> Nat
-sucTest = (\(x : Nat) (f : x = x -> Nat) -> f (idp x)) 0
+sucTest1 : (0 = 0 -> Nat) -> Nat
+sucTest1 = (\(x : Nat) (f : x = x -> Nat) -> f (idp x)) 0
+
+sucTest2 : (0 = 0 -> Nat) -> Nat
+sucTest2 = (\x (f : x = x -> Nat) -> f (idp x)) 0
+
+sucTest3 = (\x (f : x = x -> Nat) -> f (idp x)) 0
 
 failTest : (0 = 0 -> Nat) -> Nat
 failTest f = (\x -> f (idp x)) 0
