@@ -197,7 +197,9 @@ sToken p s = PT p (TS s i)
       "R" -> 9
       "\\" -> 10
       "_" -> 11
-      "suc" -> 12
+      "idp" -> 12
+      "pmap" -> 13
+      "suc" -> 14
       _ -> error $ "not a reserved word: " ++ show s
 
 -- | Get the position of a token.

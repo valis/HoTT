@@ -1,11 +1,16 @@
 module Main(main) where
 
 import System.Environment
+import System.IO
+import Data.List
+import Data.Either
+import Control.Monad
 
 import Parser.ErrM
 import Parser.AbsGrammar
 import Parser.ParGrammar
 import Parser.LayoutGrammar
+import Parser.PrintGrammar
 
 import Eval
 
@@ -25,16 +30,24 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDef :: Def -> String
-processDef = undefined
+processDefs :: [Def] -> [Either String (String,Expr,[String],Expr)]
+processDefs = undefined
 
-run :: Err Defs -> Either String String
-run (Bad s) = Left s
-run (Ok (Defs defs)) = Right (concatMap processDef defs)
+run :: Err Defs -> (String,String)
+run (Bad s) = (s,"")
+run (Ok (Defs defs)) =
+    let (errs,res) = partitionEithers (processDefs defs)
+    in (concat errs, intercalate "\n\n" $ map print res)
+  where
+    print :: (String,Expr,[String],Expr) -> String
+    print (x,t,as,e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " " ++ unwords as ++ " = " ++ printTree e
 
 runFile :: String -> IO ()
-runFile input = readFile input >>= either putStrLn (writeFile output) . run . parser
-  where output = outputFilename input
+runFile input = do
+    cnt <- readFile input
+    let (errs,res) = run (parser cnt)
+    when (not $ null errs) (hPutStrLn stderr errs)
+    when (not $ null res) $ writeFile (outputFilename input) res
 
 main :: IO ()
 main = getArgs >>= mapM_ runFile

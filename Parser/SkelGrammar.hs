@@ -43,6 +43,8 @@ transExpr x = case x of
   Nat  -> failure x
   Suc  -> failure x
   Rec  -> failure x
+  Idp  -> failure x
+  Pmap expr  -> failure x
   NatConst n  -> failure x
   Universe u  -> failure x
 

@@ -26,7 +26,9 @@ import Parser.ErrM
  'R' { PT _ (TS _ 9) }
  '\\' { PT _ (TS _ 10) }
  '_' { PT _ (TS _ 11) }
- 'suc' { PT _ (TS _ 12) }
+ 'idp' { PT _ (TS _ 12) }
+ 'pmap' { PT _ (TS _ 13) }
+ 'suc' { PT _ (TS _ 14) }
 
 L_integ  { PT _ (TI $$) }
 L_U { PT _ (T_U $$) }
@@ -87,6 +89,8 @@ Expr5 : Arg { Var $1 }
   | 'Nat' { Nat }
   | 'suc' { Suc }
   | 'R' { Rec }
+  | 'idp' { Idp }
+  | 'pmap' Expr5 { Pmap $2 }
   | Integer { NatConst $1 }
   | U { Universe $1 }
   | '(' Expr ')' { $2 }

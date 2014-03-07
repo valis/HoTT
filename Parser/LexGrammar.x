@@ -92,7 +92,7 @@ eitherResIdent tv s = treeFind resWords
                               | s > a  = treeFind right
                               | s == a = t
 
-resWords = b "=" 7 (b "->" 4 (b ")" 2 (b "(" 1 N N) (b "*" 3 N N)) (b ";" 6 (b ":" 5 N N) N)) (b "\\" 10 (b "R" 9 (b "Nat" 8 N N) N) (b "suc" 12 (b "_" 11 N N) N))
+resWords = b "Nat" 8 (b "->" 4 (b ")" 2 (b "(" 1 N N) (b "*" 3 N N)) (b ";" 6 (b ":" 5 N N) (b "=" 7 N N))) (b "idp" 12 (b "\\" 10 (b "R" 9 N N) (b "_" 11 N N)) (b "suc" 14 (b "pmap" 13 N N) N))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

@@ -116,6 +116,8 @@ instance Print Expr where
    Nat  -> prPrec i 5 (concatD [doc (showString "Nat")])
    Suc  -> prPrec i 5 (concatD [doc (showString "suc")])
    Rec  -> prPrec i 5 (concatD [doc (showString "R")])
+   Idp  -> prPrec i 5 (concatD [doc (showString "idp")])
+   Pmap expr -> prPrec i 5 (concatD [doc (showString "pmap") , prt 5 expr])
    NatConst n -> prPrec i 5 (concatD [prt 0 n])
    Universe u -> prPrec i 5 (concatD [prt 0 u])
 

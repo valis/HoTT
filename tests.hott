@@ -2,13 +2,13 @@ sucTest : (0 = 0 -> Nat) -> Nat
 sucTest = (\(x : Nat) (f : x = x -> Nat) -> f (idp x)) 0
 
 failTest : (0 = 0 -> Nat) -> Nat
-failTest = \f -> (\x -> f (idp x)) 0
+failTest f = (\x -> f (idp x)) 0
 
 pmapTest1 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
-pmapTest1 = \p y -> pmap y p
+pmapTest1 p y = pmap y p
 
 pmapTest2 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 pmapTest2 p y = pmap (\x -> y x) p
 
-pmapTest3 : (g f : Nat -> Nat) -> f = g -> Nat -> f y = g y
+pmapTest3 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
 pmapTest3 g f p y = pmap (\x -> x y) p

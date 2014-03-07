@@ -26,6 +26,8 @@ data Expr =
  | Nat
  | Suc
  | Rec
+ | Idp
+ | Pmap Expr
  | NatConst Integer
  | Universe U
   deriving (Eq,Ord,Show)
