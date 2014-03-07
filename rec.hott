@@ -1,0 +1,12 @@
+plus : Nat -> Nat -> Nat
+plus x = R (\_ -> Nat) x (\_ -> suc)
+
+mul : Nat -> Nat -> Nat
+mul x = R (\_ -> Nat) 0 (\_ -> plus x)
+
+st = mul 7 9
+
+fac : Nat -> Nat
+fac = R (\_ -> Nat) 1 (\n -> mul (suc n))
+
+sht = fac 6

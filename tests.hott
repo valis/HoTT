@@ -6,6 +6,9 @@ sucTest2 = (\x (f : x = x -> Nat) -> f (idp x)) 0
 
 sucTest3 = (\x (f : x = x -> Nat) -> f (idp x)) 0
 
+sucTest4 : (0 = 0 -> Nat) -> Nat
+sucTest4 = let x = 0 in \(f : x = x -> Nat) -> f (idp x)
+
 failTest : (0 = 0 -> Nat) -> Nat
 failTest f = (\x -> f (idp x)) 0
 
