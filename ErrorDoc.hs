@@ -1,61 +1,44 @@
 module ErrorDoc
-    ( EDoc
-    , EPretty(..)
-    , etext, enull, (<>), (<+>), ($$)
-    , etextL, etextLC, emsgL, emsgLC, edocL, edocLC
-    , render
+    ( Pretty(..)
+    , textL, textLC, msgL, msgLC, docL, docLC
+    , module Text.PrettyPrint
+    , prettyLevel
+    , prettyHead
     ) where
 
-import qualified Text.PrettyPrint as P
+import Text.PrettyPrint
 
 import Parser.AbsGrammar
+import Parser.PrintGrammar(printTree)
 
-data EDoc = EText String | EBeside EDoc Bool EDoc | EAbove EDoc EDoc | ENull
+class Pretty a where
+    pretty :: a -> Doc
 
-class EPretty a where
-    epretty :: a -> EDoc
+instance Pretty Expr where
+    pretty = text . printTree
 
-etext :: String -> EDoc
-etext = EText
+prettyLevel :: Int -> Expr -> Doc
+prettyLevel n e | n < 0 = pretty e
+prettyLevel 0 _ = text "_"
+prettyLevel _ e = pretty e -- TODO: Define it
 
-enull :: EDoc
-enull = ENull
+prettyHead :: Expr -> Doc
+prettyHead = prettyLevel 1
 
-infixl 6 <>, <+>
-infixl 5 $$
-(<>) :: EDoc -> EDoc -> EDoc
-d1 <> d2 = EBeside d1 False d2
+textL :: Int -> String -> Doc
+textL l s = text (show l ++ ":") <+> text s
 
-(<+>) :: EDoc -> EDoc -> EDoc
-d1 <+> d2 = EBeside d1 True d2
+textLC :: Int -> Int -> String -> Doc
+textLC l c s = text (show l ++ ":" ++ show c ++ ":") <+> text s
 
-($$) :: EDoc -> EDoc -> EDoc
-($$) = EAbove
+msgL :: Int -> String -> Doc -> Doc
+msgL l s d = text (show l ++ ":") <+> text s $$ d
 
-etextL :: Int -> String -> EDoc
-etextL l s = etext (show l ++ ":") <+> etext s
+msgLC :: Int -> Int -> String -> Doc -> Doc
+msgLC l c s d = text (show l ++ ":" ++ show c ++ ":") <+> text s $$ d
 
-etextLC :: Int -> Int -> String -> EDoc
-etextLC l c s = etext (show l ++ ":" ++ show c ++ ":") <+> etext s
+docL :: Int -> Doc -> Doc
+docL l d = text (show l ++ ":") <+> d
 
-emsgL :: Int -> String -> EDoc -> EDoc
-emsgL l s d = etext (show l ++ ":") <+> etext s $$ d
-
-emsgLC :: Int -> Int -> String -> EDoc -> EDoc
-emsgLC l c s d = etext (show l ++ ":" ++ show c ++ ":") <+> etext s $$ d
-
-edocL :: Int -> EDoc -> EDoc
-edocL l d = etext (show l ++ ":") <+> d
-
-edocLC :: Int -> Int -> EDoc -> EDoc
-edocLC l c d = etext (show l ++ ":" ++ show c ++ ":") <+> d
-
-render :: EDoc -> String
-render = P.render . edocToDoc
-  where
-    edocToDoc :: EDoc -> P.Doc
-    edocToDoc ENull = P.empty
-    edocToDoc (EText s) = P.text s
-    edocToDoc (EBeside d1 False d2) = edocToDoc d1 P.<> edocToDoc d2
-    edocToDoc (EBeside d1 True d2) = edocToDoc d1 P.<+> edocToDoc d2
-    edocToDoc (EAbove d1 d2) = edocToDoc d1 P.$$ edocToDoc d2
+docLC :: Int -> Int -> Doc -> Doc
+docLC l c d = text (show l ++ ":" ++ show c ++ ":") <+> d

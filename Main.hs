@@ -12,7 +12,7 @@ import Parser.ErrM
 import Parser.AbsGrammar
 import Parser.ParGrammar
 import Parser.LayoutGrammar
-import Parser.PrintGrammar hiding (render)
+import Parser.PrintGrammar(printTree)
 
 import Eval
 import ErrorDoc
@@ -36,7 +36,7 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [EDoc]) ([String],Expr,Expr)
+processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [Doc]) ([String],Expr,Expr)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (ev,tv) <- evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
@@ -50,7 +50,7 @@ processDecl name args expr ty = do
     extractArgs (Lam _ xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
     extractArgs e = ([],e)
 
-processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [EDoc] (String,Expr,[String],Expr)]
+processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [Doc] (String,Expr,[String],Expr)]
 processDecls _ [] = []
 processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
     Left errs -> Left errs : processDecls ctx decls
