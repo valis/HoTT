@@ -11,10 +11,10 @@ st = mul 7 9
 fac : Nat -> Nat
 fac = R (\_ -> Nat) 1 (\n -> mul (suc n))
 
-sht = fac 8
+sht = fac 5
 
-succ : sht = 40320
+succ : sht = 120
 succ = idp sht
 
-fail : sht = 40320
-fail = idp 40321
+fail : sht = 120
+fail = idp 121

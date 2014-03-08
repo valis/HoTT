@@ -15,35 +15,43 @@ import Parser.ErrM
 %tokentype { Token }
 
 %token 
- '(' { PT _ (TS _ 1) }
- ')' { PT _ (TS _ 2) }
- '*' { PT _ (TS _ 3) }
- '->' { PT _ (TS _ 4) }
- ':' { PT _ (TS _ 5) }
- ';' { PT _ (TS _ 6) }
- '=' { PT _ (TS _ 7) }
- 'Nat' { PT _ (TS _ 8) }
- 'R' { PT _ (TS _ 9) }
- '\\' { PT _ (TS _ 10) }
- '_' { PT _ (TS _ 11) }
- 'idp' { PT _ (TS _ 12) }
- 'in' { PT _ (TS _ 13) }
- 'let' { PT _ (TS _ 14) }
- 'pmap' { PT _ (TS _ 15) }
- 'suc' { PT _ (TS _ 16) }
- '{' { PT _ (TS _ 17) }
- '}' { PT _ (TS _ 18) }
+ ')' { PT _ (TS _ 1) }
+ '*' { PT _ (TS _ 2) }
+ '->' { PT _ (TS _ 3) }
+ ':' { PT _ (TS _ 4) }
+ ';' { PT _ (TS _ 5) }
+ '=' { PT _ (TS _ 6) }
+ 'in' { PT _ (TS _ 7) }
+ 'let' { PT _ (TS _ 8) }
+ '{' { PT _ (TS _ 9) }
+ '}' { PT _ (TS _ 10) }
 
-L_integ  { PT _ (TI $$) }
-L_U { PT _ (T_U $$) }
+L_U { PT _ (T_U _) }
+L_PLam { PT _ (T_PLam _) }
+L_PPar { PT _ (T_PPar _) }
+L_PInt { PT _ (T_PInt _) }
+L_Ppmap { PT _ (T_Ppmap _) }
+L_PIdp { PT _ (T_PIdp _) }
+L_PR { PT _ (T_PR _) }
+L_PSuc { PT _ (T_PSuc _) }
+L_PNat { PT _ (T_PNat _) }
+L_Pus { PT _ (T_Pus _) }
 L_PIdent { PT _ (T_PIdent _) }
 L_err    { _ }
 
 
 %%
 
-Integer :: { Integer } : L_integ  { (read ( $1)) :: Integer }
-U    :: { U} : L_U { U ($1)}
+U    :: { U} : L_U { U (mkPosToken $1)}
+PLam    :: { PLam} : L_PLam { PLam (mkPosToken $1)}
+PPar    :: { PPar} : L_PPar { PPar (mkPosToken $1)}
+PInt    :: { PInt} : L_PInt { PInt (mkPosToken $1)}
+Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
+PIdp    :: { PIdp} : L_PIdp { PIdp (mkPosToken $1)}
+PR    :: { PR} : L_PR { PR (mkPosToken $1)}
+PSuc    :: { PSuc} : L_PSuc { PSuc (mkPosToken $1)}
+PNat    :: { PNat} : L_PNat { PNat (mkPosToken $1)}
+Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
 
 Defs :: { Defs }
@@ -63,7 +71,7 @@ ListDef : {- empty -} { [] }
 
 Expr :: { Expr }
 Expr : 'let' '{' ListDef '}' 'in' Expr { Let $3 $6 } 
-  | '\\' ListBinder '->' Expr { Lam $2 $4 }
+  | PLam ListBinder '->' Expr { Lam $1 $2 $4 }
   | Expr1 { $1 }
 
 
@@ -91,19 +99,19 @@ Expr4 : Expr4 Expr5 { App $1 $2 }
 
 Expr5 :: { Expr }
 Expr5 : Arg { Var $1 } 
-  | 'Nat' { Nat }
-  | 'suc' { Suc }
-  | 'R' { Rec }
-  | 'idp' { Idp }
-  | 'pmap' Expr5 { Pmap $2 }
-  | Integer { NatConst $1 }
+  | PNat { Nat $1 }
+  | PSuc { Suc $1 }
+  | PR { Rec $1 }
+  | PIdp { Idp $1 }
+  | Ppmap Expr5 { Pmap $1 $2 }
+  | PInt { NatConst $1 }
   | U { Universe $1 }
-  | '(' Expr ')' { $2 }
+  | PPar Expr ')' { Paren $1 $2 }
 
 
 Arg :: { Arg }
 Arg : PIdent { Arg $1 } 
-  | '_' { NoArg }
+  | Pus { NoArg $1 }
 
 
 ListArg :: { [Arg] }
@@ -121,7 +129,7 @@ ListBinder : Binder { (:[]) $1 }
 
 
 TypedVar :: { TypedVar }
-TypedVar : '(' Expr ':' Expr ')' { TypedVar $2 $4 } 
+TypedVar : PPar Expr ':' Expr ')' { TypedVar $1 $2 $4 } 
 
 
 ListTypedVar :: { [TypedVar] }

@@ -12,9 +12,10 @@ import Parser.ErrM
 import Parser.AbsGrammar
 import Parser.ParGrammar
 import Parser.LayoutGrammar
-import Parser.PrintGrammar
+import Parser.PrintGrammar hiding (render)
 
 import Eval
+import ErrorDoc
 
 outputFilename :: String -> String
 outputFilename input = case break (== '/') input of
@@ -35,9 +36,10 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [String]) ([String],Expr,Expr)
+processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [EDoc]) ([String],Expr,Expr)
 processDecl name args expr ty = do
-    (ev,tv) <- evalDecl name (Lam (map Binder args) expr) ty
+    let p = if null args then getPos expr else argGetPos (head args)
+    (ev,tv) <- evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
     (gctx,ctx) <- get
     let fv = (M.keys ctx ++ M.keys gctx)
         (a,e') = extractArgs $ unNorm (reify fv ev tv)
@@ -45,10 +47,10 @@ processDecl name args expr ty = do
     return (a,e',t)
   where
     extractArgs :: Expr -> ([String],Expr)
-    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
+    extractArgs (Lam _ xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
     extractArgs e = ([],e)
 
-processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [String] (String,Expr,[String],Expr)]
+processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [EDoc] (String,Expr,[String],Expr)]
 processDecls _ [] = []
 processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
     Left errs -> Left errs : processDecls ctx decls
@@ -58,7 +60,7 @@ run :: Err Defs -> (String,String)
 run (Bad s) = (s,"")
 run (Ok (Defs defs)) =
     let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty) (processDefs defs)
-    in (intercalate "\n\n" (concat errs), intercalate "\n\n" (map print res))
+    in (intercalate "\n\n" (map render $ concat errs), intercalate "\n\n" (map print res))
   where
     print :: (String,Expr,[String],Expr) -> String
     print (x,t,[],e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " = " ++ printTree e

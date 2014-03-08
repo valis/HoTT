@@ -186,24 +186,16 @@ sToken :: Position -> String -> Token
 sToken p s = PT p (TS s i)
   where
     i = case s of
-      "(" -> 1
-      ")" -> 2
-      "*" -> 3
-      "->" -> 4
-      ":" -> 5
-      ";" -> 6
-      "=" -> 7
-      "Nat" -> 8
-      "R" -> 9
-      "\\" -> 10
-      "_" -> 11
-      "idp" -> 12
-      "in" -> 13
-      "let" -> 14
-      "pmap" -> 15
-      "suc" -> 16
-      "{" -> 17
-      "}" -> 18
+      ")" -> 1
+      "*" -> 2
+      "->" -> 3
+      ":" -> 4
+      ";" -> 5
+      "=" -> 6
+      "in" -> 7
+      "let" -> 8
+      "{" -> 9
+      "}" -> 10
       _ -> error $ "not a reserved word: " ++ show s
 
 -- | Get the position of a token.

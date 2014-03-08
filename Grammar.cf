@@ -1,0 +1,60 @@
+entrypoints Defs;
+
+comment "--";
+comment "{-" "-}";
+
+layout "let";
+layout stop "in";
+layout toplevel;
+
+Defs.      Defs ::= [Def];
+Def.       Def ::= PIdent [Arg] "=" Expr;
+DefType.   Def ::= PIdent ":" Expr;
+
+separator  Def ";";
+
+Let.      Expr  ::= "let" "{" [Def] "}" "in" Expr;
+Lam.      Expr  ::= PLam [Binder] "->" Expr;
+Arr.      Expr1 ::= Expr3 "->" Expr1;
+Pi.       Expr1 ::= [TypedVar] "->" Expr1;
+Prod.     Expr2 ::= Expr3 "*" Expr2;
+Sigma.    Expr2 ::= [TypedVar] "*" Expr2;
+Id.       Expr3 ::= Expr4 "=" Expr4;
+App.      Expr4 ::= Expr4 Expr5;
+Var.      Expr5 ::= Arg;
+Nat.      Expr5 ::= PNat;
+Suc.      Expr5 ::= PSuc;
+Rec.      Expr5 ::= PR;
+Idp.      Expr5 ::= PIdp;
+Pmap.     Expr5 ::= Ppmap Expr5;
+NatConst. Expr5 ::= PInt;
+Universe. Expr5 ::= U;
+_.        Expr  ::= Expr1;
+_.        Expr1 ::= Expr2;
+_.        Expr2 ::= Expr3;
+_.        Expr3 ::= Expr4;
+_.        Expr4 ::= Expr5;
+Paren.    Expr5 ::= PPar Expr ")";
+
+Arg.       Arg ::= PIdent;
+NoArg.     Arg ::= Pus;
+terminator Arg "";
+
+-- Like Arg, but cannot be empty
+Binder.   Binder ::= Arg;
+separator nonempty Binder "";
+
+TypedVar. TypedVar ::= PPar Expr ":" Expr ")";
+terminator nonempty TypedVar "";
+
+position token U ('T' 'y' 'p' 'e' digit*);
+position token PLam '\\';
+position token PPar '(';
+position token PInt digit+;
+position token Ppmap 'p' 'm' 'a' 'p';
+position token PIdp 'i' 'd' 'p';
+position token PR 'R';
+position token PSuc 's' 'u' 'c';
+position token PNat 'N' 'a' 't';
+position token Pus '_';
+position token PIdent (letter(letter|digit|'\''|'_')*);

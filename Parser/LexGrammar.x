@@ -20,7 +20,7 @@ $i = [$l $d _ ']          -- identifier character
 $u = [\0-\255]          -- universal: any character
 
 @rsyms =    -- symbols and non-identifier-like reserved words
-   \= | \: | \; | \{ | \} | \\ | \- \> | \* | \( | \) | \_
+   \= | \: | \; | \{ | \} | \- \> | \* | \)
 
 :-
 "--" [.]* ; -- Toss single line comments
@@ -29,12 +29,21 @@ $u = [\0-\255]          -- universal: any character
 $white+ ;
 @rsyms { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
 T y p e $d * { tok (\p s -> PT p (eitherResIdent (T_U . share) s)) }
+\\ { tok (\p s -> PT p (eitherResIdent (T_PLam . share) s)) }
+\( { tok (\p s -> PT p (eitherResIdent (T_PPar . share) s)) }
+$d + { tok (\p s -> PT p (eitherResIdent (T_PInt . share) s)) }
+p m a p { tok (\p s -> PT p (eitherResIdent (T_Ppmap . share) s)) }
+i d p { tok (\p s -> PT p (eitherResIdent (T_PIdp . share) s)) }
+R { tok (\p s -> PT p (eitherResIdent (T_PR . share) s)) }
+s u c { tok (\p s -> PT p (eitherResIdent (T_PSuc . share) s)) }
+N a t { tok (\p s -> PT p (eitherResIdent (T_PNat . share) s)) }
+\_ { tok (\p s -> PT p (eitherResIdent (T_Pus . share) s)) }
 $l ($l | $d | \' | \_)* { tok (\p s -> PT p (eitherResIdent (T_PIdent . share) s)) }
 
 $l $i*   { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
 
 
-$d+      { tok (\p s -> PT p (TI $ share s))    }
+
 
 
 {
@@ -52,6 +61,15 @@ data Tok =
  | TD !String         -- double precision float literals
  | TC !String         -- character literals
  | T_U !String
+ | T_PLam !String
+ | T_PPar !String
+ | T_PInt !String
+ | T_Ppmap !String
+ | T_PIdp !String
+ | T_PR !String
+ | T_PSuc !String
+ | T_PNat !String
+ | T_Pus !String
  | T_PIdent !String
 
  deriving (Eq,Show,Ord)
@@ -79,6 +97,15 @@ prToken t = case t of
   PT _ (TD s)   -> s
   PT _ (TC s)   -> s
   PT _ (T_U s) -> s
+  PT _ (T_PLam s) -> s
+  PT _ (T_PPar s) -> s
+  PT _ (T_PInt s) -> s
+  PT _ (T_Ppmap s) -> s
+  PT _ (T_PIdp s) -> s
+  PT _ (T_PR s) -> s
+  PT _ (T_PSuc s) -> s
+  PT _ (T_PNat s) -> s
+  PT _ (T_Pus s) -> s
   PT _ (T_PIdent s) -> s
 
 
@@ -92,7 +119,7 @@ eitherResIdent tv s = treeFind resWords
                               | s > a  = treeFind right
                               | s == a = t
 
-resWords = b "\\" 10 (b ":" 5 (b "*" 3 (b ")" 2 (b "(" 1 N N) N) (b "->" 4 N N)) (b "Nat" 8 (b "=" 7 (b ";" 6 N N) N) (b "R" 9 N N))) (b "pmap" 15 (b "in" 13 (b "idp" 12 (b "_" 11 N N) N) (b "let" 14 N N)) (b "{" 17 (b "suc" 16 N N) (b "}" 18 N N)))
+resWords = b "=" 6 (b "->" 3 (b "*" 2 (b ")" 1 N N) N) (b ";" 5 (b ":" 4 N N) N)) (b "{" 9 (b "let" 8 (b "in" 7 N N) N) (b "}" 10 N N))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 
