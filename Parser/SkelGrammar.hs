@@ -32,6 +32,7 @@ transDef x = case x of
 
 transExpr :: Expr -> Result
 transExpr x = case x of
+  Let defs expr  -> failure x
   Lam binders expr  -> failure x
   Arr expr1 expr2  -> failure x
   Pi typedvars expr  -> failure x

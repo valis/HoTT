@@ -27,8 +27,12 @@ import Parser.ErrM
  '\\' { PT _ (TS _ 10) }
  '_' { PT _ (TS _ 11) }
  'idp' { PT _ (TS _ 12) }
- 'pmap' { PT _ (TS _ 13) }
- 'suc' { PT _ (TS _ 14) }
+ 'in' { PT _ (TS _ 13) }
+ 'let' { PT _ (TS _ 14) }
+ 'pmap' { PT _ (TS _ 15) }
+ 'suc' { PT _ (TS _ 16) }
+ '{' { PT _ (TS _ 17) }
+ '}' { PT _ (TS _ 18) }
 
 L_integ  { PT _ (TI $$) }
 L_U { PT _ (T_U $$) }
@@ -58,7 +62,8 @@ ListDef : {- empty -} { [] }
 
 
 Expr :: { Expr }
-Expr : '\\' ListBinder '->' Expr { Lam $2 $4 } 
+Expr : 'let' '{' ListDef '}' 'in' Expr { Let $3 $6 } 
+  | '\\' ListBinder '->' Expr { Lam $2 $4 }
   | Expr1 { $1 }
 
 

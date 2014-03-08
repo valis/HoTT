@@ -44,15 +44,17 @@ The reserved words used in Grammar are the following: \\
 
 \begin{tabular}{lll}
 {\reserved{Nat}} &{\reserved{R}} &{\reserved{idp}} \\
-{\reserved{pmap}} &{\reserved{suc}} & \\
+{\reserved{in}} &{\reserved{let}} &{\reserved{pmap}} \\
+{\reserved{suc}} & & \\
 \end{tabular}\\
 
 The symbols used in Grammar are the following: \\
 
 \begin{tabular}{lll}
 {\symb{{$=$}}} &{\symb{:}} &{\symb{;}} \\
-{\symb{$\backslash$}} &{\symb{{$-$}{$>$}}} &{\symb{*}} \\
-{\symb{(}} &{\symb{)}} &{\symb{\_}} \\
+{\symb{\{}} &{\symb{\}}} &{\symb{$\backslash$}} \\
+{\symb{{$-$}{$>$}}} &{\symb{*}} &{\symb{(}} \\
+{\symb{)}} &{\symb{\_}} & \\
 \end{tabular}\\
 
 \subsection*{Comments}
@@ -80,7 +82,8 @@ All other symbols are terminals.\\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr}} & {\arrow}  &{\terminal{$\backslash$}} {\nonterminal{ListBinder}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr}}  \\
+{\nonterminal{Expr}} & {\arrow}  &{\terminal{let}} {\terminal{\{}} {\nonterminal{ListDef}} {\terminal{\}}} {\terminal{in}} {\nonterminal{Expr}}  \\
+ & {\delimit}  &{\terminal{$\backslash$}} {\nonterminal{ListBinder}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr}}  \\
  & {\delimit}  &{\nonterminal{Expr1}}  \\
 \end{tabular}\\
 

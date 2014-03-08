@@ -1,16 +1,10 @@
-sucTest1 : (0 = 0 -> Nat) -> Nat
-sucTest1 = (\(x : Nat) (f : x = x -> Nat) -> f (idp x)) 0
+letTest1 : (0 = 0 -> Nat) -> Nat
+letTest1 = let x = 0 in \f -> f (idp x)
 
-sucTest2 : (0 = 0 -> Nat) -> Nat
-sucTest2 = (\x (f : x = x -> Nat) -> f (idp x)) 0
+letTest2 : (0 = 0 -> Nat) -> Nat
+letTest2 f = let x = 0 in f (idp x)
 
-sucTest3 = (\x (f : x = x -> Nat) -> f (idp x)) 0
-
-sucTest4 : (0 = 0 -> Nat) -> Nat
-sucTest4 = let x = 0 in \(f : x = x -> Nat) -> f (idp x)
-
-failTest : (0 = 0 -> Nat) -> Nat
-failTest f = (\x -> f (idp x)) 0
+-- letTest3 = let x = 0 in \(f : x = x -> Nat) -> f (idp x)
 
 pmapTest1 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 pmapTest1 p y = pmap y p

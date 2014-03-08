@@ -6,6 +6,7 @@ import System.IO
 import Data.List
 import Data.Either
 import Control.Monad
+import Control.Monad.State
 
 import Parser.ErrM
 import Parser.AbsGrammar
@@ -34,72 +35,30 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processExpr :: Ctx -> String -> Expr -> Maybe Expr -> Either [String] (Ctx,Expr,Expr)
-processExpr ctx name expr mty = do
-    tv <- case mty of
-        Nothing -> typeOf ctx M.empty expr
-        Just ty -> do
-            typeOf ctx M.empty ty
-            let tv = eval ctx ty 0 M.empty
-            hasType ctx M.empty expr tv
-            return tv
-    let ev = evalOfType ctx expr tv 0 M.empty
-    return (M.insert name (ev,tv) ctx, unNorm $ reify (M.keys ctx) ev tv, unNorm $ reify (M.keys ctx) tv $ Stype maxBound)
-
-processDecl :: Ctx -> String -> [Arg] -> Expr -> Maybe Expr -> Either [String] (Ctx,[String],Expr,Expr)
-processDecl ctx name args expr ty = do
-    (ctx',e,t) <- processExpr ctx name (Lam (map Binder args) expr) ty
-    let (a,e') = extractArgs e
-    return (ctx',a,e',t)
+processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [String]) ([String],Expr,Expr)
+processDecl name args expr ty = do
+    (ev,tv) <- evalDecl name (Lam (map Binder args) expr) ty
+    (gctx,ctx) <- get
+    let fv = (M.keys ctx ++ M.keys gctx)
+        (a,e') = extractArgs $ unNorm (reify fv ev tv)
+        t = unNorm $ reify fv tv (Stype maxBound)
+    return (a,e',t)
   where
     extractArgs :: Expr -> ([String],Expr)
     extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
     extractArgs e = ([],e)
 
-processDefs :: [Def] -> [Either [String] (String,Expr,[String],Expr)]
-processDefs defs =
-    let typeSigsDup = duplicates (map fst typeSigs)
-        funDeclsDup = duplicates (map fst funDecls)
-    in if not (null typeSigsDup) || not (null funDeclsDup)
-        then map (\name -> Left ["Duplicate type signatures for " ++ name]) typeSigsDup ++
-             map (\name -> Left ["Multiple declarations of " ++ name]) funDeclsDup
-        else processDecls M.empty funDecls
-  where
-    typeSigs = filterTypeSigs defs
-    funDecls = filterFunDecls defs
-    
-    processDecls :: Ctx -> [(String,([Arg],Expr))] -> [Either [String] (String,Expr,[String],Expr)]
-    processDecls _ [] = []
-    processDecls ctx ((name,(args,expr)):decls) = case processDecl ctx name args expr (lookup name typeSigs) of
-        Left errs -> Left errs : processDecls ctx decls
-        Right (ctx',args',expr',ty) -> Right (name,ty,args',expr') : processDecls ctx' decls
-    
-    filterTypeSigs :: [Def] -> [(String,Expr)]
-    filterTypeSigs [] = []
-    filterTypeSigs (DefType (PIdent (_,x)) e : defs) = (x,e) : filterTypeSigs defs
-    filterTypeSigs (_:defs) = filterTypeSigs defs
-    
-    filterFunDecls :: [Def] -> [(String,([Arg],Expr))]
-    filterFunDecls [] = []
-    filterFunDecls (Def (PIdent (_,x)) a e : defs) = (x,(a,e)) : filterFunDecls defs
-    filterFunDecls (_:defs) = filterFunDecls defs
-    
-    duplicates :: [String] -> [String]
-    duplicates [] = []
-    duplicates (x:xs) = case findRemove xs of
-        Nothing -> duplicates xs
-        Just xs' -> x : duplicates xs'
-      where
-        findRemove :: [String] -> Maybe [String]
-        findRemove [] = Nothing
-        findRemove (y:ys) | x == y = Just $ maybe ys id (findRemove ys)
-                          | otherwise = fmap (y:) (findRemove ys)
+processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [String] (String,Expr,[String],Expr)]
+processDecls _ [] = []
+processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
+    Left errs -> Left errs : processDecls ctx decls
+    Right ((args',expr',ty'),(ctx',_)) -> Right (name,ty',args',expr') : processDecls ctx' decls
 
 run :: Err Defs -> (String,String)
 run (Bad s) = (s,"")
 run (Ok (Defs defs)) =
-    let (errs,res) = partitionEithers (processDefs defs)
-    in (unlines (concat errs), intercalate "\n\n" (map print res) ++ "\n")
+    let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty) (processDefs defs)
+    in (intercalate "\n\n" (concat errs), intercalate "\n\n" (map print res))
   where
     print :: (String,Expr,[String],Expr) -> String
     print (x,t,[],e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " = " ++ printTree e
@@ -109,8 +68,8 @@ runFile :: String -> IO ()
 runFile input = do
     cnt <- readFile input
     let (errs,res) = run (parser cnt)
-    when (not $ null errs) (hPutStr stderr errs)
-    when (not $ null res) $ writeFile (outputFilename input) res
+    when (not $ null errs) (hPutStrLn stderr errs)
+    when (not $ null res) $ writeFile (outputFilename input) (res ++ "\n")
 
 main :: IO ()
 main = getArgs >>= mapM_ runFile

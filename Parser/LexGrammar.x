@@ -20,7 +20,7 @@ $i = [$l $d _ ']          -- identifier character
 $u = [\0-\255]          -- universal: any character
 
 @rsyms =    -- symbols and non-identifier-like reserved words
-   \= | \: | \; | \\ | \- \> | \* | \( | \) | \_
+   \= | \: | \; | \{ | \} | \\ | \- \> | \* | \( | \) | \_
 
 :-
 "--" [.]* ; -- Toss single line comments
@@ -92,7 +92,7 @@ eitherResIdent tv s = treeFind resWords
                               | s > a  = treeFind right
                               | s == a = t
 
-resWords = b "Nat" 8 (b "->" 4 (b ")" 2 (b "(" 1 N N) (b "*" 3 N N)) (b ";" 6 (b ":" 5 N N) (b "=" 7 N N))) (b "idp" 12 (b "\\" 10 (b "R" 9 N N) (b "_" 11 N N)) (b "suc" 14 (b "pmap" 13 N N) N))
+resWords = b "\\" 10 (b ":" 5 (b "*" 3 (b ")" 2 (b "(" 1 N N) N) (b "->" 4 N N)) (b "Nat" 8 (b "=" 7 (b ";" 6 N N) N) (b "R" 9 N N))) (b "pmap" 15 (b "in" 13 (b "idp" 12 (b "_" 11 N N) N) (b "let" 14 N N)) (b "{" 17 (b "suc" 16 N N) (b "}" 18 N N)))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

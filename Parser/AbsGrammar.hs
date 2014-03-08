@@ -15,7 +15,8 @@ data Def =
   deriving (Eq,Ord,Show)
 
 data Expr =
-   Lam [Binder] Expr
+   Let [Def] Expr
+ | Lam [Binder] Expr
  | Arr Expr Expr
  | Pi [TypedVar] Expr
  | Prod Expr Expr

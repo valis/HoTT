@@ -105,6 +105,7 @@ instance Print Def where
 
 instance Print Expr where
   prt i e = case e of
+   Let defs expr -> prPrec i 0 (concatD [doc (showString "let") , doc (showString "{") , prt 0 defs , doc (showString "}") , doc (showString "in") , prt 0 expr])
    Lam binders expr -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 binders , doc (showString "->") , prt 0 expr])
    Arr expr0 expr -> prPrec i 1 (concatD [prt 3 expr0 , doc (showString "->") , prt 1 expr])
    Pi typedvars expr -> prPrec i 1 (concatD [prt 0 typedvars , doc (showString "->") , prt 1 expr])

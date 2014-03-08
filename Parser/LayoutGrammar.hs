@@ -10,8 +10,8 @@ import Data.Maybe (isNothing, fromJust)
 -- local parameters
 
 topLayout = True
-layoutWords = []
-layoutStopWords = []
+layoutWords = ["let"]
+layoutStopWords = ["in"]
 
 -- layout separators
 
@@ -198,8 +198,12 @@ sToken p s = PT p (TS s i)
       "\\" -> 10
       "_" -> 11
       "idp" -> 12
-      "pmap" -> 13
-      "suc" -> 14
+      "in" -> 13
+      "let" -> 14
+      "pmap" -> 15
+      "suc" -> 16
+      "{" -> 17
+      "}" -> 18
       _ -> error $ "not a reserved word: " ++ show s
 
 -- | Get the position of a token.

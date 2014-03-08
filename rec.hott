@@ -1,12 +1,20 @@
 plus : Nat -> Nat -> Nat
-plus x = R (\_ -> Nat) x (\_ -> suc)
+-- plus x = R (\_ -> Nat) x (\_ -> suc)
+plus x y = R (\_ -> Nat) y (\_ -> suc) x
 
 mul : Nat -> Nat -> Nat
-mul x = R (\_ -> Nat) 0 (\_ -> plus x)
+-- mul x = R (\_ -> Nat) 0 (\_ -> plus x)
+mul x y = R (\_ -> Nat) 0 (\_ -> plus y) x
 
 st = mul 7 9
 
 fac : Nat -> Nat
 fac = R (\_ -> Nat) 1 (\n -> mul (suc n))
 
-sht = fac 6
+sht = fac 8
+
+succ : sht = 40320
+succ = idp sht
+
+fail : sht = 40320
+fail = idp 40321

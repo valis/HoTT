@@ -29,13 +29,13 @@ PIdent literals are recognized by the regular expression
 The set of reserved words is the set of terminals appearing in the grammar. Those reserved words that consist of non-letter characters are called symbols, and they are treated in a different way from those that are similar to identifiers. The lexer follows rules familiar from languages like Haskell, C, and Java, including longest match and spacing conventions.
 
 The reserved words used in Grammar are the following:
-  | ``Nat`` | ``R`` | ``idp`` | ``pmap``
-  | ``suc`` |  |  | 
+  | ``Nat`` | ``R`` | ``idp`` | ``in``
+  | ``let`` | ``pmap`` | ``suc`` | 
 
 The symbols used in Grammar are the following:
-  | = | : | ; | \
-  | -> | * | ( | )
-  | _ |  |  | 
+  | = | : | ; | {
+  | } | \ | -> | *
+  | ( | ) | _ | 
 
 ===Comments===
 Single-line comments begin with --.Multiple-line comments are  enclosed with {- and -}.
@@ -52,7 +52,8 @@ All other symbols are terminals.
   | //[Def]// | -> | **eps**
   |  |  **|**  | //Def// 
   |  |  **|**  | //Def// ``;`` //[Def]// 
-  | //Expr// | -> | ``\`` //[Binder]// ``->`` //Expr// 
+  | //Expr// | -> | ``let`` ``{`` //[Def]// ``}`` ``in`` //Expr// 
+  |  |  **|**  | ``\`` //[Binder]// ``->`` //Expr// 
   |  |  **|**  | //Expr1// 
   | //Expr1// | -> | //Expr3// ``->`` //Expr1// 
   |  |  **|**  | //[TypedVar]// ``->`` //Expr1// 
