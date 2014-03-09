@@ -7,13 +7,14 @@ import Data.List
 import Data.Either
 import Control.Monad
 import Control.Monad.State
+import qualified Text.PrettyPrint as P
 
 import Parser.ErrM
-import Parser.AbsGrammar
+import qualified Parser.AbsGrammar as R
 import Parser.ParGrammar
 import Parser.LayoutGrammar
-import Parser.PrintGrammar(printTree)
 
+import Syntax.Term
 import Eval
 import ErrorDoc
 
@@ -34,38 +35,34 @@ outputFilename input = case break (== '/') input of
     insert [s1,s2] = s1 ++ "_output." ++ s2
     insert (x1:xs) = x1 ++ "." ++ insert xs
 
-parser :: String -> Err Defs
+parser :: String -> Err R.Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [EMsg]) ([String],Expr,Expr)
+processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT (Ctx,Ctx) EDocM ([String],Term,Term)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
-    (ev,tv) <- evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
+    (ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
     (gctx,ctx) <- get
     let fv = (M.keys ctx ++ M.keys gctx)
-        (a,e') = extractArgs $ unNorm (reify fv ev tv)
-        t = unNorm $ reify fv tv (Stype maxBound)
+        (a,e') = extractArgs (reify fv ev tv)
+        t = reify fv tv (Stype maxBound)
     return (a,e',t)
   where
-    extractArgs :: Expr -> ([String],Expr)
-    extractArgs (Lam _ xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
+    extractArgs :: Term -> ([String],Term)
+    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (xs ++ ys, r)
     extractArgs e = ([],e)
 
-processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [EMsg] (String,Expr,[String],Expr)]
+processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [EDocM Def]
 processDecls _ [] = []
 processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
     Left errs -> Left errs : processDecls ctx decls
-    Right ((args',expr',ty'),(ctx',_)) -> Right (name,ty',args',expr') : processDecls ctx' decls
+    Right ((args',expr',ty'),(ctx',_)) -> Right (Def name (Just ty') args' expr') : processDecls ctx' decls
 
-run :: String -> Err Defs -> (String,String)
+run :: String -> Err R.Defs -> (String,String)
 run _ (Bad s) = (s,"")
-run fn (Ok (Defs defs)) =
+run fn (Ok (R.Defs defs)) =
     let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty) (processDefs defs)
-    in (intercalate "\n\n" (map (erenderWithFilename fn) $ concat errs), intercalate "\n\n" (map print res))
-  where
-    print :: (String,Expr,[String],Expr) -> String
-    print (x,t,[],e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " = " ++ printTree e
-    print (x,t,as,e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " " ++ unwords as ++ " = " ++ printTree e
+    in (intercalate "\n\n" $ map (erenderWithFilename fn) $ concat errs, intercalate "\n\n" $ map (P.render . ppDef) res)
 
 runFile :: String -> IO ()
 runFile input = do

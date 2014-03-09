@@ -1,14 +1,20 @@
 .PHONY: all bnfc clean
 
+FLAGS = -O2 -odir build/ -hidir build/ \
+	-fwarn-incomplete-patterns \
+	-fwarn-incomplete-uni-patterns \
+	-fwarn-unused-imports \
+
 all:
-	ghc -O2 -fwarn-incomplete-patterns -fwarn-incomplete-uni-patterns -fwarn-unused-imports -odir build/ -hidir build/ -o hott Main.hs
+	ghc $(FLAGS) -o hott Main.hs
+
 bnfc:
 	bnfc -p Parser -haskell Grammar.cf
 	alex Parser/LexGrammar.x
 	happy Parser/ParGrammar.y
 
 build/%.o: %.hs
-	ghc -ibuild/ -c -O2 $< -odir build/ -hidir build/ -o $@
+	ghc -ibuild/ -c $(FLAGS) -o $@ $<
 
 clean:
-	-@rm -f hott build/*.o build/*.hi build/Parser/*.o build/Parser/*.hi Parser/*.bak
+	-@rm -f hott build/*.o build/*.hi build/Parser/*.o build/Parser/*.hi build/Syntax/*.o build/Syntax/*.hi Parser/*.bak

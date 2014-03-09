@@ -1,5 +1,5 @@
 module ErrorDoc
-    ( EMsg, EDoc
+    ( EMsg, EDoc, EDocM
     , EPretty(..)
     , etext, enull, (<>), (<+>), ($$)
     , emsg, emsgL, emsgLC
@@ -9,23 +9,24 @@ module ErrorDoc
 
 import qualified Text.PrettyPrint as P
 
-import Parser.AbsGrammar
-import Parser.PrintGrammar(printTree)
+import Syntax.Term
+
+type EDocM = Either [EMsg]
 
 data EMsg = EMsg (Maybe Int) (Maybe Int) String EDoc
-data EDoc = EText String | ENull | ETerm (Maybe Int) Expr | EAbove EDoc EDoc | EBeside EDoc Bool EDoc
+data EDoc = EText String | ENull | ETerm (Maybe Int) Term | EAbove EDoc EDoc | EBeside EDoc Bool EDoc
 
 class EPretty a where
     epretty :: a -> EDoc
 
-instance EPretty Expr where
+instance EPretty Term where
     epretty = ETerm Nothing
 
-eprettyLevel :: Int -> Expr -> EDoc
+eprettyLevel :: Int -> Term -> EDoc
 eprettyLevel n e | n < 0 = epretty e
                  | otherwise = ETerm (Just n) e
 
-eprettyHead :: Expr -> EDoc
+eprettyHead :: Term -> EDoc
 eprettyHead = eprettyLevel 1
 
 etext :: String -> EDoc
@@ -72,5 +73,5 @@ edocToDoc (EText "") = P.empty
 edocToDoc (EText s) = P.text s
 edocToDoc (EBeside d1 False d2) = edocToDoc d1 P.<> edocToDoc d2
 edocToDoc (EBeside d1 True d2) = edocToDoc d1 P.<+> edocToDoc d2
-edocToDoc (EAbove d1 d2) = edocToDoc d1 P.$$ edocToDoc d2
-edocToDoc (ETerm _ e) = P.text (printTree e)
+edocToDoc (EAbove d1 d2) = edocToDoc d1 P.$+$ edocToDoc d2
+edocToDoc (ETerm l e) = ppTerm l e
