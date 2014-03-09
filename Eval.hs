@@ -32,11 +32,11 @@ data Value
 type Ctx  = M.Map String (Value,Value)
 type CtxT = M.Map String Value
 
-instance Pretty Norm where
-    pretty = text . printTree . unNorm
+instance EPretty Norm where
+    epretty = etext . printTree . unNorm
 
-expType :: Int -> [String] -> Value -> Doc
-expType l ctx ty = text "Expected type:" <+> prettyLevel l (unNorm $ reify ctx ty $ Stype maxBound)
+expType :: Int -> [String] -> Value -> EDoc
+expType l ctx ty = etext "Expected type:" <+> eprettyLevel l (unNorm $ reify ctx ty $ Stype maxBound)
 
 getPos :: Expr -> (Int,Int)
 getPos (Let [] e) = getPos e
@@ -104,7 +104,7 @@ instance Enum Level where
     fromEnum (Finite l) = fromInteger l
     fromEnum _ = error "Enum.Level.fromEnum: bad argument"
 
-type Err a = Either [Doc] a
+type Err a = Either [EMsg] a
 
 processDefs :: [Def] -> Err [(String,Maybe Expr,[Arg],Expr)]
 processDefs defs =
@@ -115,8 +115,8 @@ processDefs defs =
         typeSigsDup = duplicates (map fst typeSigs)
         funDeclsDup = duplicates (map fst funDecls)
     in if not (null typeSigsDup) || not (null funDeclsDup)
-        then Left $ map (\(PIdent ((l,c),s)) -> textLC l c $ "Duplicate type signatures for " ++ s) typeSigsDup
-                 ++ map (\(PIdent ((l,c),s)) -> textLC l c $ "Multiple declarations of " ++ s) funDeclsDup
+        then Left $ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Duplicate type signatures for " ++ s) enull) typeSigsDup
+                 ++ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Multiple declarations of " ++ s) enull) funDeclsDup
         else Right $ map (\(name,(args,expr)) -> (name,lookup name typeSigs',args,expr)) funDecls'
   where
     filterTypeSigs :: [Def] -> [(PIdent,Expr)]
@@ -167,6 +167,7 @@ binderGetPos (Binder b) = argGetPos b
 parseLevel :: String -> Level
 parseLevel "Type" = Omega
 parseLevel ('T':'y':'p':'e':s) = Finite (read s)
+parseLevel s = error $ "parseLevel: " ++ s
 
 ctxtToCtx :: CtxT -> Ctx
 ctxtToCtx = M.mapWithKey $ \k v -> (liftValue [k] (svar k) v, v)
@@ -196,12 +197,10 @@ freeVars (Let defs e) = freeVarsDef defs e
 freeVars (Lam _ bnds e) = freeVars e \\ map unBinder bnds
 freeVars (Arr e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Pi [] e) = freeVars e
-freeVars (Pi (TypedVar _ (Var (NoArg _)) t : xs) e) = freeVars t `union` freeVars (Pi xs e)
-freeVars (Pi (TypedVar _ (Var (Arg (PIdent (_,x)))) t : xs) e) = freeVars t `union` delete x (freeVars $ Pi xs e)
+freeVars (Pi (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Pi xs e) \\ freeVars vars)
 freeVars (Prod e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Sigma [] e) = freeVars e
-freeVars (Sigma (TypedVar _ (Var (NoArg _)) t : xs) e) = freeVars t `union` freeVars (Sigma xs e)
-freeVars (Sigma (TypedVar _ (Var (Arg (PIdent (_,x)))) t : xs) e) = freeVars t `union` delete x (freeVars $ Sigma xs e)
+freeVars (Sigma (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Sigma xs e) \\ freeVars vars)
 freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var (Arg (PIdent (_,x)))) = [x]
@@ -231,11 +230,11 @@ renameDefs r@(Def (PIdent (i,z)) as t : defs) e x y
     | z == y =
         let (y', Let defs1 e1) = renameExpr [z,x] y (Let defs e)
             (defs2, e2) = renameDefs defs1 e1 x y
-            Lam _ as' t' = rename (Lam internalError (map Binder as) t) x y
+            Lam _ as' t' = rename (Lam (error "renameDefs.==") (map Binder as) t) x y
         in (Def (PIdent (i,y')) (map (\(Binder a) -> a) as') t' : defs2, e2)
     | otherwise =
         let (defs',e') = renameDefs defs e x y
-            Lam _ as' t' = rename (Lam internalError (map Binder as) t) x y
+            Lam _ as' t' = rename (Lam (error "renameDefs./=") (map Binder as) t) x y
         in (Def (PIdent (i,z)) (map (\(Binder a) -> a) as') t' : defs', e')
 
 rename :: Expr -> String -> String -> Expr
@@ -280,37 +279,34 @@ liftErr2 f (Left m) _ = Left m
 liftErr2 f _ (Left m) = Left m
 liftErr2 f (Right v1) (Right v2) = f v1 v2
 
-maxType :: (Int,Int) -> (Int,Int) -> [String] -> Value -> Value -> Err Value
-maxType _ _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
-maxType (l,c) (l',c') ctx t1 t2 = liftErr2 internalError
-    (cmpTypesErr l  c  ctx (Stype $ pred maxBound) t1)
-    (cmpTypesErr l' c' ctx (Stype $ pred maxBound) t2)
+maxType :: (Int,Int) -> (Int,Int) -> [String] -> Expr -> Expr -> Value -> Value -> Err Value
+maxType _ _ _ _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
+maxType (l,c) (l',c') ctx e1 e2 t1 t2 = liftErr2 (error "maxType")
+    (cmpTypesErr l  c  ctx (Stype $ pred maxBound) t1 e1)
+    (cmpTypesErr l' c' ctx (Stype $ pred maxBound) t2 e2)
 
-typeOf'depType :: Ctx -> ([TypedVar] -> Expr -> Expr) -> CtxT -> [TypedVar] -> Expr -> Err Value
-typeOf'depType gctx _ ctx [] e = typeOf gctx ctx e
-typeOf'depType gctx dt ctx (TypedVar _ vars t : list) e = getVars vars >>= go
+typeOf'depType :: Ctx -> CtxT -> [TypedVar] -> Expr -> Err Value
+typeOf'depType gctx ctx [] e = typeOf gctx ctx e
+typeOf'depType gctx ctx (TypedVar _ vars t : list) e = do
+    tv <- typeOf gctx ctx t
+    let (l,c) = getPos t
+        e' = Pi list e
+    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) (Stype $ pred maxBound) tv t
+    ctx' <- updateCtx ctx (eval gctx t 0 $ ctxtToCtx ctx) vars
+    ev <- typeOf gctx ctx' e'
+    maxType (l,c) (getPos e) (M.keys gctx ++ M.keys ctx') t e' tv ev
   where
-    tv = typeOf gctx ctx t
-    
-    getVars (Var (NoArg _)) = Right ["_"]
-    getVars (Var (Arg (PIdent (_,x)))) = Right [x]
-    getVars (App a (Var (NoArg _))) = fmap (++ ["_"]) (getVars a)
-    getVars (App a (Var (Arg (PIdent (_,x))))) = fmap (++ [x]) (getVars a)
-    getVars e = let (l,c) = getPos e in Left [textLC l c "Expected identifier"]
-    
-    go [] = typeOf'depType gctx dt ctx list e
-    go [v] =
-        let k1 = typeOf gctx ctx t
-            (v',e') = renameExpr (M.keys gctx ++ M.keys ctx) v (dt list e)
-            k2 = typeOf gctx (M.insert v' (eval gctx t 0 (ctxtToCtx ctx)) ctx) e'
-        in liftErr2 (maxType (getPos t) (getPos e) $ M.keys gctx ++ M.keys ctx) k1 k2
-    go _ = undefined
+    updateCtx ctx _ (Var (NoArg _)) = Right ctx
+    updateCtx ctx tv (Var (Arg (PIdent (_,x)))) = Right (M.insert x tv ctx)
+    updateCtx ctx tv (App a (Var (NoArg _))) = updateCtx ctx tv a
+    updateCtx ctx tv (App a (Var (Arg (PIdent (_,x))))) = fmap (M.insert x tv) (updateCtx ctx tv a)
+    updateCtx _ _ e = let (l,c) = getPos e in Left [emsgLC l c "Expected identifier" enull]
 
 typeOf :: Ctx -> CtxT -> Expr -> Err Value
 typeOf gctx ctx (Lam _ [] e) = typeOf gctx ctx e
-typeOf _ _ (Lam (PLam ((l,c),_)) _ _) = Left [textLC l c "Cannot infer type of the argument"]
-typeOf _ _ (Idp (PIdp ((l,c),_))) = Left [textLC l c "Cannot infer type of idp"]
-typeOf _ _ (Pmap (Ppmap ((l,c),_)) _) = Left [textLC l c "Cannot infer type of pmap"]
+typeOf _ _ (Lam (PLam ((l,c),_)) _ _) = Left [emsgLC l c "Cannot infer type of the argument" enull]
+typeOf _ _ (Idp (PIdp ((l,c),_))) = Left [emsgLC l c "Cannot infer type of idp" enull]
+typeOf _ _ (Pmap (Ppmap ((l,c),_)) _) = Left [emsgLC l c "Cannot infer type of pmap" enull]
 typeOf gctx ctx (Let defs e) = do
     decls <- processDefs defs
     let st = forM_ decls $ \(name,ty,args,expr) ->
@@ -320,27 +316,29 @@ typeOf gctx ctx (Let defs e) = do
     typeOf gctx' (ctxToCtxt ctx') e
 typeOf gctx ctx (App (Idp _) e) = do
     t <- typeOf gctx ctx e
-    let v = eval gctx e 0 (ctxtToCtx ctx)
+    let v = evalOfType gctx e t 0 (ctxtToCtx ctx)
     Right (Sid t v v)
 typeOf gctx ctx (App (Pmap (Ppmap ((l,c),_)) e1) e2) = do
     t2 <- typeOf gctx ctx e2
     case t2 of
         Sid t a b -> do
-            s <- typeOfLam (l,c) (getPos e2) gctx ctx e1 t2
+            s <- typeOfLam (l,c) (getPos e2) gctx ctx e1 e2 t2
             let e' = app 0 $ evalOfType gctx e1 (sarr t s) 0 (ctxtToCtx ctx)
             Right $ Sid s (e' a) (e' b)
-        _ -> let (l',c') = getPos e2 in Left [docLC l' c' $ text "Expected Id type" $$
-            text "Actual type:" <+> prettyHead (unNorm $ reify (M.keys gctx ++ M.keys ctx) t2 $ Stype maxBound)]
+        _ -> let (l',c') = getPos e2
+                 fv = M.keys gctx ++ M.keys ctx
+             in Left [emsgLC l' c' "" $ etext "Expected Id type" $$ etext "But term" <+> epretty e2
+                    <+> etext "has type" <+> eprettyHead (unNorm $ reify fv t2 $ Stype maxBound)]
 typeOf gctx ctx (Arr e1 e2) =
-    liftErr2 (maxType (getPos e1) (getPos e2) $ M.keys gctx ++ M.keys ctx) (typeOf gctx ctx e1) (typeOf gctx ctx e2)
+    liftErr2 (maxType (getPos e1) (getPos e2) (M.keys gctx ++ M.keys ctx) e1 e2) (typeOf gctx ctx e1) (typeOf gctx ctx e2)
 typeOf gctx ctx (Prod e1 e2) = typeOf gctx ctx (Arr e1 e2)
-typeOf gctx ctx (Pi tv e) = typeOf'depType gctx Pi ctx tv e
-typeOf gctx ctx (Sigma tv e) = typeOf'depType gctx Sigma ctx tv e
+typeOf gctx ctx (Pi tv e) = typeOf'depType gctx ctx tv e
+typeOf gctx ctx (Sigma tv e) = typeOf'depType gctx ctx tv e
 typeOf gctx ctx (Id a b) = do
     a' <- typeOf gctx ctx a
     b' <- typeOf gctx ctx b
     let (l,c) = getPos b
-    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) a' b'
+    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) a' b' b
     typeOf gctx ctx $ unNorm $ reify (M.keys gctx ++ M.keys ctx) a' (Stype maxBound)
 typeOf _ _ (Nat _) = Right $ Stype (Finite 0)
 typeOf _ _ (Universe (U (_,t))) = Right $ Stype $ succ (parseLevel t)
@@ -348,11 +346,13 @@ typeOf gctx ctx (App e1 e2) = do
     t <- typeOf gctx ctx e1
     case t of
         Spi _ a b -> hasType gctx ctx e2 a >> Right (b $ evalOfType gctx e2 a 0 $ ctxtToCtx ctx)
-        _ -> let (l,c) = getPos e1 in Left [docLC l c $ text "Expected pi type" $$
-            text "Actual type: " <+> prettyHead (unNorm $ reify (M.keys gctx ++ M.keys ctx) t $ Stype maxBound)]
-typeOf _ _ (Var (NoArg (Pus ((l,c),_)))) = Left [textLC l c "Expected identifier"]
+        _ -> let (l,c) = getPos e1
+                 fv = M.keys gctx ++ M.keys ctx
+             in Left [emsgLC l c "" $ etext "Expected pi type" $$ etext "But term" <+> epretty e1
+                    <+> etext "has type" <+> eprettyHead (unNorm $ reify fv t $ Stype maxBound)]
+typeOf _ _ (Var (NoArg (Pus ((l,c),_)))) = Left [emsgLC l c "Expected identifier" enull]
 typeOf gctx ctx (Var (Arg (PIdent ((l,c),x)))) =
-    maybe (Left [textLC l c $ "Unknown identifier " ++ x]) Right $ M.lookup x ctx `mplus` fmap snd (M.lookup x gctx)
+    maybe (Left [emsgLC l c ("Unknown identifier " ++ x) enull]) Right $ M.lookup x ctx `mplus` fmap snd (M.lookup x gctx)
 typeOf _ _ (Suc _) = Right (sarr Snat Snat)
 typeOf _ _ (NatConst _) = Right Snat
 typeOf _ _ (Rec _) = Right $ Spi "P" (Snat `sarr` Stype maxBound) $ \p -> app 0 p Szero `sarr`
@@ -360,34 +360,36 @@ typeOf _ _ (Rec _) = Right $ Spi "P" (Snat `sarr` Stype maxBound) $ \p -> app 0 
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOf gctx ctx (Paren _ e) = typeOf gctx ctx e
 
-typeOfLam :: (Int,Int) -> (Int,Int) -> Ctx -> CtxT -> Expr -> Value -> Err Value
-typeOfLam lc lc' gctx ctx (Lam _ [] e) ty = typeOfLam lc lc' gctx ctx e ty
-typeOfLam _ _ gctx ctx (Lam (PLam ((l,c),_)) (x:xs) e) (Sid ty _ _) =
+typeOfLam :: (Int,Int) -> (Int,Int) -> Ctx -> CtxT -> Expr -> Expr -> Value -> Err Value
+typeOfLam lc lc' gctx ctx (Lam _ [] e) e2 ty = typeOfLam lc lc' gctx ctx e e2 ty
+typeOfLam _ _ gctx ctx (Lam (PLam ((l,c),_)) (x:xs) e) _ (Sid ty _ _) =
     let p = if null xs then getPos e else binderGetPos (head xs)
         (x',e') = renameExpr (M.keys gctx ++ M.keys ctx) (unBinder x) (Lam (PLam (p,"\\")) xs e)
     in do
         s <- typeOf gctx (M.insert x' ty ctx) e'
         if elem x' $ freeVars $ unNorm $ reify (x' : M.keys gctx ++ M.keys ctx) s (Stype maxBound)
-            then Left [textLC l c "Cannot infer type of lambda expression"]
+            then Left [emsgLC l c "Cannot infer type of lambda expression" enull]
             else Right s
-typeOfLam lc lc' gctx ctx (Paren _ e) act = typeOfLam lc lc' gctx ctx e act
-typeOfLam (l,c) (l',c') gctx ctx e (Sid act _ _) = do
+typeOfLam lc lc' gctx ctx (Paren _ e) e2 act = typeOfLam lc lc' gctx ctx e e2 act
+typeOfLam (l,c) (l',c') gctx ctx e e2 (Sid act _ _) = do
     let fv = M.keys gctx ++ M.keys ctx
     t <- typeOf gctx ctx e
     case t of
         Spi x exp r -> do
             case cmpTypes fv exp act of
                 Just o | o /= LT -> Right ()
-                _ -> let em s t = text s <+> parens (pretty $ reify fv t $ Stype maxBound) <+> text "_" <+> text "_"
-                     in Left [docLC l' c' $ em "Expected type: Id" exp $$ em "Actual type: Id" act]
+                _ -> let em s t = s <+> etext "(" <> (epretty $ reify fv t $ Stype maxBound) <> etext ") _ _"
+                     in Left [emsgLC l' c' "" $ em (etext "Expected type: Id") exp $$
+                        em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
             let x' = freshName x (M.keys gctx ++ M.keys ctx)
                 r' = r $ liftValue [x'] (svar x') exp
             if elem x' $ freeVars $ unNorm $ reify (x' : fv) r' (Stype maxBound)
-                then Left [docLC l c $ text "Expected arrow type" $$
-                    text "Actual type:" <+> pretty (reify fv t $ Stype maxBound)]
+                then Left [emsgLC l c "" $ etext "Expected arrow type" $$ etext "But term" <+>
+                    epretty e <+> etext "has type" <+> epretty (reify fv t $ Stype maxBound)]
                 else Right r'
-        _ -> Left [docLC l c $ text "Expected pi type" $$
-            text "Actual type:" <+> prettyHead (unNorm $ reify fv t $ Stype maxBound)]
+        _ -> Left [emsgLC l c "" $ etext "Expected pi type" $$ etext "But term" <+> epretty e
+                <+> etext "has type" <+> eprettyHead (unNorm $ reify fv t $ Stype maxBound)]
+typeOfLam _ _ _ _ _ _ _ = error "typeOfLam"
 
 hasType :: Ctx -> CtxT -> Expr -> Value -> Err ()
 hasType gctx ctx (Lam _ [] e) ty = hasType gctx ctx e ty
@@ -395,33 +397,33 @@ hasType gctx ctx (Lam i (x:xs) e) (Spi z a b) =
     let (x',e') = renameExpr (M.keys gctx ++ M.keys ctx) (unBinder x) (Lam i xs e)
     in hasType gctx (M.insert x' a ctx) e' (b $ liftValue [x'] (svar x') a)
 hasType gctx ctx (Lam _ (Binder (Arg (PIdent ((l,c),_))):_) _) ty =
-    Left [docLC l c $ expType 1 (M.keys gctx ++ M.keys ctx) ty $$ text "But lambda expression has pi type"]
-hasType gctx ctx (Idp (PIdp ((l,c),_))) exp@(Spi x a _) =
-    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) exp (Spi x a $ \v -> Sid a v v)
+    Left [emsgLC l c "" $ expType 1 (M.keys gctx ++ M.keys ctx) ty $$ etext "But lambda expression has pi type"]
+hasType gctx ctx i@(Idp (PIdp ((l,c),_))) exp@(Spi x a _) =
+    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) exp (Spi x a $ \v -> Sid a v v) i
 hasType gctx ctx (Idp (PIdp ((l,c),_))) ty =
-    Left [docLC l c $ expType 1 (M.keys gctx ++ M.keys ctx) ty $$ text "But idp has pi type"]
-hasType gctx ctx (Pmap (Ppmap ((l,c),_)) e) exp@(Spi x (Sid t a b) r) =
+    Left [emsgLC l c "" $ expType 1 (M.keys gctx ++ M.keys ctx) ty $$ etext "But idp has pi type"]
+hasType gctx ctx i@(Pmap (Ppmap ((l,c),_)) e) exp@(Spi x (Sid t a b) r) =
     let x' = freshName x (M.keys gctx ++ M.keys ctx)
     in case r (liftValue [x'] (svar x') a) of
         Sid s _ _ -> do
             hasType gctx ctx e (sarr t s)
             let e' = evalOfType gctx e (sarr t s) 0 (ctxtToCtx ctx)
                 act = Sid t a b `sarr` Sid s (app 0 e' a) (app 0 e' b)
-            cmpTypesErr l c (M.keys gctx ++ M.keys ctx) exp act
-        _ -> Left [docLC l c $ expType 2 (M.keys gctx ++ M.keys ctx) exp $$
-            text "But pmap _ has type of the form x = y -> _ x = _ y"]
+            cmpTypesErr l c (M.keys gctx ++ M.keys ctx) exp act i
+        _ -> Left [emsgLC l c "" $ expType 2 (M.keys gctx ++ M.keys ctx) exp $$
+            etext "But pmap _ has type of the form x = y -> _ x = _ y"]
 hasType gctx ctx (Pmap (Ppmap ((l,c),_)) _) exp@(Spi _ _ _) =
-    Left [docLC l c $ expType 2 (M.keys gctx ++ M.keys ctx) exp $$
-        text "But pmap _ has type of the form x = y -> _ x = _ y"]
+    Left [emsgLC l c "" $ expType 2 (M.keys gctx ++ M.keys ctx) exp $$
+        etext "But pmap _ has type of the form x = y -> _ x = _ y"]
 hasType gctx ctx (Pmap (Ppmap ((l,c),_)) _) exp =
-    Left [docLC l c $ expType 1 (M.keys gctx ++ M.keys ctx) exp $$ text "But pmap _ has pi type"]
+    Left [emsgLC l c "" $ expType 1 (M.keys gctx ++ M.keys ctx) exp $$ etext "But pmap _ has pi type"]
 hasType gctx ctx (Paren _ e) ty = hasType gctx ctx e ty
 hasType gctx ctx e ty = do
     ty1 <- typeOf gctx ctx e
     let (l,c) = getPos e
-    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) ty ty1
+    cmpTypesErr l c (M.keys gctx ++ M.keys ctx) ty ty1 e
 
-evalDecl :: String -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [Doc]) (Value,Value)
+evalDecl :: String -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [EMsg]) (Value,Value)
 evalDecl name expr mty = do
     (gctx,ctx) <- get
     let ctxt = ctxToCtxt ctx
@@ -430,7 +432,7 @@ evalDecl name expr mty = do
         Just ty -> do
             vty <- lift (typeOf gctx ctxt ty)
             let (l,c) = getPos ty
-            lift $ cmpTypesErr l c (M.keys gctx ++ M.keys ctx) (Stype $ pred maxBound) vty
+            lift $ cmpTypesErr l c (M.keys gctx ++ M.keys ctx) (Stype $ pred maxBound) vty ty
             return (eval gctx ty 0 ctx)
     lift (hasType gctx ctxt expr tv)
     let ev = evalOfType gctx expr tv 0 ctx
@@ -439,11 +441,11 @@ evalDecl name expr mty = do
 
 eval :: Ctx -> Expr -> Integer -> Ctx -> Value
 eval gctx (Let defs e) n ctx =
-    let decls = either internalError id (processDefs defs)
+    let decls = either (error "eval.Let.1") id (processDefs defs)
         st = forM_ decls $ \(name,ty,args,expr) ->
             let p = if null args then getPos expr else argGetPos (head args)
             in evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
-        (gctx',ctx') = either internalError id $ execStateT st (gctx, ctx)
+        (gctx',ctx') = either (error "eval.Let.2") id $ execStateT st (gctx, ctx)
     in eval gctx' e n ctx'
 eval gctx (App (Idp _) e) n ctx = eval (M.map (\(v,t) -> (idp v,t)) gctx) e (n + 1) (M.map (\(v,t) -> (idp v,t)) ctx)
 eval gctx (App (Pmap _ e1) e2) n ctx = pmap n (eval gctx e1 n ctx) (eval gctx e2 n ctx)
@@ -462,7 +464,7 @@ eval gctx (Sigma (TypedVar _ (Var (Arg (PIdent (_,x)))) t : vars) e) 0 ctx =
       (x',e') = renameExpr (M.keys gctx ++ M.keys ctx) x (Sigma vars e)
   in Ssigma x' v1 $ \a -> eval gctx e' 0 (M.insert x' (a,v1) ctx)
 eval gctx (Id a b) 0 ctx =
-    Sid (either (const internalError) id $ typeOf gctx (ctxToCtxt ctx) a) (eval gctx a 0 ctx) (eval gctx b 0 ctx)
+    Sid (either (const $ error "eval.Id") id $ typeOf gctx (ctxToCtxt ctx) a) (eval gctx a 0 ctx) (eval gctx b 0 ctx)
 eval _ (Nat _) 0 _ = Snat
 eval _ (Universe (U (_,t))) 0 _ = Stype (parseLevel t)
 eval gctx (App e1 e2) n ctx = 
@@ -476,6 +478,18 @@ eval _ (NatConst (PInt (_,x))) _ _ = genConst (read x :: Integer)
 eval gctx (Rec _) _ ctx = Slam "P" $ \pk pm pv -> Slam "z" $ \zk zm zv -> Slam "s" $ \sk sm sv -> Slam "x" $ \xk xm ->
     rec (M.keys gctx ++ M.keys ctx) xk (action xm $ action sm $ action zm pv) (action xm $ action sm zv) (action xm sv)
 eval gctx (Paren _ e) n ctx = eval gctx e n ctx
+
+eval _ (Var (NoArg _)) _ _ = error "eval.NoArg"
+eval _ (Lam _ _ _) _ _ = error "eval.Lam"
+eval _ (Idp _) _ _ = error "eval.Idp"
+eval _ (Pmap _ _) _ _ = error "eval.Pmap"
+eval _ (Arr _ _) _ _ = error "eval.Arr > 0"
+eval _ (Pi _ _) _ _ = error "eval.Pi > 0"
+eval _ (Prod _ _) _ _ = error "eval.Prod > 0"
+eval _ (Sigma _ _) _ _ = error "eval.Sigma > 0"
+eval _ (Id _ _) _ _ = error "eval.Id > 0"
+eval _ (Nat _) _ _ = error "eval.Nat > 0"
+eval _ (Universe _) _ _ = error "eval.U > 0"
 
 evalOfType :: Ctx -> Expr -> Value -> Integer -> Ctx -> Value
 evalOfType gctx (Lam _ [] e) ty n ctx = evalOfType gctx e ty n ctx
@@ -498,6 +512,7 @@ evalOfType gctx e _ n ctx = eval gctx e n ctx
 
 app :: Integer -> Value -> Value -> Value
 app n (Slam _ f) = f n []
+app n _ = error "app"
 
 infixl 5 `aApp`
 aApp = App
@@ -514,6 +529,7 @@ rec ctx n p z s = go
                 `aApp` unNorm (reify ctx s $ Spi "x" Snat $ \x -> app n p x `sarr` app n p (Ssuc x))
                 `aApp` e
         in liftValue (freeVars r) (snorm r) (app n p t)
+    go _ = error "rec.go"
 
 cmpTypes :: [String] -> Value -> Value -> Maybe Ordering
 cmpTypes ctx (Spi x a b) (Spi _ a' b') = case (cmpTypes ctx a' a, cmpTypes ctx' (b $ svar fresh) (b' $ svar fresh)) of
@@ -535,10 +551,11 @@ cmpTypes _ (Stype k) (Stype k') = Just (compare k k')
 cmpTypes _ (Ne t) (Ne t') = if t == t' then Just EQ else Nothing
 cmpTypes _ _ _ = Nothing
 
-cmpTypesErr :: Int -> Int -> [String] -> Value -> Value -> Err ()
-cmpTypesErr l c ctx t1 t2 = case cmpTypes ctx t1 t2 of
+cmpTypesErr :: Int -> Int -> [String] -> Value -> Value -> Expr -> Err ()
+cmpTypesErr l c ctx t1 t2 e = case cmpTypes ctx t1 t2 of
     Just o | o /= LT -> Right ()
-    _ -> Left [docLC l c $ expType (-1) ctx t1 $$ text "Actual type:" <+> pretty (reify ctx t2 $ Stype maxBound)]
+    _ -> Left [emsgLC l c "" $ expType (-1) ctx t1 $$
+        etext "But term" <+> epretty e <+> etext "has type" <+> epretty (reify ctx t2 $ Stype maxBound)]
 
 cmpValues :: [String] -> Value -> Value -> Value -> Bool
 cmpValues ctx e1 e2 t = reify ctx e1 t == reify ctx e2 t
@@ -585,5 +602,30 @@ reify _ Snat (Stype _) = Norm $ Nat $ PNat ((-1,-1),"Nat")
 reify ctx (Sidp x) (Sid t _ _) = Norm $ App (Idp $ PIdp ((-1,-1),"idp")) $ unNorm (reify ctx x t)
 reify _ (Ne e) _ = e
 
-internalError :: a
-internalError = error "INTERNAL_ERROR"
+reify _ (Slam _ _) (Ssigma _ _ _) = error "reify.Slam.Ssigma"
+reify _ (Slam _ _) Snat = error "reify.Slam.Snat"
+reify _ (Slam _ _) (Sid _ _ _) = error "reify.Slam.Sid"
+reify _ (Slam _ _) (Stype _) = error "reify.Slam.Stype"
+reify _ (Slam _ _) (Ne _) = error "reify.Slam.Ne"
+reify _ (Slam _ _) _ = error "reify.Slam"
+reify _ Szero (Spi _ _ _) = error "reify.Szero.Spi"
+reify _ Szero (Ssigma _ _ _) = error "reify.Szero.Ssigma"
+reify _ Szero (Stype _) = error "reify.Szero.Stype"
+reify _ Szero (Ne _) = error "reify.Szero.Ne"
+reify _ Szero _ = error "reify.Szero"
+reify _ (Ssuc _) (Spi _ _ _) = error "reify.Ssuc.Spi"
+reify _ (Ssuc _) (Ssigma _ _ _) = error "reify.Ssuc.Ssigma"
+reify _ (Ssuc _) (Stype _) = error "reify.Ssuc.Stype"
+reify _ (Ssuc _) (Ne _) = error "reify.Ssuc.Ne"
+reify _ (Ssuc _) _ = error "reify.Ssuc"
+reify _ (Spi _ _ _) _ = error "reify.Spi"
+reify _ (Ssigma _ _ _) _ = error "reify.Ssigma"
+reify _ Snat _ = error "reify.Snat"
+reify _ (Sid _ _ _) _ = error "reify.Sid"
+reify _ (Stype _) _ = error "reify.Stype"
+reify _ (Sidp _) (Spi _ _ _) = error "reify.Sidp.Spi"
+reify _ (Sidp _) (Ssigma _ _ _) = error "reify.Sidp.Ssigma"
+reify _ (Sidp _) Snat = error "reify.Sidp.Snat"
+reify _ (Sidp _) (Stype _) = error "reify.Sidp.Stype"
+reify _ (Sidp _) (Ne _) = error "reify.Sidp.Ne"
+reify _ (Sidp _) _ = error "reify.Sidp"

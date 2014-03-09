@@ -26,9 +26,10 @@ outputFilename input = case break (== '/') input of
     splitDots s = case break (== '.') s of
         ("",[]) -> []
         (w,[]) -> [w]
-        (w,'.':s') -> w : splitDots s'
+        (w,_:s') -> w : splitDots s'
     
     insert :: [String] -> String
+    insert [] = ""
     insert [s] = s ++ "_output"
     insert [s1,s2] = s1 ++ "_output." ++ s2
     insert (x1:xs) = x1 ++ "." ++ insert xs
@@ -36,7 +37,7 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [Doc]) ([String],Expr,Expr)
+processDecl :: String -> [Arg] -> Expr -> Maybe Expr -> StateT (Ctx,Ctx) (Either [EMsg]) ([String],Expr,Expr)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (ev,tv) <- evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
@@ -50,17 +51,17 @@ processDecl name args expr ty = do
     extractArgs (Lam _ xs e) = let (ys,r) = extractArgs e in (map unBinder xs ++ ys, r)
     extractArgs e = ([],e)
 
-processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [Doc] (String,Expr,[String],Expr)]
+processDecls :: Ctx -> [(String,Maybe Expr,[Arg],Expr)] -> [Either [EMsg] (String,Expr,[String],Expr)]
 processDecls _ [] = []
 processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
     Left errs -> Left errs : processDecls ctx decls
     Right ((args',expr',ty'),(ctx',_)) -> Right (name,ty',args',expr') : processDecls ctx' decls
 
-run :: Err Defs -> (String,String)
-run (Bad s) = (s,"")
-run (Ok (Defs defs)) =
+run :: String -> Err Defs -> (String,String)
+run _ (Bad s) = (s,"")
+run fn (Ok (Defs defs)) =
     let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty) (processDefs defs)
-    in (intercalate "\n\n" (map render $ concat errs), intercalate "\n\n" (map print res))
+    in (intercalate "\n\n" (map (erenderWithFilename fn) $ concat errs), intercalate "\n\n" (map print res))
   where
     print :: (String,Expr,[String],Expr) -> String
     print (x,t,[],e) = x ++ " : " ++ printTree t ++ "\n" ++ x ++ " = " ++ printTree e
@@ -69,7 +70,7 @@ run (Ok (Defs defs)) =
 runFile :: String -> IO ()
 runFile input = do
     cnt <- readFile input
-    let (errs,res) = run (parser cnt)
+    let (errs,res) = run input (parser cnt)
     when (not $ null errs) (hPutStrLn stderr errs)
     when (not $ null res) $ writeFile (outputFilename input) (res ++ "\n")
 

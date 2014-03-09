@@ -1,44 +1,76 @@
 module ErrorDoc
-    ( Pretty(..)
-    , textL, textLC, msgL, msgLC, docL, docLC
-    , module Text.PrettyPrint
-    , prettyLevel
-    , prettyHead
+    ( EMsg, EDoc
+    , EPretty(..)
+    , etext, enull, (<>), (<+>), ($$)
+    , emsg, emsgL, emsgLC
+    , eprettyLevel, eprettyHead
+    , erender, erenderWithFilename
     ) where
 
-import Text.PrettyPrint
+import qualified Text.PrettyPrint as P
 
 import Parser.AbsGrammar
 import Parser.PrintGrammar(printTree)
 
-class Pretty a where
-    pretty :: a -> Doc
+data EMsg = EMsg (Maybe Int) (Maybe Int) String EDoc
+data EDoc = EText String | ENull | ETerm (Maybe Int) Expr | EAbove EDoc EDoc | EBeside EDoc Bool EDoc
 
-instance Pretty Expr where
-    pretty = text . printTree
+class EPretty a where
+    epretty :: a -> EDoc
 
-prettyLevel :: Int -> Expr -> Doc
-prettyLevel n e | n < 0 = pretty e
-prettyLevel 0 _ = text "_"
-prettyLevel _ e = pretty e -- TODO: Define it
+instance EPretty Expr where
+    epretty = ETerm Nothing
 
-prettyHead :: Expr -> Doc
-prettyHead = prettyLevel 1
+eprettyLevel :: Int -> Expr -> EDoc
+eprettyLevel n e | n < 0 = epretty e
+                 | otherwise = ETerm (Just n) e
 
-textL :: Int -> String -> Doc
-textL l s = text (show l ++ ":") <+> text s
+eprettyHead :: Expr -> EDoc
+eprettyHead = eprettyLevel 1
 
-textLC :: Int -> Int -> String -> Doc
-textLC l c s = text (show l ++ ":" ++ show c ++ ":") <+> text s
+etext :: String -> EDoc
+etext = EText
 
-msgL :: Int -> String -> Doc -> Doc
-msgL l s d = text (show l ++ ":") <+> text s $$ d
+enull :: EDoc
+enull = ENull
 
-msgLC :: Int -> Int -> String -> Doc -> Doc
-msgLC l c s d = text (show l ++ ":" ++ show c ++ ":") <+> text s $$ d
+infixl 6 <>, <+>
+infixl 5 $$
+(<>) :: EDoc -> EDoc -> EDoc
+d1 <> d2 = EBeside d1 False d2
 
-docL :: Int -> Doc -> Doc
-docL l d = text (show l ++ ":") <+> d
+(<+>) :: EDoc -> EDoc -> EDoc
+d1 <+> d2 = EBeside d1 True d2
 
-docLC :: Int -> Int -> Doc -> Doc
-docLC l c d = text (show l ++ ":" ++ show c ++ ":") <+> d
+($$) :: EDoc -> EDoc -> EDoc
+($$) = EAbove
+
+emsg :: String -> EDoc -> EMsg
+emsg = EMsg Nothing Nothing
+
+emsgL :: Int -> String -> EDoc -> EMsg
+emsgL l = EMsg (Just l) Nothing
+
+emsgLC :: Int -> Int -> String -> EDoc -> EMsg
+emsgLC l c = EMsg (Just l) (Just c)
+
+erender :: EMsg -> String
+erender (EMsg l c s d) = P.render (msgToDoc Nothing l c s d)
+
+erenderWithFilename :: String -> EMsg -> String
+erenderWithFilename fn (EMsg l c s d) = P.render (msgToDoc (Just fn) l c s d)
+
+msgToDoc :: Maybe String -> Maybe Int -> Maybe Int -> String -> EDoc -> P.Doc
+msgToDoc fn l c s d = P.hang (edocToDoc $
+    maybe enull (\s -> etext $ s ++ ":") fn <>
+    maybe enull (\ln -> etext $ show ln ++ ":") l <>
+    maybe enull (\cn -> etext $ show cn ++ ":") c <+> etext s) 4 (edocToDoc d)
+
+edocToDoc :: EDoc -> P.Doc
+edocToDoc ENull = P.empty
+edocToDoc (EText "") = P.empty
+edocToDoc (EText s) = P.text s
+edocToDoc (EBeside d1 False d2) = edocToDoc d1 P.<> edocToDoc d2
+edocToDoc (EBeside d1 True d2) = edocToDoc d1 P.<+> edocToDoc d2
+edocToDoc (EAbove d1 d2) = edocToDoc d1 P.$$ edocToDoc d2
+edocToDoc (ETerm _ e) = P.text (printTree e)
