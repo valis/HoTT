@@ -1,10 +1,13 @@
+-- letTest = let x = 0 in \(f : x = x -> Nat) -> f (idp x)
+
 letTest1 : (0 = 0 -> Nat) -> Nat
 letTest1 = let x = 0 in \f -> f (idp x)
 
 letTest2 : (0 = 0 -> Nat) -> Nat
 letTest2 f = let x = 0 in f (idp x)
 
--- letTest3 = let x = 0 in \(f : x = x -> Nat) -> f (idp x)
+letTest3 : (let x = 0 in x) = 0
+letTest3 = idp 0
 
 pmapTest1 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 pmapTest1 p y = pmap y p

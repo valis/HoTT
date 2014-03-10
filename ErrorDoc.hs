@@ -5,13 +5,12 @@ module ErrorDoc
     , emsg, emsgL, emsgLC
     , eprettyLevel, eprettyHead
     , erender, erenderWithFilename
+    , liftErr2
     ) where
 
 import qualified Text.PrettyPrint as P
 
 import Syntax.Term
-
-type EDocM = Either [EMsg]
 
 data EMsg = EMsg (Maybe Int) (Maybe Int) String EDoc
 data EDoc = EText String | ENull | ETerm (Maybe Int) Term | EAbove EDoc EDoc | EBeside EDoc Bool EDoc
@@ -21,6 +20,14 @@ class EPretty a where
 
 instance EPretty Term where
     epretty = ETerm Nothing
+
+type EDocM = Either [EMsg]
+
+liftErr2 :: (a -> b -> EDocM c) -> EDocM a -> EDocM b -> EDocM c
+liftErr2 f (Left m1) (Left m2) = Left (m1 ++ m2)
+liftErr2 f (Left m) _ = Left m
+liftErr2 f _ (Left m) = Left m
+liftErr2 f (Right v1) (Right v2) = f v1 v2
 
 eprettyLevel :: Int -> Term -> EDoc
 eprettyLevel n e | n < 0 = epretty e

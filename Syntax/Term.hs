@@ -1,11 +1,12 @@
 module Syntax.Term
     ( Term(..), Def(..), Level(..)
     , ppTerm, ppDef
-    , freshName
+    , freshName, freeVars
     ) where
 
 import qualified Data.Map as M
 import Text.PrettyPrint
+import Data.List
 
 data Level = Finite Integer | Omega | Omega1 | Omega2 deriving Eq
 
@@ -44,7 +45,7 @@ instance Enum Level where
     fromEnum (Finite l) = fromInteger l
     fromEnum _ = error "Enum.Level.fromEnum: bad argument"
 
-data Def = Def String (Maybe Term) [String] Term
+data Def = Def String (Maybe (Term,[String])) Term
 
 data Term
     = Let [Def] Term
@@ -71,6 +72,26 @@ freshName base vars | elem base vars = go 0
          | otherwise = x
          where x = base ++ show n
 
+freeVars :: Term -> [String]
+freeVars (Let defs e) = freeVars e \\ map (\(Def name _ _) -> name) defs
+freeVars (Lam [] e) = freeVars e
+freeVars (Lam (v:vs) e) = delete v $ freeVars (Lam vs e)
+freeVars (Pi [] e) = freeVars e
+freeVars (Pi ((vars,t):vs) e) = freeVars t `union` (freeVars (Pi vs e) \\ vars)
+freeVars (Sigma [] e) = freeVars e
+freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ vars)
+freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Var "_") = []
+freeVars (Var v) = [v]
+freeVars Nat = []
+freeVars Suc = []
+freeVars Rec = []
+freeVars Idp = []
+freeVars (Pmap e) = freeVars e
+freeVars (NatConst _) = []
+freeVars (Universe _) = []
+
 instance Eq Term where
     (==) = cmp 0 M.empty M.empty
       where
@@ -85,12 +106,11 @@ instance Eq Term where
         cmp c m1 m2 e1 (Sigma [] e2) = cmp c m1 m2 e1 e2
         cmp c m1 m2 (Sigma (([],_):ts) e1) e2 = cmp c m1 m2 (Sigma ts e1) e2
         cmp c m1 m2 e1 (Sigma (([],_):ts) e2) = cmp c m1 m2 e1 (Sigma ts e2)
-        cmp c m1 m2 (Let (Def v1 Nothing as1 r1 : ds1) e1) (Let (Def v2 Nothing as2 r2 : ds2) e2) =
-            cmp c m1 m2 (Lam as1 r1) (Lam as2 r2) &&
-            cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Let ds1 e1) (Let ds2 e2)
-        cmp c m1 m2 (Let (Def v1 (Just t1) as1 r1 : ds1) e1) (Let (Def v2 (Just t2) as2 r2 : ds2) e2) =
+        cmp c m1 m2 (Let (Def v1 Nothing r1 : ds1) e1) (Let (Def v2 Nothing r2 : ds2) e2) =
+            cmp c m1 m2 r1 r2 && cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Let ds1 e1) (Let ds2 e2)
+        cmp c m1 m2 (Let (Def v1 (Just (t1,as1)) r1 : ds1) e1) (Let (Def v2 (Just (t2,as2)) r2 : ds2) e2) =
             cmp c m1 m2 t1 t2 &&
-            cmp c m1 m2 (Lam as1 r1) (Lam as2 r2) &&
+            cmpVars c m1 m2 as1 as2 r1 r2 &&
             cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Let ds1 e1) (Let ds2 e2)
         cmp c m1 m2 (Lam (v1:vs1) e1) (Lam (v2:vs2) e2) =
             cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Lam vs1 e1) (Lam vs2 e2)
@@ -117,8 +137,9 @@ instance Eq Term where
         cmpVars _ _ _ _ _ _ _ = False
 
 ppDef :: Def -> Doc
-ppDef (Def name Nothing   args expr) = text name <+> equals <+> ppTerm Nothing expr
-ppDef (Def name (Just ty) args expr) = text name <+> colon  <+> ppTerm Nothing ty $+$ ppDef (Def name Nothing args expr)
+ppDef (Def name Nothing          expr) = text name <+> equals <+> ppTerm Nothing expr
+ppDef (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm Nothing ty
+                                     $+$ text name <+> equals <+> hsep (map text args) <+> ppTerm Nothing expr
 
 ppTerm :: Maybe Int -> Term -> Doc
 ppTerm = go False

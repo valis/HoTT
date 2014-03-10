@@ -15,6 +15,7 @@ import Parser.ParGrammar
 import Parser.LayoutGrammar
 
 import Syntax.Term
+import Value
 import Eval
 import ErrorDoc
 
@@ -49,14 +50,14 @@ processDecl name args expr ty = do
     return (a,e',t)
   where
     extractArgs :: Term -> ([String],Term)
-    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (xs ++ ys, r)
+    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (map fst xs ++ ys, r)
     extractArgs e = ([],e)
 
 processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [EDocM Def]
 processDecls _ [] = []
 processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
     Left errs -> Left errs : processDecls ctx decls
-    Right ((args',expr',ty'),(ctx',_)) -> Right (Def name (Just ty') args' expr') : processDecls ctx' decls
+    Right ((args',expr',ty'),(ctx',_)) -> Right (Def name (Just (ty',args')) expr') : processDecls ctx' decls
 
 run :: String -> Err R.Defs -> (String,String)
 run _ (Bad s) = (s,"")
