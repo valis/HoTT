@@ -1,17 +1,16 @@
 module Syntax.Raw
     ( unArg, unBinder
     , getPos, argGetPos, binderGetPos
-    , parseLevel
     , freeVars, rename, renameExpr
-    , processDefs
+    , preprocessDefs
     ) where
 
 import Data.List
+import Text.PrettyPrint
 
 import Parser.AbsGrammar
-import Parser.PrintGrammar(printTree)
-import qualified Syntax.Term as T
-import ErrorDoc
+import ErrorDoc hiding ((<+>),(<>),($$))
+import Syntax.Common
 
 getPos :: Expr -> (Int,Int)
 getPos (Let [] e) = getPos e
@@ -51,11 +50,6 @@ unBinder (Binder b) = unArg b
 binderGetPos :: Binder -> (Int,Int)
 binderGetPos (Binder b) = argGetPos b
 
-parseLevel :: String -> T.Level
-parseLevel "Type" = T.Omega
-parseLevel ('T':'y':'p':'e':s) = T.Finite (read s)
-parseLevel s = error $ "parseLevel: " ++ s
-
 freeVarsDef :: [Def] -> Expr -> [String]
 freeVarsDef [] e = freeVars e
 freeVarsDef (DefType _ t : ds) e = freeVars t `union` freeVarsDef ds e
@@ -84,7 +78,7 @@ freeVars (Universe _) = []
 freeVars (Paren _ e) = freeVars e
 
 renameExpr :: [String] -> String -> Expr -> (String,Expr)
-renameExpr m x e = let x' = T.freshName x (freeVars e ++ m) in (x', rename e x x')
+renameExpr m x e = let x' = freshName x (m ++ freeVars e) in (x', rename e x x')
 
 renameDefs :: [Def] -> Expr -> String -> String -> ([Def],Expr)
 renameDefs [] e x y = ([], rename e x y)
@@ -145,18 +139,75 @@ rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
 
-processDefs :: [Def] -> EDocM [(String,Maybe Expr,[Arg],Expr)]
-processDefs defs =
+instance EPretty Expr where
+    epretty = edoc . ppExpr Nothing
+
+ppDef :: Def -> Doc
+ppDef (Def (PIdent (_,name)) args expr) = text name <+> hsep (map (text . unArg) args) <+> equals <+> ppExpr Nothing expr 
+ppDef (DefType (PIdent (_,name)) expr) = text name <+> colon <+> ppExpr Nothing expr
+
+ppExpr :: Maybe Int -> Expr -> Doc
+ppExpr = go False
+  where
+    ppArrow l e@(Lam _ _ _) = go True l e
+    ppArrow l e@(Pi _ _) = go True l e
+    ppArrow l e = go False l e
+    
+    go _ (Just 0) _ = char '_'
+    go _ _ (NatConst (PInt (_,n))) = text n
+    go _ _ x | Just n <- getNat x = integer n
+      where
+        getNat :: Expr -> Maybe Integer
+        getNat (NatConst (PInt (_,n))) = Just (read n)
+        getNat (App (Suc _) x) = fmap succ (getNat x)
+        getNat _ = Nothing
+    go _ _ (Var a) = text (unArg a)
+    go _ _ (Nat _) = text "Nat"
+    go _ _ (Suc _) = text "suc"
+    go _ _ (Rec _) = text "R"
+    go _ _ (Idp _) = text "idp"
+    go _ _ (Universe (U (_,u))) = text u
+    go True l e = parens (go False l e)
+    go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
+    go False l (Lam _ vars e) = char 'λ' <> hsep (map (text . unBinder) vars) <+> char '→' <+> go False (fmap pred l) e
+    go False l (Pi ts e) =
+        let l' = fmap pred l
+            ppTypedVar (TypedVar _ e t) = parens $ go False Nothing e <+> colon <+> go False l' t
+        in hsep (map ppTypedVar ts) <+> char '→' <+> go False l' e
+    go False l (Sigma ts e) =
+        let l' = fmap pred l
+            ppTypedVar (TypedVar _ e t) = parens $ go False Nothing e <+> colon <+> go False l' t
+        in hsep (map ppTypedVar ts) <+> char '×' <+> go False l' e
+    go False l (Arr e1 e2) =
+        let l' = fmap pred l
+        in ppArrow l' e1 <+> char '→' <+> go False l' e2
+    go False l (Prod e1 e2) =
+        let l' = fmap pred l
+        in ppArrow l' e1 <+> char '×' <+> ppArrow l' e2
+    go False l (Id e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> equals <+> go False l' e2
+    go False l (App e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> go True l' e2
+    go False l (Pmap _ e) = text "pmap" <+> go True (fmap pred l) e
+    go False l (Paren _ e) = go False l e
+
+preprocessDefs :: [Def] -> EDocM [Def]
+preprocessDefs defs =
     let typeSigs = filterTypeSigs defs
         funDecls = filterFunDecls defs
         typeSigs' = map (\(PIdent (_,s),e) -> (s,e)) typeSigs
-        funDecls' = map (\(PIdent (_,s),e) -> (s,e)) funDecls
         typeSigsDup = duplicates (map fst typeSigs)
         funDeclsDup = duplicates (map fst funDecls)
     in if not (null typeSigsDup) || not (null funDeclsDup)
         then Left $ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Duplicate type signatures for " ++ s) enull) typeSigsDup
                  ++ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Multiple declarations of " ++ s) enull) funDeclsDup
-        else Right $ map (\(name,(args,expr)) -> (name,lookup name typeSigs',args,expr)) funDecls'
+        else fmap concat $ forE funDecls $ \(i@(PIdent ((l,c),name)),(args,expr)) -> case lookup name typeSigs' of
+            Nothing -> if null args
+                then Right [Def i [] expr]
+                else Left [emsgLC l c "Cannot infer type of the argument" enull]
+            Just ty -> Right [DefType i ty, Def i args expr]
   where
     filterTypeSigs :: [Def] -> [(PIdent,Expr)]
     filterTypeSigs [] = []
@@ -179,6 +230,3 @@ processDefs defs =
         findRemove (y@(PIdent (_,w)) : ys)
             | v == w = Just $ maybe ys id (findRemove ys)
             | otherwise = fmap (y:) (findRemove ys)
-
-instance EPretty Expr where
-    epretty = etext . printTree -- TODO: Reimplement printTree?

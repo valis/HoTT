@@ -1,49 +1,13 @@
 module Syntax.Term
-    ( Term(..), Def(..), Level(..)
+    ( Term(..), Def(..)
     , ppTerm, ppDef
-    , freshName, freeVars
+    , freeVars
     ) where
 
 import qualified Data.Map as M
 import Text.PrettyPrint
 import Data.List
-
-data Level = Finite Integer | Omega | Omega1 | Omega2 deriving Eq
-
-instance Show Level where
-    show (Finite n) = "Type" ++ show n
-    show Omega = "Type"
-    show Omega1 = "TYPE"
-    show Omega2 = "TYPE1"
-
-instance Ord Level where
-    compare (Finite x) (Finite y) = compare x y
-    compare (Finite _) _ = LT
-    compare _ (Finite _) = GT
-    compare Omega Omega = EQ
-    compare Omega Omega1 = LT
-    compare Omega Omega2 = LT
-    compare Omega1 Omega1 = EQ
-    compare Omega1 Omega2 = LT
-    compare Omega2 Omega2 = EQ
-    compare _ _ = GT
-
-instance Bounded Level where
-    minBound = Finite 0
-    maxBound = Omega2
-
-instance Enum Level where
-    succ (Finite l) = Finite (succ l)
-    succ Omega = Omega1
-    succ Omega1 = Omega2
-    succ Omega2 = error "Enum.Level.succ: bad argument"
-    pred (Finite l) | l > 0 = Finite (pred l)
-    pred Omega1 = Omega
-    pred Omega2 = Omega1
-    pred _ = error "Enum.Level.pred: bad argument"
-    toEnum = Finite . toInteger
-    fromEnum (Finite l) = fromInteger l
-    fromEnum _ = error "Enum.Level.fromEnum: bad argument"
+import Syntax.Common
 
 data Def = Def String (Maybe (Term,[String])) Term
 
@@ -52,7 +16,7 @@ data Term
     | Lam [String] Term
     | Pi [([String],Term)] Term
     | Sigma [([String],Term)] Term
-    | Id Term Term
+    | Id Term Term Term
     | App Term Term
     | Var String
     | Nat
@@ -63,15 +27,6 @@ data Term
     | NatConst Integer
     | Universe Level
 
-freshName :: String -> [String] -> String
-freshName "_" vars = freshName "x" vars
-freshName base vars | elem base vars = go 0
-                    | otherwise = base
-  where
-    go n | elem x vars = go (n + 1)
-         | otherwise = x
-         where x = base ++ show n
-
 freeVars :: Term -> [String]
 freeVars (Let defs e) = freeVars e \\ map (\(Def name _ _) -> name) defs
 freeVars (Lam [] e) = freeVars e
@@ -80,7 +35,7 @@ freeVars (Pi [] e) = freeVars e
 freeVars (Pi ((vars,t):vs) e) = freeVars t `union` (freeVars (Pi vs e) \\ vars)
 freeVars (Sigma [] e) = freeVars e
 freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ vars)
-freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Id t e1 e2) = freeVars t `union` freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var "_") = []
 freeVars (Var v) = [v]
@@ -118,7 +73,7 @@ instance Eq Term where
             cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Pi ts1 e1) (Pi ts2 e2)
         cmp c m1 m2 (Sigma ((vs1,t1):ts1) e1) (Sigma ((vs2,t2):ts2) e2) =
             cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Sigma ts1 e1) (Sigma ts2 e2)
-        cmp c m1 m2 (Id a1 b1) (Id a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
             (Nothing, Nothing) -> v1 == v2
             (Just c1, Just c2) -> c1 == c2
@@ -148,15 +103,15 @@ ppTerm = go False
     ppArrow l e@(Pi _ _) = go True l e
     ppArrow l e = go False l e
     
-    ppVars :: Bool -> Char -> Maybe Int -> [([String],Term)] -> Term -> Doc
-    ppVars _ c l [] e = char c <+> go False l e
-    ppVars True c l ts e = char c <+> ppVars False c l ts e
-    ppVars False c l (([],t):ts) e =
+    ppVars :: Bool -> Char -> Maybe Int -> [([String],Term)] -> Doc
+    ppVars _ c l [] = char c
+    ppVars True c l ts = char c <+> ppVars False c l ts
+    ppVars False c l (([],t):ts) =
         let l' = fmap pred l
-        in ppArrow l' t <+> ppVars True c l' ts e
-    ppVars False c l ((vars,t):ts) e =
+        in ppArrow l' t <+> ppVars True c l' ts
+    ppVars False c l ((vars,t):ts) =
         let l' = fmap pred l
-        in parens (hsep (map text vars) <+> colon <+> go False l' t) <+> ppVars False c l' ts e
+        in parens (hsep (map text vars) <+> colon <+> go False l' t) <+> ppVars False c l' ts
     
     go _ (Just 0) _ = char '_'
     go _ _ (NatConst n) = integer n
@@ -177,11 +132,11 @@ ppTerm = go False
     go False l (Lam vars e) = char 'λ' <> hsep (map text vars) <+> char '→' <+> go False (fmap pred l) e
     go False l (Pi ts e) =
         let l' = fmap pred l
-        in ppVars False '→' l' ts e
+        in ppVars False '→' l' ts <+> go False l' e
     go False l (Sigma ts e) =
         let l' = fmap pred l
-        in ppVars False '×' l' ts e
-    go False l (Id e1 e2) =
+        in ppVars False '×' l' ts <+> ppArrow l' e
+    go False l (Id _ e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> equals <+> go False l' e2
     go False l (App e1 e2) =

@@ -14,10 +14,11 @@ import qualified Parser.AbsGrammar as R
 import Parser.ParGrammar
 import Parser.LayoutGrammar
 
+import Syntax.Raw
 import Syntax.Term
 import Value
-import Eval
 import ErrorDoc
+import TypeChecking
 
 outputFilename :: String -> String
 outputFilename input = case break (== '/') input of
@@ -39,30 +40,28 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err R.Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT (Ctx,Ctx) EDocM ([String],Term,Term)
+processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT Ctx EDocM ([String],Term,Term)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
-    (gctx,ctx) <- get
-    let fv = (M.keys ctx ++ M.keys gctx)
-        (a,e') = extractArgs (reify fv ev tv)
-        t = reify fv tv (Stype maxBound)
-    return (a,e',t)
+    let (a,e') = extractArgs (reify ev)
+    return (a,e',reify tv)
   where
     extractArgs :: Term -> ([String],Term)
-    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (map fst xs ++ ys, r)
+    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (xs ++ ys, r)
     extractArgs e = ([],e)
 
 processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [EDocM Def]
 processDecls _ [] = []
-processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) (ctx,M.empty) of
+processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) ctx of
     Left errs -> Left errs : processDecls ctx decls
-    Right ((args',expr',ty'),(ctx',_)) -> Right (Def name (Just (ty',args')) expr') : processDecls ctx' decls
+    Right ((args',expr',ty'),ctx') -> Right (Def name (Just (ty',args')) expr') : processDecls ctx' decls
 
 run :: String -> Err R.Defs -> (String,String)
 run _ (Bad s) = (s,"")
 run fn (Ok (R.Defs defs)) =
-    let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty) (processDefs defs)
+    let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty)
+            $ fmap processDefs (preprocessDefs defs)
     in (intercalate "\n\n" $ map (erenderWithFilename fn) $ concat errs, intercalate "\n\n" $ map (P.render . ppDef) res)
 
 runFile :: String -> IO ()
