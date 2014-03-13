@@ -5,6 +5,7 @@ import System.Environment
 import System.IO
 import Data.List
 import Data.Either
+import Data.Maybe
 import Control.Monad
 import Control.Monad.State
 import qualified Text.PrettyPrint as P
@@ -44,12 +45,9 @@ processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT Ctx EDocM (
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
-    let (a,e') = extractArgs (reify ev)
-    return (a,e',reify tv)
-  where
-    extractArgs :: Term -> ([String],Term)
-    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (xs ++ ys, r)
-    extractArgs e = ([],e)
+    let Def _ mty e' = simplifyDef $ Def name (Just (reify tv, [])) (reify ev)
+        (ty,args) = fromMaybe (error "processDecl") mty
+    return (args,e',ty)
 
 processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [EDocM Def]
 processDecls _ [] = []
@@ -62,7 +60,7 @@ run _ (Bad s) = (s,"")
 run fn (Ok (R.Defs defs)) =
     let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty)
             $ fmap processDefs (preprocessDefs defs)
-    in (intercalate "\n\n" $ map (erenderWithFilename fn) $ concat errs, intercalate "\n\n" $ map (P.render . ppDef) res)
+    in (intercalate "\n\n" $ map (erenderWithFilename fn) (concat errs), intercalate "\n\n" $ map (P.render . ppDef) res)
 
 runFile :: String -> IO ()
 runFile input = do

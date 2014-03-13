@@ -12,10 +12,7 @@ import Parser.AbsGrammar
 import Syntax.Common
 import Syntax.Raw
 import qualified Syntax.Term as T
-import Eval
-
-evalRaw :: Ctx -> Expr -> Value
-evalRaw ctx e = eval 0 (ctxToCtxV ctx) (rawExprToTerm ctx e)
+import RawToTerm
 
 maxType :: (Int,Int) -> (Int,Int) -> Expr -> Expr -> Value -> Value -> EDocM Value
 maxType _ _ _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
@@ -36,7 +33,7 @@ typeOf'depType ctx (TypedVar _ vars t : list) e = do
     let (l,c) = getPos t
         e' = Pi list e
     cmpTypesErr l c (Stype $ pred maxBound) tv t
-    ctx' <- updateCtx ctx (evalRaw ctx t) vars
+    ctx' <- updateCtx ctx (evalRaw ctx t (Just tv)) vars
     ev <- typeOf ctx' e'
     maxType (l,c) (getPos e) t e' tv ev
   where
@@ -53,22 +50,21 @@ typeOf _ (Idp (PIdp ((l,c),_))) = Left [emsgLC l c "Cannot infer type of idp" en
 typeOf _ (Pmap (Ppmap ((l,c),_)) _) = Left [emsgLC l c "Cannot infer type of pmap" enull]
 typeOf ctx (Let defs e) = do
     defs' <- preprocessDefs defs
-    let decls = processDefs defs'
-        st = forM_ decls $ \(name,ty,args,expr) ->
+    let st = forM_ (processDefs defs') $ \(name,ty,args,expr) ->
             let p = if null args then getPos expr else argGetPos (head args)
             in evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
     ctx' <- execStateT st ctx
     typeOf ctx' e
 typeOf ctx (App (Idp _) e) = do
     t <- typeOf ctx e
-    let v = evalRaw ctx e
+    let v = evalRaw ctx e (Just t)
     Right (Sid t v v)
 typeOf ctx (App (Pmap (Ppmap ((l,c),_)) e1) e2) = do
     t2 <- typeOf ctx e2
     case t2 of
-        Sid _ a b -> do
+        Sid s a b -> do
             t <- typeOfLam (l,c) (getPos e2) ctx e1 e2 t2
-            let e' = app 0 (evalRaw ctx e1)
+            let e' = app 0 $ evalRaw ctx e1 (Just $ s `sarr` t)
             Right $ Sid t (e' a) (e' b)
         _ -> let (l',c') = getPos e2
              in Left [emsgLC l' c' "" $ etext "Expected Id type" $$ etext "But term" <+> epretty e2
@@ -89,7 +85,7 @@ typeOf _ (Universe (U (_,t))) = Right $ Stype $ succ (parseLevel t)
 typeOf ctx (App e1 e2) = do
     t <- typeOf ctx e1
     case t of
-        Spi _ _ a b -> hasType ctx e2 a >> Right (b $ evalRaw ctx e2)
+        Spi _ _ a b -> hasType ctx e2 a >> Right (b $ evalRaw ctx e2 $ Just a)
         _ -> let (l,c) = getPos e1
              in Left [emsgLC l c "" $ etext "Expected pi type" $$
                     etext "But term" <+> epretty e1 <+> etext "has type" <+> eprettyHead (reify t)]
@@ -122,7 +118,7 @@ typeOfLam (l,c) (l',c') ctx e e2 (Sid act _ _) = do
         Spi x fv exp r -> do
             case cmpTypes exp act of
                 Just o | o /= LT -> Right ()
-                _ -> let em s t = s <+> etext "(" <> epretty (reify t) <> etext ") _ _"
+                _ -> let em s t = s <> etext "(" <> epretty (T.simplify $ reify t) <> etext ") _ _"
                      in Left [emsgLC l' c' "" $ em (etext "Expected type: Id") exp $$
                         em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
             let x' = freshName x fv
@@ -140,8 +136,11 @@ hasType ctx (Lam _ [] e) ty = hasType ctx e ty
 hasType ctx (Lam i (x:xs) e) (Spi z fv a b) =
     let (x',e') = renameExpr fv (unBinder x) (Lam i xs e)
     in hasType (M.insert x' (svar x',a) ctx) e' $ b (svar x')
-hasType _ (Lam _ (Binder (Arg (PIdent ((l,c),_))):_) _) ty =
-    Left [emsgLC l c "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
+hasType _ (Lam _ (Binder arg : _) _) ty =
+    let (l,c) = case arg of
+            Arg (PIdent (p,_)) -> p
+            NoArg (Pus (p,_)) -> p
+    in Left [emsgLC l c "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
 hasType _ i@(Idp (PIdp ((l,c),_))) exp@(Spi x _ a _) =
     cmpTypesErr l c exp (Spi x (valueFreeVars a) a $ \v -> Sid a v v) i
 hasType _ (Idp (PIdp ((l,c),_))) ty =
@@ -150,8 +149,8 @@ hasType ctx i@(Pmap (Ppmap ((l,c),_)) e) exp@(Spi x fv (Sid t a b) r) =
     let x' = freshName x fv
     in case r (svar x') of
         Sid s _ _ -> do
-            hasType ctx e (sarr t s)
-            let e' = evalRaw ctx e
+            hasType ctx e (t `sarr` s)
+            let e' = evalRaw ctx e (Just $ t `sarr` s)
                 act = Sid t a b `sarr` Sid s (app 0 e' a) (app 0 e' b)
             cmpTypesErr l c exp act i
         _ -> Left [emsgLC l c "" $ expType 2 exp $$ etext "But pmap _ has type of the form x = y -> _ x = _ y"]
@@ -160,6 +159,13 @@ hasType _ (Pmap (Ppmap ((l,c),_)) _) exp@(Spi _ _ _ _) =
 hasType _ (Pmap (Ppmap ((l,c),_)) _) exp =
     Left [emsgLC l c "" $ expType 1 exp $$ etext "But pmap _ has pi type"]
 hasType ctx (Paren _ e) ty = hasType ctx e ty
+hasType ctx (Let defs e) ty = do
+    defs' <- preprocessDefs defs
+    let st = forM_ (processDefs defs') $ \(name,ty,args,expr) ->
+            let p = if null args then getPos expr else argGetPos (head args)
+            in evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
+    ctx' <- execStateT st ctx
+    hasType ctx' e ty
 hasType ctx e ty = do
     ty1 <- typeOf ctx e
     let (l,c) = getPos e
@@ -171,12 +177,11 @@ evalDecl name expr mty = do
     tv <- case mty of
         Nothing -> lift (typeOf ctx expr)
         Just ty -> do
-            vty <- lift (typeOf ctx ty)
-            let (l,c) = getPos ty
-            lift $ cmpTypesErr l c (Stype $ pred maxBound) vty ty
-            return (evalRaw ctx ty)
-    lift (hasType ctx expr tv)
-    let ev = evalRaw ctx expr
+            lift $ hasType ctx ty $ Stype (pred maxBound)
+            let tv = evalRaw ctx ty $ Just $ Stype (pred maxBound)
+            lift (hasType ctx expr tv)
+            return tv
+    let ev = evalRaw ctx expr (Just tv)
     put (M.insert name (ev,tv) ctx)
     return (ev,tv)
 

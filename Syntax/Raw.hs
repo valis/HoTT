@@ -1,7 +1,7 @@
 module Syntax.Raw
     ( unArg, unBinder
     , getPos, argGetPos, binderGetPos
-    , freeVars, rename, renameExpr
+    , freeVars, renameExpr
     , preprocessDefs
     ) where
 
@@ -78,7 +78,8 @@ freeVars (Universe _) = []
 freeVars (Paren _ e) = freeVars e
 
 renameExpr :: [String] -> String -> Expr -> (String,Expr)
-renameExpr m x e = let x' = freshName x (m ++ freeVars e) in (x', rename e x x')
+renameExpr m x e | not (elem x m) = (x,e)
+                 | otherwise = let x' = freshName x (m ++ freeVars e) in (x', rename e x x')
 
 renameDefs :: [Def] -> Expr -> String -> String -> ([Def],Expr)
 renameDefs [] e x y = ([], rename e x y)

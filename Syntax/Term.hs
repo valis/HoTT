@@ -2,6 +2,7 @@ module Syntax.Term
     ( Term(..), Def(..)
     , ppTerm, ppDef
     , freeVars
+    , simplify, simplifyDef
     ) where
 
 import qualified Data.Map as M
@@ -74,6 +75,7 @@ instance Eq Term where
         cmp c m1 m2 (Sigma ((vs1,t1):ts1) e1) (Sigma ((vs2,t2):ts2) e2) =
             cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Sigma ts1 e1) (Sigma ts2 e2)
         cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
             (Nothing, Nothing) -> v1 == v2
             (Just c1, Just c2) -> c1 == c2
@@ -143,3 +145,59 @@ ppTerm = go False
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2
     go False l (Pmap e) = text "pmap" <+> go True (fmap pred l) e
+
+simplify :: Term -> Term
+simplify (Let [] e) = simplify e
+simplify (Let defs (Let defs' e)) = simplify $ Let (defs ++ defs') e
+simplify (Let defs e) = Let (map simplifyDef defs) (simplify e)
+simplify (Lam [] e) = simplify e
+simplify (Lam args (Lam args' e)) = simplify $ Lam (args ++ args') e
+simplify (Lam args e) = Lam args (simplify e)
+simplify (Pi [] e) = simplify e
+simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
+simplify (Pi (([v],t):ts) e)
+    | elem v (freeVars $ Pi ts e) = case simplify (Pi ts e) of
+        Pi ts' e' -> Pi (([v], simplify t):ts') e'
+        r -> Pi [([v], simplify t)] r
+    | otherwise = case simplify (Pi ts e) of
+        Pi ts' e' -> Pi (([], simplify t):ts') e'
+        r -> Pi [([], simplify t)] r
+simplify (Pi ((v:vs,t):ts) e)
+    | elem v (freeVars $ Pi ((vs,t):ts) e) = case simplify $ Pi ((vs,t):ts) e of
+        Pi ts' e' -> Pi (([v], simplify t):ts') e'
+        r -> Pi [([v], simplify t)] r
+    | otherwise = Pi [([], simplify t)] $ simplify (Pi ((vs,t):ts) e)
+simplify (Sigma [] e) = simplify e
+simplify (Sigma (([],t):ts) e) = Sigma [([], simplify t)] $ simplify (Sigma ts e)
+simplify (Sigma (([v],t):ts) e)
+    | elem v (freeVars $ Sigma ts e) = case simplify (Sigma ts e) of
+        Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
+        r -> Sigma [([v], simplify t)] r
+    | otherwise = case simplify (Sigma ts e) of
+        Sigma ts' e' -> Sigma (([], simplify t):ts') e'
+        r -> Sigma [([], simplify t)] r
+simplify (Sigma ((v:vs,t):ts) e)
+    | elem v (freeVars $ Sigma ((vs,t):ts) e) = case simplify $ Sigma ((vs,t):ts) e of
+        Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
+        r -> Sigma [([v], simplify t)] r
+    | otherwise = Sigma [([], simplify t)] $ simplify (Sigma ((vs,t):ts) e)
+simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
+simplify (App e1 e2) = App (simplify e1) (simplify e2)
+simplify e@(Var _) = e
+simplify Nat = Nat
+simplify Suc = Suc
+simplify Rec = Rec
+simplify Idp = Idp
+simplify (Pmap e) = Pmap (simplify e)
+simplify e@(NatConst _) = e
+simplify e@(Universe _) = e
+
+simplifyDef :: Def -> Def
+simplifyDef (Def name Nothing expr) = Def name Nothing (simplify expr)
+simplifyDef (Def name (Just (ty,args)) expr) =
+    let (args',expr') = extractArgs (simplify expr)
+    in Def name (Just (simplify ty, args ++ args')) expr'
+  where
+    extractArgs :: Term -> ([String],Term)
+    extractArgs (Lam xs e) = let (ys,r) = extractArgs e in (xs ++ ys, r)
+    extractArgs e = ([],e)

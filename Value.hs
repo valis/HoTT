@@ -77,10 +77,7 @@ cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = case (cmpTypes a a', cmpTypes (
     (Just l, Just r) | l == r -> Just l
     _ -> Nothing
     where fresh = freshName x (v1 `union` v2)
-cmpTypes (Sid t a b) (Sid t' a' b') = case cmpTypes t t' of
-    Nothing -> Nothing
-    Just GT -> if cmpValues a a' && cmpValues b b' then Just EQ else Nothing
-    _       -> if cmpValues a a' && cmpValues b b' then Just EQ else Nothing
+cmpTypes (Sid _ a b) (Sid _ a' b') = if cmpValues a a' && cmpValues b b' then Just EQ else Nothing
 cmpTypes Snat Snat = Just EQ
 cmpTypes (Stype k) (Stype k') = Just (compare k k')
 cmpTypes (Ne t) (Ne t') = if t == t' then Just EQ else Nothing

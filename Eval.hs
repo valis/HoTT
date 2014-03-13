@@ -1,7 +1,5 @@
 module Eval
     ( eval
-    , typeOfTerm
-    , rawDefsToTerm, rawExprToTerm
     ) where
 
 import qualified Data.Map as M
@@ -9,9 +7,6 @@ import Data.Maybe
 import Data.List
 
 import Syntax.Term
-import Syntax.Common
-import qualified Syntax.Raw as R
-import qualified Parser.AbsGrammar as E
 import Value
 
 eval :: Integer -> CtxV -> Term -> Value
@@ -24,16 +19,16 @@ eval n ctx (Lam args e) = go n ctx args
   where
     fv = freeVars e
     go n ctx []     = eval n ctx e
-    go n ctx (a:as) = Slam a (fv \\ args) $ \k m v -> go k (M.insert a v $ M.map (action m) ctx) as
+    go n ctx s@(a:as) = Slam a (fv \\ s) $ \k m v -> go k (M.insert a v $ M.map (action m) ctx) as
 eval n ctx (Pi [] e) = eval n ctx e
 eval 0 ctx (Pi ((vars,t):ts) e) = go ctx vars
   where
     tv   = eval 0 ctx t
     efv  = freeVars (Pi ts e)
     pefv = freeVars t `union` efv
-    go ctx []     = eval 0 ctx t `sarrFV` (eval 0 ctx (Pi ts e),efv)
-    go ctx [v]    = Spi v  efv tv $ \a -> eval 0 (M.insert v a ctx) (Pi ts e)
-    go ctx (v:vs) = Spi v pefv tv $ \a -> go     (M.insert v a ctx) vs
+    go ctx []       = eval 0 ctx t `sarrFV` (eval 0 ctx (Pi ts e),efv)
+    go ctx [v]      = Spi v (delete v efv) tv $ \a -> eval 0 (M.insert v a ctx) (Pi ts e)
+    go ctx s@(v:vs) = Spi v (pefv \\ s)    tv $ \a -> go     (M.insert v a ctx) vs
 eval n ctx (Sigma [] e) = eval n ctx e
 eval 0 ctx (Sigma ((v:vars,t):ts) e) = go ctx vars
   where
@@ -81,84 +76,3 @@ rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\s -> Rec P z s x) (f : P = P) : P x = P x
     -- example: pmap (\z -> Rec P z s 0) p = p
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
-
-rawDefsToTerm :: Ctx -> [E.Def] -> [Def]
-rawDefsToTerm ctx [] = []
-rawDefsToTerm ctx (E.DefType _ t : E.Def (E.PIdent (_,name)) args e : defs) =
-    Def name (Just (rawExprToTerm ctx t, map R.unArg args)) (rawExprToTerm ctx e) : rawDefsToTerm ctx defs
-rawDefsToTerm ctx (E.Def (E.PIdent (_,name)) [] e : defs) = Def name Nothing (rawExprToTerm ctx e) : rawDefsToTerm ctx defs
-rawDefsToTerm _ _ = error "rawDefsToTerm"
-
-exprToVars :: E.Expr -> [String]
-exprToVars = reverse . go
-  where
-    go (E.Var (E.NoArg _)) = ["_"]
-    go (E.Var (E.Arg (E.PIdent (_,x)))) = [x]
-    go (E.App a (E.Var (E.NoArg _))) = "_" : go a
-    go (E.App a (E.Var (E.Arg (E.PIdent (_,x))))) = x : go a
-    go _ = error "exprToVars"
-
-rawExprToTerm :: Ctx -> E.Expr -> Term
-rawExprToTerm ctx (E.Let defs expr) = Let (rawDefsToTerm ctx defs) (rawExprToTerm ctx expr)
-rawExprToTerm ctx (E.Lam _ args expr) = Lam (map R.unBinder args) (rawExprToTerm ctx expr)
-rawExprToTerm ctx (E.Pi tvs e) =
-    Pi (map (\(E.TypedVar _ vars t) -> (exprToVars vars, rawExprToTerm ctx t)) tvs) (rawExprToTerm ctx e)
-rawExprToTerm ctx (E.Sigma tvs e) =
-    Sigma (map (\(E.TypedVar _ vars t) -> (exprToVars vars, rawExprToTerm ctx t)) tvs) (rawExprToTerm ctx e)
-rawExprToTerm ctx (E.Arr e1 e2) = Pi [([], rawExprToTerm ctx e1)] (rawExprToTerm ctx e2)
-rawExprToTerm ctx (E.Prod e1 e2) = Sigma [([], rawExprToTerm ctx e1)] (rawExprToTerm ctx e2)
-rawExprToTerm ctx (E.Id e1 e2) =
-    let e1' = rawExprToTerm ctx e1
-    in Id (reify $ typeOfTerm ctx e1') e1' (rawExprToTerm ctx e2)
-rawExprToTerm ctx (E.App e1 e2) = App (rawExprToTerm ctx e1) (rawExprToTerm ctx e2)
-rawExprToTerm ctx (E.Pmap _ e) = Pmap (rawExprToTerm ctx e)
-rawExprToTerm ctx (E.Var a) = Var (R.unArg a)
-rawExprToTerm ctx (E.Nat _) = Nat
-rawExprToTerm ctx (E.Suc _) = Suc
-rawExprToTerm ctx (E.Rec _) = Rec
-rawExprToTerm ctx (E.Idp _) = Idp
-rawExprToTerm ctx (E.NatConst (E.PInt (_,x))) = NatConst (read x)
-rawExprToTerm ctx (E.Universe (E.U (_,x))) = Universe (parseLevel x)
-rawExprToTerm ctx (E.Paren _ e) = rawExprToTerm ctx e
-
-typeOfTerm :: Ctx -> Term -> Value
-typeOfTerm ctx (Let defs e) = typeOfTerm (updateCtx ctx defs) e
-  where
-    updateCtx ctx [] = ctx
-    updateCtx ctx (Def name Nothing expr : ds) =
-        updateCtx (M.insert name (eval 0 (ctxToCtxV ctx) expr, typeOfTerm ctx expr) ctx) ds
-    updateCtx ctx (Def name (Just (ty,args)) expr : ds) =
-        updateCtx (M.insert name (eval 0 (ctxToCtxV ctx) (Lam args expr), eval 0 (ctxToCtxV ctx) ty) ctx) ds
-typeOfTerm ctx (Lam [] e) = typeOfTerm ctx e
-typeOfTerm _ (Lam _ _) = error "typeOfTerm.Lam"
-typeOfTerm ctx (Pi [] e) = typeOfTerm ctx e
-typeOfTerm ctx (Pi ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm ctx (Pi vs e)) of
-    (Stype k1, Stype k2) -> Stype (max k1 k2)
-    _ -> error "typeOfTerm.Pi"
-typeOfTerm ctx (Sigma [] e) = typeOfTerm ctx e
-typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm ctx (Sigma vs e)) of
-    (Stype k1, Stype k2) -> Stype (max k1 k2)
-    _ -> error "typeOfTerm.Sigma"
-typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
-typeOfTerm ctx (App Idp e) = let t = typeOfTerm ctx e in Spi "x" (valueFreeVars t) t $ \v -> Sid t v v
-typeOfTerm ctx (App (Pmap e1) e2) =
-    let e' = eval 0 (ctxToCtxV ctx) e1
-    in case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
-        (Spi x fv t s, Sid _ a b) -> Sid (s $ error "typeOfTerm.Pmap.App.Pi") (app 0 e' a) (app 0 e' b)
-        _ -> error "typeOfTerm.Pmap.App"
-typeOfTerm ctx (App e1 e2) = case typeOfTerm ctx e1 of
-    Spi _ _ _ b -> b $ eval 0 (ctxToCtxV ctx) e2
-    _ -> error "typeOfTerm.App"
-typeOfTerm ctx (Var v) = case M.lookup v ctx of
-    Nothing -> error $ "typeOfTerm.Var: " ++ v
-    Just (_,t) -> t
-typeOfTerm _ Nat = Stype (Finite 0)
-typeOfTerm _ Suc = Snat `sarr` Snat
-typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
-    let pfv = valueFreeVars p
-    in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
--- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
-typeOfTerm _ (NatConst _) = Snat
-typeOfTerm _ (Universe l) = Stype (succ l)
-typeOfTerm _ Idp = error "typeOfTerm.Idp"
-typeOfTerm _ (Pmap _) = error "typeOfTerm.Pmap"
