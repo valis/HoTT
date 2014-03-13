@@ -18,7 +18,8 @@ eval :: Integer -> CtxV -> Term -> Value
 eval n ctx Idp = Slam "x" [] $ \_ _ -> idp
 eval n ctx (Pmap e) = Slam "p" (freeVars e) $ \k m -> pmap k $ eval k (M.map (action m) ctx) e
 eval n ctx (Let [] e) = eval n ctx e
-eval n ctx (Let (Def v _ d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
+eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
+eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
 eval n ctx (Lam args e) = go n ctx args
   where
     fv = freeVars e
@@ -121,38 +122,43 @@ rawExprToTerm ctx (E.Universe (E.U (_,x))) = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) = rawExprToTerm ctx e
 
 typeOfTerm :: Ctx -> Term -> Value
-typeOfTerm = undefined
-{-
-typeOfTerm ctx (Let defs e) = undefined
+typeOfTerm ctx (Let defs e) = typeOfTerm (updateCtx ctx defs) e
+  where
+    updateCtx ctx [] = ctx
+    updateCtx ctx (Def name Nothing expr : ds) =
+        updateCtx (M.insert name (eval 0 (ctxToCtxV ctx) expr, typeOfTerm ctx expr) ctx) ds
+    updateCtx ctx (Def name (Just (ty,args)) expr : ds) =
+        updateCtx (M.insert name (eval 0 (ctxToCtxV ctx) (Lam args expr), eval 0 (ctxToCtxV ctx) ty) ctx) ds
 typeOfTerm ctx (Lam [] e) = typeOfTerm ctx e
-typeOfTerm ctx (Lam ((v,t):vs) e) = undefined -- Spi "x" (evalTerm t) $ \v -> -- Lam vs e
+typeOfTerm _ (Lam _ _) = error "typeOfTerm.Lam"
 typeOfTerm ctx (Pi [] e) = typeOfTerm ctx e
-typeOfTerm ctx (Pi ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm ctx (Sigma vs e)) of
+typeOfTerm ctx (Pi ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm ctx (Pi vs e)) of
     (Stype k1, Stype k2) -> Stype (max k1 k2)
     _ -> error "typeOfTerm.Pi"
 typeOfTerm ctx (Sigma [] e) = typeOfTerm ctx e
 typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm ctx (Sigma vs e)) of
     (Stype k1, Stype k2) -> Stype (max k1 k2)
     _ -> error "typeOfTerm.Sigma"
-typeOfTerm ctx (Id e _) = typeOfTerm ctx $ reify (M.keys ctx) (typeOfTerm ctx e) (Stype maxBound)
+typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
+typeOfTerm ctx (App Idp e) = let t = typeOfTerm ctx e in Spi "x" (valueFreeVars t) t $ \v -> Sid t v v
+typeOfTerm ctx (App (Pmap e1) e2) =
+    let e' = eval 0 (ctxToCtxV ctx) e1
+    in case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
+        (Spi x fv t s, Sid _ a b) -> Sid (s $ error "typeOfTerm.Pmap.App.Pi") (app 0 e' a) (app 0 e' b)
+        _ -> error "typeOfTerm.Pmap.App"
 typeOfTerm ctx (App e1 e2) = case typeOfTerm ctx e1 of
-    Spi _ _ b -> b (eval 0 ctx e2)
+    Spi _ _ _ b -> b $ eval 0 (ctxToCtxV ctx) e2
     _ -> error "typeOfTerm.App"
-typeOfTerm ctx (Var v) = fromMaybe (error "typeOfTerm.Var") (M.lookup v ctx)
+typeOfTerm ctx (Var v) = case M.lookup v ctx of
+    Nothing -> error $ "typeOfTerm.Var: " ++ v
+    Just (_,t) -> t
 typeOfTerm _ Nat = Stype (Finite 0)
 typeOfTerm _ Suc = Snat `sarr` Snat
-typeOfTerm _ Rec = Spi "P" (Snat `sarr` Stype maxBound) $ \p -> app 0 p Szero `sarr`
-    (Spi "x" Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" Snat (app 0 p)
+typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
+    let pfv = valueFreeVars p
+    in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
-typeOfTerm ctx (Idp e) = let t = typeOfTerm ctx e in Spi "x" t $ \v -> Sid t v v
-typeOfTerm ctx (Pmap e a b) =
-    let a' = evalTerm a
-        b' = evalTerm b
-        e' = evalTerm e
-        t = typeOfTerm ctx a
-    in case typeOfTerm ctx e of
-        Spi _ _ r -> Sid t a' b' `sarr` Sid (r $ error "typeOfTerm.Pmap.Pi") (app 0 e' a') (app 0 e' b')
-        _ -> error "typeOfTerm.Pmap"
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
--}
+typeOfTerm _ Idp = error "typeOfTerm.Idp"
+typeOfTerm _ (Pmap _) = error "typeOfTerm.Pmap"

@@ -9,6 +9,7 @@ letTest2 f = let x = 0 in f (idp x)
 letTest3 : (let x = 0 in x) = 0
 letTest3 = idp 0
 
+{-
 pmapTest1 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 pmapTest1 p y = pmap y p
 
@@ -20,3 +21,4 @@ pmapTest3 p y = pmap (\x -> y x) p
 
 pmapTest4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
 pmapTest4 g f p y = pmap (\x -> x y) p
+-}

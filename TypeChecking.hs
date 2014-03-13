@@ -14,8 +14,8 @@ import Syntax.Raw
 import qualified Syntax.Term as T
 import Eval
 
-evalRaw :: Integer -> Ctx -> Expr -> Value
-evalRaw n ctx e = eval n (ctxToCtxV ctx) (rawExprToTerm ctx e)
+evalRaw :: Ctx -> Expr -> Value
+evalRaw ctx e = eval 0 (ctxToCtxV ctx) (rawExprToTerm ctx e)
 
 maxType :: (Int,Int) -> (Int,Int) -> Expr -> Expr -> Value -> Value -> EDocM Value
 maxType _ _ _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
@@ -36,7 +36,7 @@ typeOf'depType ctx (TypedVar _ vars t : list) e = do
     let (l,c) = getPos t
         e' = Pi list e
     cmpTypesErr l c (Stype $ pred maxBound) tv t
-    ctx' <- updateCtx ctx (evalRaw 0 ctx t) vars
+    ctx' <- updateCtx ctx (evalRaw ctx t) vars
     ev <- typeOf ctx' e'
     maxType (l,c) (getPos e) t e' tv ev
   where
@@ -61,14 +61,14 @@ typeOf ctx (Let defs e) = do
     typeOf ctx' e
 typeOf ctx (App (Idp _) e) = do
     t <- typeOf ctx e
-    let v = evalRaw 0 ctx e
+    let v = evalRaw ctx e
     Right (Sid t v v)
 typeOf ctx (App (Pmap (Ppmap ((l,c),_)) e1) e2) = do
     t2 <- typeOf ctx e2
     case t2 of
         Sid _ a b -> do
             t <- typeOfLam (l,c) (getPos e2) ctx e1 e2 t2
-            let e' = app 0 (evalRaw 0 ctx e1)
+            let e' = app 0 (evalRaw ctx e1)
             Right $ Sid t (e' a) (e' b)
         _ -> let (l',c') = getPos e2
              in Left [emsgLC l' c' "" $ etext "Expected Id type" $$ etext "But term" <+> epretty e2
@@ -89,7 +89,7 @@ typeOf _ (Universe (U (_,t))) = Right $ Stype $ succ (parseLevel t)
 typeOf ctx (App e1 e2) = do
     t <- typeOf ctx e1
     case t of
-        Spi _ _ a b -> hasType ctx e2 a >> Right (b $ evalRaw 0 ctx e2)
+        Spi _ _ a b -> hasType ctx e2 a >> Right (b $ evalRaw ctx e2)
         _ -> let (l,c) = getPos e1
              in Left [emsgLC l c "" $ etext "Expected pi type" $$
                     etext "But term" <+> epretty e1 <+> etext "has type" <+> eprettyHead (reify t)]
@@ -151,7 +151,7 @@ hasType ctx i@(Pmap (Ppmap ((l,c),_)) e) exp@(Spi x fv (Sid t a b) r) =
     in case r (svar x') of
         Sid s _ _ -> do
             hasType ctx e (sarr t s)
-            let e' = evalRaw 0 ctx e
+            let e' = evalRaw ctx e
                 act = Sid t a b `sarr` Sid s (app 0 e' a) (app 0 e' b)
             cmpTypesErr l c exp act i
         _ -> Left [emsgLC l c "" $ expType 2 exp $$ etext "But pmap _ has type of the form x = y -> _ x = _ y"]
@@ -174,9 +174,9 @@ evalDecl name expr mty = do
             vty <- lift (typeOf ctx ty)
             let (l,c) = getPos ty
             lift $ cmpTypesErr l c (Stype $ pred maxBound) vty ty
-            return (evalRaw 0 ctx ty)
+            return (evalRaw ctx ty)
     lift (hasType ctx expr tv)
-    let ev = evalRaw 0 ctx expr
+    let ev = evalRaw ctx expr
     put (M.insert name (ev,tv) ctx)
     return (ev,tv)
 

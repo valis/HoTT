@@ -94,7 +94,7 @@ instance Eq Term where
 ppDef :: Def -> Doc
 ppDef (Def name Nothing          expr) = text name <+> equals <+> ppTerm Nothing expr
 ppDef (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm Nothing ty
-                                     $+$ text name <+> equals <+> hsep (map text args) <+> ppTerm Nothing expr
+                                     $+$ text name <+> hsep (map text args) <+> equals <+> ppTerm Nothing expr
 
 ppTerm :: Maybe Int -> Term -> Doc
 ppTerm = go False
