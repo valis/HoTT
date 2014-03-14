@@ -54,22 +54,18 @@ sprod a (b,fv) = Ssigma "_" fv a (const b)
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV = M.map fst
 
-cmpTypes :: Value -> Value -> Maybe Ordering
-cmpTypes (Spi x v1 a b) (Spi _ v2 a' b') = case (cmpTypes a' a, cmpTypes (b $ svar fresh) (b' $ svar fresh)) of
-    (Just l, Just r) | l == r -> Just l
-    _ -> Nothing
+cmpTypes :: Value -> Value -> Bool
+cmpTypes (Spi x v1 a b) (Spi _ v2 a' b') = cmpTypes a' a && cmpTypes (b $ svar fresh) (b' $ svar fresh)
     where fresh = freshName x (v1 `union` v2)
-cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = case (cmpTypes a a', cmpTypes (b $ svar fresh) (b' $ svar fresh)) of
-    (Just l, Just r) | l == r -> Just l
-    _ -> Nothing
+cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = cmpTypes a a' && cmpTypes (b $ svar fresh) (b' $ svar fresh)
     where fresh = freshName x (v1 `union` v2)
-cmpTypes (Sid _ a b) (Sid _ a' b') = if cmpValues a a' && cmpValues b b' then Just EQ else Nothing
-cmpTypes Snat Snat = Just EQ
-cmpTypes (Stype k) (Stype k') = Just (compare k k')
-cmpTypes (Ne l t) (Ne l' t') = if t == t' && l == l' then Just EQ else Nothing
+cmpTypes (Sid _ a b) (Sid _ a' b') = cmpValues a a' && cmpValues b b'
+cmpTypes Snat Snat = True
+cmpTypes (Stype k) (Stype k') = k <= k'
+cmpTypes (Ne l t) (Ne l' t') = t == t' && l == l'
 cmpTypes (Spi v fv (Sid t x y) b) (Sid (Spi v' fv' c d) f g) = case (isArr v fv b, isArr v' fv' d) of
-    (Just b', Just d') | cmpTypes t c == Just EQ && cmpTypes b' (Sid d' (app 0 f x) (app 0 g y)) == Just EQ -> Just EQ
-    _ -> Nothing
+    (Just b', Just d') | cmpTypes t c && cmpTypes b' (Sid d' (app 0 f x) (app 0 g y)) -> True
+    _ -> False
   where
     isArr :: String -> [String] -> (Value -> Value) -> Maybe Value
     isArr x fv f =
@@ -77,7 +73,7 @@ cmpTypes (Spi v fv (Sid t x y) b) (Sid (Spi v' fv' c d) f g) = case (isArr v fv 
             r = f (svar x')
         in if elem x' (valueFreeVars r) then Nothing else Just r
 cmpTypes a@(Sid _ _ _) b@(Spi _ _ _ _) = cmpTypes b a
-cmpTypes _ _ = Nothing
+cmpTypes _ _ = False
 
 cmpValues :: Value -> Value -> Bool
 cmpValues e1 e2 = reify e1 == reify e2

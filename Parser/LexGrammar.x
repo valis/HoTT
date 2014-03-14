@@ -37,6 +37,7 @@ R { tok (\p s -> PT p (eitherResIdent (T_PR . share) s)) }
 s u c { tok (\p s -> PT p (eitherResIdent (T_PSuc . share) s)) }
 N a t { tok (\p s -> PT p (eitherResIdent (T_PNat . share) s)) }
 \_ { tok (\p s -> PT p (eitherResIdent (T_Pus . share) s)) }
+t r a n s { tok (\p s -> PT p (eitherResIdent (T_PTrans . share) s)) }
 $l ($l | $d | \' | \_)* { tok (\p s -> PT p (eitherResIdent (T_PIdent . share) s)) }
 
 $l $i*   { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
@@ -68,6 +69,7 @@ data Tok =
  | T_PSuc !String
  | T_PNat !String
  | T_Pus !String
+ | T_PTrans !String
  | T_PIdent !String
 
  deriving (Eq,Show,Ord)
@@ -103,6 +105,7 @@ prToken t = case t of
   PT _ (T_PSuc s) -> s
   PT _ (T_PNat s) -> s
   PT _ (T_Pus s) -> s
+  PT _ (T_PTrans s) -> s
   PT _ (T_PIdent s) -> s
 
 

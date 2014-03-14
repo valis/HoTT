@@ -54,6 +54,11 @@ transPus x = case x of
   Pus str  -> failure x
 
 
+transPTrans :: PTrans -> Result
+transPTrans x = case x of
+  PTrans str  -> failure x
+
+
 transPIdent :: PIdent -> Result
 transPIdent x = case x of
   PIdent str  -> failure x
@@ -85,6 +90,7 @@ transExpr x = case x of
   Suc psuc  -> failure x
   Rec pr  -> failure x
   Idp pidp  -> failure x
+  Trans ptrans  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x

@@ -10,7 +10,8 @@ import Syntax.Term
 import Value
 
 eval :: Integer -> CtxV -> Term -> Value
-eval n ctx Idp = Slam "x" [] $ \_ _ -> idp
+eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
+eval _ _ Trans = Slam "p" [] $ \k _ -> trans k
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -103,3 +104,10 @@ action _ (Stype _) = error "action.Stype"
 
 idp :: Value -> Value
 idp = action [Ud]
+
+trans :: Integer -> Value -> Value
+trans 0 (Sidp _) = Slam "x" [] $ \_ _ -> id
+trans n (Sidp _) = error $ "TODO: trans.Sidp " ++ show n
+trans 0 (Ne _ e) = Ne [] (App Trans e)
+trans n (Ne l e) = error $ "TODO: trans.Ne " ++ show n
+trans _ _ = error "trans"

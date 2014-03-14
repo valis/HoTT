@@ -18,20 +18,11 @@ test3 p y = idp (\x -> y x) p
 test4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
 test4 g f p y = idp (\x -> x y) p
 
-test5 : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
-test5 g f x y p q = idp (\f x -> f x) p q
+test5 : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
+test5 _ _ _ p = idp p
 
-test5' : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
-test5' g f x y p = idp (\f x -> f x) p
-
-test5'' : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
-test5'' g f x y = idp (\f x -> f x)
-
-test6 : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
-test6 _ _ _ p = idp p
-
-test6' : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
-test6' _ _ _ = idp
+test5' : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
+test5' _ _ _ = idp
 
 ext : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
 ext _ _ _ _ p a = p (idp a)

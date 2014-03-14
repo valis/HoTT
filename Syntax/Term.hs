@@ -24,6 +24,7 @@ data Term
     | Suc
     | Rec
     | Idp
+    | Trans
     | NatConst Integer
     | Universe Level
 
@@ -43,6 +44,7 @@ freeVars Nat = []
 freeVars Suc = []
 freeVars Rec = []
 freeVars Idp = []
+freeVars Trans = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 
@@ -82,6 +84,7 @@ instance Eq Term where
         cmp _ _ _ Suc Suc = True
         cmp _ _ _ Rec Rec = True
         cmp _ _ _ Idp Idp = True
+        cmp _ _ _ Trans Trans = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
         cmp _ _ _ _ _ = False
@@ -131,6 +134,7 @@ ppTerm = go False
     go _ _ Suc = text "suc"
     go _ _ Rec = text "R"
     go _ _ Idp = text "idp"
+    go _ _ Trans = text "trans"
     go _ _ (Universe u) = text (show u)
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -195,6 +199,7 @@ simplify Nat = Nat
 simplify Suc = Suc
 simplify Rec = Rec
 simplify Idp = Idp
+simplify Trans = Trans
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
 

@@ -79,6 +79,7 @@ rawExprToTerm ctx (E.App (E.Idp _) e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ 
     Sid s _ _ -> App Idp $ rawExprToTerm ctx e $ Just (t `sarr` s)
     _ -> error "rawExprToTerm.App.Idp.Sid"
 rawExprToTerm ctx (E.App (E.Idp _) e) _ = App Idp (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App (E.Trans _) e) _ = App Trans (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
@@ -90,6 +91,7 @@ rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
 rawExprToTerm _ (E.Rec _) _ = Rec
 rawExprToTerm _ (E.Idp _) _ = Idp
+rawExprToTerm _ (E.Trans _) _ = Trans
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
@@ -121,6 +123,9 @@ typeOfTerm ctx (App (App Idp e1) e2) =
     in case typeOfTerm ctx e2 of
         Sid t a b -> Sid (typeOfLam ctx e1 t) (app 0 e' a) (app 0 e' b)
         _ -> error "typeOfTerm.App.App.Idp"
+typeOfTerm ctx (App Trans e) = case typeOfTerm ctx e of
+    Sid _ x y -> x `sarr` y
+    _ -> error "typeOfTerm.App.Trans"
 typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
@@ -137,6 +142,7 @@ typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
+typeOfTerm _ Trans = error "typeOfTerm.Trans"
 
 typeOfLam :: Ctx -> Term -> Value -> Value
 typeOfLam ctx (Lam [] e) t = typeOfLam ctx e t
