@@ -7,6 +7,9 @@ pmap _ _ f _ _ = idp f
 depTest : (A : Type) (B : A -> Type) (f : (a : A) -> B a) -> f = f
 depTest A B f = idp f
 
+transTest : (A : Type) -> trans (idp A) = (\a -> a)
+transTest A = idp (\a -> a)
+
 transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' -> B a -> B a'
 transport A B a a' p = trans (idp B p)
 

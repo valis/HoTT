@@ -14,11 +14,11 @@ import Syntax.Raw
 import qualified Syntax.Term as T
 import RawToTerm
 
-maxType :: (Int,Int) -> (Int,Int) -> Expr -> Expr -> Value -> Value -> EDocM Value
-maxType _ _ _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
-maxType lc lc' e1 e2 t1 t2 = liftErr2 (error "maxType")
-    (cmpTypesErr lc  (Stype $ pred maxBound) t1 e1)
-    (cmpTypesErr lc' (Stype $ pred maxBound) t2 e2)
+maxType :: Expr -> Expr -> Value -> Value -> EDocM Value
+maxType _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
+maxType e1 e2 t1 t2 = liftErr2 (error "maxType")
+    (cmpTypesErr (Stype $ pred maxBound) t1 e1)
+    (cmpTypesErr (Stype $ pred maxBound) t2 e2)
 
 processDefs :: [Def] -> [(String,Maybe Expr,[Arg],Expr)]
 processDefs [] = []
@@ -30,12 +30,11 @@ typeOf'depType :: Ctx -> [TypedVar] -> Expr -> EDocM Value
 typeOf'depType ctx [] e = typeOf ctx e
 typeOf'depType ctx (TypedVar _ vars t : list) e = do
     tv <- typeOf ctx t
-    let lc = getPos t
-        e' = Pi list e
-    cmpTypesErr lc (Stype $ pred maxBound) tv t
+    let e' = Pi list e
+    cmpTypesErr (Stype $ pred maxBound) tv t
     ctx' <- updateCtx ctx (evalRaw ctx t (Just tv)) vars
     ev <- typeOf ctx' e'
-    maxType lc (getPos e) t e' tv ev
+    maxType t e' tv ev
   where
     updateCtx ctx _ (Var (NoArg _)) = Right ctx
     updateCtx ctx tv (Var (Arg (PIdent (_,x)))) = Right (M.insert x (svar x,tv) ctx)
@@ -73,14 +72,13 @@ typeOf ctx (App (Trans _) e) = do
         Sid (Stype _) x y -> Right (x `sarr` y)
         _ -> expTypeBut "Id Type _ _" e t
 typeOf ctx (Arr e1 e2) =
-    liftErr2 (maxType (getPos e1) (getPos e2) e1 e2) (typeOf ctx e1) (typeOf ctx e2)
+    liftErr2 (maxType e1 e2) (typeOf ctx e1) (typeOf ctx e2)
 typeOf ctx (Prod e1 e2) = typeOf ctx (Arr e1 e2)
 typeOf ctx (Pi tv e) = typeOf'depType ctx tv e
 typeOf ctx (Sigma tv e) = typeOf'depType ctx tv e
 typeOf ctx (Id a b) = do
     a' <- typeOf ctx a
-    b' <- typeOf ctx b
-    cmpTypesErr (getPos b) a' b' b
+    hasType ctx b a'
     return $ typeOfTerm ctx (reify a')
 typeOf _ (Nat _) = Right $ Stype (Finite 0)
 typeOf _ (Universe (U (_,t))) = Right $ Stype $ succ (parseLevel t)
@@ -155,29 +153,10 @@ hasType _ (Lam _ (Binder arg : _) _) ty =
             Arg (PIdent (p,_)) -> p
             NoArg (Pus (p,_)) -> p
     in Left [emsgLC l c "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
-hasType _ i@(Idp (PIdp (lc,_))) exp@(Spi x _ a _) =
-    cmpTypesErr lc exp (Spi x (valueFreeVars a) a $ \v -> Sid a v v) i
+hasType _ i@(Idp _) exp@(Spi x _ a _) =
+    cmpTypesErr exp (Spi x (valueFreeVars a) a $ \v -> Sid a v v) i
 hasType _ (Idp (PIdp ((l,c),_))) ty =
     Left [emsgLC l c "" $ expType 1 ty $$ etext "But idp has pi type"]
-hasType ctx i@(App (Idp (PIdp ((l,c),_))) e) exp@(Spi x fv (Sid t a b) r) =
-    let x' = freshName x fv
-    in case r (svar x') of
-        Sid s _ _ -> do
-            hasType ctx e (t `sarr` s)
-            let e' = evalRaw ctx e (Just $ t `sarr` s)
-                act = Sid t a b `sarr` Sid s (app 0 e' a) (app 0 e' b)
-            cmpTypesErr (l,c) exp act i
-        Spi _ _ _ _ ->
-            let (l',c') = getPos e
-            in Left [emsgLC l' c' "cannot infer type of the second argument" enull]
-        _ -> Left [emsgLC l c "" $ expType 2 exp $$ etext "But idp _ has type of the form x = y -> _ x = _ y"]
-hasType _ (App (Idp (PIdp ((l,c),_))) _) exp@(Spi _ _ _ _) =
-    Left [emsgLC l c "" $ expType 2 exp $$ etext "But idp _ has type of the form x = y -> _ x = _ y"]
-hasType ctx e@(App (Idp _) _) exp@(Sid _ _ _) = do
-    act <- typeOf ctx e
-    cmpTypesErr (getPos e) exp act e
-hasType _ (App (Idp (PIdp ((l,c),_))) _) exp =
-    Left [emsgLC l c "" $ expType 1 exp $$ etext "But idp _ has Id type"]
 hasType ctx (Paren _ e) ty = hasType ctx e ty
 hasType ctx (Let defs e) ty = do
     defs' <- preprocessDefs defs
@@ -192,9 +171,23 @@ hasType ctx e@(Trans (PTrans (lc,_))) ty@(Spi v fv (Sid (Stype _) x y) b) = case
         else transErrorMsg lc ty
     _ -> transErrorMsg lc ty
 hasType ctx (Trans (PTrans (lc,_))) ty = transErrorMsg lc ty
+hasType ctx ea@(App (Idp _) e) exp@(Sid t a b) = do
+    hasType ctx e t
+    let e' = evalRaw ctx e (Just t)
+    cmpTypesErr exp (Sid t e' e') ea
+hasType ctx ea@(App (Idp (PIdp (lc,_))) e) exp@(Spi v fv (Sid t x y) b) = case isArr v fv b of
+    Just (Sid s x' y') -> do
+        hasType ctx e (t `sarr` s)
+        let e' = evalRaw ctx e $ Just (t `sarr` s)
+        cmpTypesErr exp (Sid t x y `sarr` Sid s (app 0 e' x) (app 0 e' y)) ea
+    _ -> idpErrorMsg lc exp
+hasType ctx (App (Idp (PIdp (lc,_))) _) exp = idpErrorMsg lc exp
 hasType ctx e exp = do
     act <- typeOf ctx e
-    cmpTypesErr (getPos e) exp act e
+    cmpTypesErr exp act e
+
+idpErrorMsg :: (Int,Int) -> Value -> EDocM a
+idpErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType 2 ty $$ etext "But idp _ has type of the form x = y -> _ x = _ y"]
 
 transErrorMsg :: (Int,Int) -> Value -> EDocM a
 transErrorMsg (l,c) ty =
@@ -217,10 +210,10 @@ evalDecl name expr mty = do
 expType :: Int -> Value -> EDoc
 expType l ty = etext "Expected type:" <+> eprettyLevel l (T.simplify $ reify ty)
 
-cmpTypesErr :: (Int,Int) -> Value -> Value -> Expr -> EDocM ()
-cmpTypesErr (l,c) t1 t2 e = if cmpTypes t2 t1
+cmpTypesErr :: Value -> Value -> Expr -> EDocM ()
+cmpTypesErr t1 t2 e = if cmpTypes t2 t1
     then Right ()
-    else Left [emsgLC l c "" $ expType (-1) t1 $$
+    else let (l,c) = getPos e in Left [emsgLC l c "" $ expType (-1) t1 $$
         etext "But term" <+> epretty e <+> etext "has type" <+> epretty (T.simplify $ reify t2)]
 
 expTypeBut :: String -> Expr -> Value -> EDocM a

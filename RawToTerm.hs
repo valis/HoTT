@@ -70,7 +70,8 @@ rawExprToTerm ctx (E.Arr e1 e2) ty = Pi [([], rawExprToTerm ctx e1 ty)] (rawExpr
 rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (rawExprToTerm ctx e2 ty)
 rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
-    in Id (reify $ typeOfTerm ctx e1') e1' (rawExprToTerm ctx e2 Nothing)
+        t1 = typeOfTerm ctx e1'
+    in Id (reify t1) e1' $ rawExprToTerm ctx e2 (Just t1)
 rawExprToTerm ctx (E.App (E.App (E.Idp _) e1) e2) _ = case typeOfTerm ctx (rawExprToTerm ctx e2 Nothing) of
     Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just (t `sarr` svar "_")
                  in App (App Idp e') (rawExprToTerm ctx e2 Nothing)
@@ -117,7 +118,9 @@ typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (upd
     updateCtx ctx [] = ctx
     updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
 typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
-typeOfTerm ctx (App Idp e) = let t = typeOfTerm ctx e in Spi "x" (valueFreeVars t) t $ \v -> Sid t v v
+typeOfTerm ctx (App Idp e) =
+    let v = eval 0 (ctxToCtxV ctx) e
+    in Sid (typeOfTerm ctx e) v v
 typeOfTerm ctx (App (App Idp e1) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case typeOfTerm ctx e2 of
