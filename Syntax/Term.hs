@@ -153,7 +153,12 @@ simplify (Let defs (Let defs' e)) = simplify $ Let (defs ++ defs') e
 simplify (Let defs e) = Let (map simplifyDef defs) (simplify e)
 simplify (Lam [] e) = simplify e
 simplify (Lam args (Lam args' e)) = simplify $ Lam (args ++ args') e
-simplify (Lam args e) = Lam args (simplify e)
+simplify (Lam args e) = Lam (simplifyArgs args $ args \\ freeVars e) (simplify e)
+  where
+    simplifyArgs args [] = args
+    simplifyArgs [] _ = []
+    simplifyArgs (a:as) (r:rs) | a == r = "_" : simplifyArgs as rs
+                               | otherwise = simplifyArgs as (r:rs)
 simplify (Pi [] e) = simplify e
 simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
 simplify (Pi (([v],t):ts) e)

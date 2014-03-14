@@ -59,16 +59,14 @@ typeOf ctx (App (Idp _) e) = do
     t <- typeOf ctx e
     let v = evalRaw ctx e (Just t)
     Right (Sid t v v)
-typeOf ctx (App (Pmap (Ppmap ((l,c),_)) e1) e2) = do
+typeOf ctx (App (Pmap (Ppmap _) e1) e2) = do
     t2 <- typeOf ctx e2
     case t2 of
         Sid s a b -> do
-            t <- typeOfLam (l,c) (getPos e2) ctx e1 e2 t2
+            t <- typeOfLam (getPos e2) ctx e1 e2 t2
             let e' = app 0 $ evalRaw ctx e1 (Just $ s `sarr` t)
             Right $ Sid t (e' a) (e' b)
-        _ -> let (l',c') = getPos e2
-             in Left [emsgLC l' c' "" $ etext "Expected Id type" $$ etext "But term" <+> epretty e2
-                    <+> etext "has type" <+> eprettyHead (reify t2)]
+        _ -> expTypeBut "Id" e2 t2
 typeOf ctx (Arr e1 e2) =
     liftErr2 (maxType (getPos e1) (getPos e2) e1 e2) (typeOf ctx e1) (typeOf ctx e2)
 typeOf ctx (Prod e1 e2) = typeOf ctx (Arr e1 e2)
@@ -83,12 +81,21 @@ typeOf ctx (Id a b) = do
 typeOf _ (Nat _) = Right $ Stype (Finite 0)
 typeOf _ (Universe (U (_,t))) = Right $ Stype $ succ (parseLevel t)
 typeOf ctx (App e1 e2) = do
-    t <- typeOf ctx e1
-    case t of
+    t1 <- typeOf ctx e1
+    case t1 of
         Spi _ _ a b -> hasType ctx e2 a >> Right (b $ evalRaw ctx e2 $ Just a)
-        _ -> let (l,c) = getPos e1
-             in Left [emsgLC l c "" $ etext "Expected pi type" $$
-                    etext "But term" <+> epretty e1 <+> etext "has type" <+> eprettyHead (reify t)]
+        Sid (Spi x fv exp b) f g -> do
+            b' <- isArr e1 t1 x fv b
+            t2 <- typeOf ctx e2
+            let (l,c) = getPos e2
+            case t2 of
+                Sid act x y -> case cmpTypes exp act of
+                    Just o | o /= LT -> Right $ Sid b' (app 0 f x) (app 0 g y)
+                    _ -> let em s t1 = s <> etext "(" <> epretty (T.simplify $ reify t1) <> etext ") _ _"
+                         in Left [emsgLC l c "" $ em (etext "Expected type: Id") exp $$
+                            em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
+                _ -> expTypeBut "Id" e2 t2
+        _ -> expTypeBut "pi" e1 t1
 typeOf _ (Var (NoArg (Pus ((l,c),_)))) = Left [emsgLC l c "Expected identifier" enull]
 typeOf ctx (Var (Arg (PIdent ((l,c),x)))) = case M.lookup x ctx of
     Nothing -> Left [emsgLC l c ("Unknown identifier " ++ x) enull]
@@ -101,9 +108,17 @@ typeOf _ (Rec _) = Right $ Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOf ctx (Paren _ e) = typeOf ctx e
 
-typeOfLam :: (Int,Int) -> (Int,Int) -> Ctx -> Expr -> Expr -> Value -> EDocM Value
-typeOfLam lc lc' ctx (Lam _ [] e) e2 ty = typeOfLam lc lc' ctx e e2 ty
-typeOfLam _ _ ctx (Lam (PLam ((l,c),_)) (x:xs) e) _ (Sid ty _ _) =
+isArr :: Expr -> Value -> String -> [String] -> (Value -> Value) -> EDocM Value
+isArr e t x fv f =
+    let x' = freshName x fv
+        r = f (svar x')
+    in if elem x' (valueFreeVars r)
+        then expTypeBut "arrow" e t
+        else Right r
+
+typeOfLam :: (Int,Int) -> Ctx -> Expr -> Expr -> Value -> EDocM Value
+typeOfLam lc' ctx (Lam _ [] e) e2 ty = typeOfLam lc' ctx e e2 ty
+typeOfLam _ ctx (Lam (PLam ((l,c),_)) (x:xs) e) _ (Sid ty _ _) =
     let p = if null xs then getPos e else binderGetPos (head xs)
         (x',e') = renameExpr [] (unBinder x) (Lam (PLam (p,"\\")) xs e)
     in do
@@ -111,25 +126,17 @@ typeOfLam _ _ ctx (Lam (PLam ((l,c),_)) (x:xs) e) _ (Sid ty _ _) =
         if elem x' $ T.freeVars (reify s)
             then Left [emsgLC l c "Cannot infer type of lambda expression" enull]
             else Right s
-typeOfLam lc lc' ctx (Paren _ e) e2 act = typeOfLam lc lc' ctx e e2 act
-typeOfLam (l,c) (l',c') ctx e e2 (Sid act _ _) = do
+typeOfLam lc' ctx (Paren _ e) e2 act = typeOfLam lc' ctx e e2 act
+typeOfLam (l',c') ctx e e2 (Sid act _ _) = do
     t <- typeOf ctx e
     case t of
-        Spi x fv exp r -> do
-            case cmpTypes exp act of
-                Just o | o /= LT -> Right ()
-                _ -> let em s t = s <> etext "(" <> epretty (T.simplify $ reify t) <> etext ") _ _"
-                     in Left [emsgLC l' c' "" $ em (etext "Expected type: Id") exp $$
-                        em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
-            let x' = freshName x fv
-                r' = r (svar x')
-            if elem x' $ T.freeVars (reify r')
-                then Left [emsgLC l c "" $ etext "Expected arrow type" $$ etext "But term" <+>
-                    epretty e <+> etext "has type" <+> epretty (reify t)]
-                else Right r'
-        _ -> Left [emsgLC l c "" $ etext "Expected pi type" $$ etext "But term" <+> epretty e
-                <+> etext "has type" <+> eprettyHead (reify t)]
-typeOfLam _ _ _ _ _ _ = error "typeOfLam"
+        Spi x fv exp r -> case cmpTypes exp act of
+            Just o | o /= LT -> isArr e t x fv r
+            _ -> let em s t = s <> etext "(" <> epretty (T.simplify $ reify t) <> etext ") _ _"
+                 in Left [emsgLC l' c' "" $ em (etext "Expected type: Id") exp $$
+                    em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
+        _ -> expTypeBut "pi" e t
+typeOfLam _ _ _ _ _ = error "typeOfLam"
 
 hasType :: Ctx -> Expr -> Value -> EDocM ()
 hasType ctx (Lam _ [] e) ty = hasType ctx e ty
@@ -186,10 +193,16 @@ evalDecl name expr mty = do
     return (ev,tv)
 
 expType :: Int -> Value -> EDoc
-expType l ty = etext "Expected type:" <+> eprettyLevel l (reify ty)
+expType l ty = etext "Expected type:" <+> eprettyLevel l (T.simplify $ reify ty)
 
 cmpTypesErr :: Int -> Int -> Value -> Value -> Expr -> EDocM ()
 cmpTypesErr l c t1 t2 e = case cmpTypes t1 t2 of
     Just o | o /= LT -> Right ()
     _ -> Left [emsgLC l c "" $ expType (-1) t1 $$
-        etext "But term" <+> epretty e <+> etext "has type" <+> epretty (reify t2)]
+        etext "But term" <+> epretty e <+> etext "has type" <+> epretty (T.simplify $ reify t2)]
+
+expTypeBut :: String -> Expr -> Value -> EDocM a
+expTypeBut exp e act =
+    let (l,c) = getPos e
+    in Left [emsgLC l c "" $ etext ("Expected " ++ exp ++ " type") $$
+            etext "But term" <+> epretty e <+> etext "has type" <+> eprettyHead (T.simplify $ reify act)]

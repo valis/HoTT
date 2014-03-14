@@ -42,17 +42,13 @@ updateCtx ctx (Def name Nothing expr : ds) =
 updateCtx ctx (Def name (Just (ty,args)) expr : ds) =
     updateCtx (M.insert name (eval 0 (ctxToCtxV ctx) (Lam args expr), eval 0 (ctxToCtxV ctx) ty) ctx) ds
 
-rawExprToTerm'depType :: ([([String],Term)] -> Term -> Term) -> Ctx -> [E.TypedVar] -> E.Expr -> Maybe Value -> Term
-rawExprToTerm'depType dt ctx tvs e ty = 
-    let l = map (\(E.TypedVar _ vars t) -> (exprToVars vars, rawExprToTerm ctx t ty)) tvs
-    in dt l $ rawExprToTerm (updateCtx ctx tvs) e ty
+rawExprToTerm'depType :: ([([String],Term)] -> Term -> Term) -> Ctx -> E.TypedVar -> E.Expr -> Maybe Value -> Term
+rawExprToTerm'depType dt ctx (E.TypedVar _ vars t) e ty = 
+    dt [(exprToVars vars, rawExprToTerm ctx t ty)] $ rawExprToTerm (updateCtx ctx (exprToVars vars)) e ty
   where
+    tv = evalRaw ctx t ty
     updateCtx ctx [] = ctx
-    updateCtx ctx (E.TypedVar _ vars t : tvs) = updateCtx (updateCtxVars ctx $ exprToVars vars) tvs
-      where
-        tv = evalRaw ctx t ty
-        updateCtxVars ctx [] = ctx
-        updateCtxVars ctx (v:vs) = updateCtxVars (M.insert v (svar v, tv) ctx) vs
+    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
 
 rawExprToTerm :: Ctx -> E.Expr -> Maybe Value -> Term
 rawExprToTerm ctx e (Just (Ne _ (Var "_"))) = rawExprToTerm ctx e Nothing
@@ -64,8 +60,12 @@ rawExprToTerm ctx (E.Lam i (arg:args) expr) (Just (Spi _ fv t s)) =
     let (v,expr') = R.renameExpr fv (R.unBinder arg) (E.Lam i args expr)
     in Lam [v] $ rawExprToTerm (M.insert v (svar v, t) ctx) expr' $ Just $ s (svar v)
 rawExprToTerm _ (E.Lam _ _ _) _ = error "rawExprToTerm.Lam"
-rawExprToTerm ctx (E.Pi tvs e) ty = rawExprToTerm'depType Pi ctx tvs e ty
-rawExprToTerm ctx (E.Sigma tvs e) ty = rawExprToTerm'depType Sigma ctx tvs e ty
+rawExprToTerm ctx (E.Pi [] e) ty = error "rawExprToTerm.Pi"
+rawExprToTerm ctx (E.Pi [t] e) ty = rawExprToTerm'depType Pi ctx t e ty
+rawExprToTerm ctx (E.Pi (t:ts) e) ty = rawExprToTerm ctx (E.Pi [t] $ E.Pi ts e) ty
+rawExprToTerm ctx (E.Sigma [] e) ty = error "rawExprToTerm.Sigma"
+rawExprToTerm ctx (E.Sigma [t] e) ty = rawExprToTerm'depType Sigma ctx t e ty
+rawExprToTerm ctx (E.Sigma (t:ts) e) ty = rawExprToTerm ctx (E.Sigma [t] $ E.Sigma ts e) ty
 rawExprToTerm ctx (E.Arr e1 e2) ty = Pi [([], rawExprToTerm ctx e1 ty)] (rawExprToTerm ctx e2 ty)
 rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (rawExprToTerm ctx e2 ty)
 rawExprToTerm ctx (E.Id e1 e2) _ =
@@ -80,6 +80,7 @@ rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
         Spi _ _ t2 _ -> App e1' $ rawExprToTerm ctx e2 (Just t2)
+        Sid _ _ _ -> App e1' (rawExprToTerm ctx e2 Nothing)
         _ -> error "rawExprToTerm.App"
 rawExprToTerm ctx (E.Pmap _ e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ error "rawExprToTerm.Pmap.Var" of
     Sid s _ _ -> Pmap $ rawExprToTerm ctx e $ Just (t `sarr` s)
@@ -119,10 +120,11 @@ typeOfTerm ctx (App Idp e) = let t = typeOfTerm ctx e in Spi "x" (valueFreeVars 
 typeOfTerm ctx (App (Pmap e1) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
-        (Spi x fv t s, Sid _ a b) -> Sid (s $ error "typeOfTerm.Pmap.App.Pi") (app 0 e' a) (app 0 e' b)
+        (Spi _ _ _ s, Sid _ a b) -> Sid (s $ error "typeOfTerm.Pmap.App.Pi") (app 0 e' a) (app 0 e' b)
         _ -> error "typeOfTerm.Pmap.App"
-typeOfTerm ctx (App e1 e2) = case typeOfTerm ctx e1 of
-    Spi _ _ _ b -> b $ eval 0 (ctxToCtxV ctx) e2
+typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
+    (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
+    (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
 typeOfTerm ctx (Var v) = case M.lookup v ctx of
     Nothing -> error $ "typeOfTerm.Var: " ++ v ++ " // " ++ show (M.keys ctx)

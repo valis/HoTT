@@ -67,6 +67,16 @@ cmpTypes (Sid _ a b) (Sid _ a' b') = if cmpValues a a' && cmpValues b b' then Ju
 cmpTypes Snat Snat = Just EQ
 cmpTypes (Stype k) (Stype k') = Just (compare k k')
 cmpTypes (Ne l t) (Ne l' t') = if t == t' && l == l' then Just EQ else Nothing
+cmpTypes (Spi v fv (Sid t x y) b) (Sid (Spi v' fv' c d) f g) = case (isArr v fv b, isArr v' fv' d) of
+    (Just b', Just d') | cmpTypes t c == Just EQ && cmpTypes b' (Sid d' (app 0 f x) (app 0 g y)) == Just EQ -> Just EQ
+    _ -> Nothing
+  where
+    isArr :: String -> [String] -> (Value -> Value) -> Maybe Value
+    isArr x fv f =
+        let x' = freshName x fv
+            r = f (svar x')
+        in if elem x' (valueFreeVars r) then Nothing else Just r
+cmpTypes a@(Sid _ _ _) b@(Spi _ _ _ _) = cmpTypes b a
 cmpTypes _ _ = Nothing
 
 cmpValues :: Value -> Value -> Bool
