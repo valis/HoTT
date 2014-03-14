@@ -55,7 +55,7 @@ rawExprToTerm'depType dt ctx tvs e ty =
         updateCtxVars ctx (v:vs) = updateCtxVars (M.insert v (svar v, tv) ctx) vs
 
 rawExprToTerm :: Ctx -> E.Expr -> Maybe Value -> Term
-rawExprToTerm ctx e (Just (Ne (Var "_"))) = rawExprToTerm ctx e Nothing
+rawExprToTerm ctx e (Just (Ne _ (Var "_"))) = rawExprToTerm ctx e Nothing
 rawExprToTerm ctx (E.Let defs expr) ty =
     let defs' = rawDefsToTerm ctx defs
     in Let defs' $ rawExprToTerm (updateCtx ctx defs') expr ty

@@ -113,7 +113,8 @@ ppTerm = go False
         in ppArrow l' t <+> ppVars True c l' ts
     ppVars False c l ((vars,t):ts) =
         let l' = fmap pred l
-        in parens (hsep (map text vars) <+> colon <+> go False l' t) <+> ppVars False c l' ts
+            b = not (null ts) && null (fst $ head ts)
+        in parens (hsep (map text vars) <+> colon <+> go False l' t) <+> ppVars b c l' ts
     
     go _ (Just 0) _ = char '_'
     go _ _ (NatConst n) = integer n

@@ -2,12 +2,12 @@ module Value
     ( Value(..), ValueFV
     , D(..), GlobMap
     , svar, sarr, sarrFV, sprod
-    , Ctx, CtxT, CtxV
-    , ctxTToCtx, ctxToCtxT, ctxToCtxV
+    , Ctx, CtxV
+    , ctxToCtxV
     , cmpTypes
     , reify, reifyFV
     , valueFreeVars
-    , action, app, idp, pmap
+    , app
     ) where
 
 import qualified Data.Map as M
@@ -24,15 +24,21 @@ data Value
     | Spi String [String] Value (Value -> Value) | Ssigma String [String] Value (Value -> Value) -- Constructors for Type_k
     | Snat | Sid Value Value Value | Stype Level -- Constructors for Type_k
     | Sidp Value -- Constructor for Id
-    | Ne Term
+    | Ne [(Term,Term)] Term
     -- | Srepl Value | Siso Value Value Value Value | Scomp Value Value | Ssym Value
 type Ctx  = M.Map String (Value,Value)
-type CtxT = M.Map String Value
 type CtxV = M.Map String Value
 type ValueFV = (Value,[String])
 
 svar :: String -> Value
-svar x = Ne (Var x)
+svar x = Ne [] (Var x)
+
+app :: Integer -> Value -> Value -> Value
+app n (Slam _ _ f) a = f n [] a
+app n (Ne t e) a =
+    let a' = reify a
+    in Ne (map (\(x,y) -> (App x a', App y a')) t) (App e a')
+app n _ _ = error "Value.app"
 
 infixr 5 `sarrFV`
 sarrFV :: Value -> ValueFV -> Value
@@ -44,26 +50,6 @@ sarr a b = sarrFV a (b,valueFreeVars b)
 
 sprod :: Value -> ValueFV -> Value
 sprod a (b,fv) = Ssigma "_" fv a (const b)
-
-action :: GlobMap -> Value -> Value
-action _ v = v -- TODO: Define it
-
-app :: Integer -> Value -> Value -> Value
-app n (Slam _ _ f) a = f n [] a
-app n (Ne e) a = Ne $ App e (reify a)
-app n _ _ = error "Value.app"
-
-idp :: Value -> Value
-idp = action [Ud]
-
-pmap :: Integer -> Value -> Value -> Value
-pmap n a = app (n + 1) (idp a)
-
-ctxTToCtx :: CtxT -> Ctx
-ctxTToCtx = M.mapWithKey $ \k v -> (svar k, v)
-
-ctxToCtxT :: Ctx -> CtxT
-ctxToCtxT = M.map snd
 
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV = M.map fst
@@ -80,7 +66,7 @@ cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = case (cmpTypes a a', cmpTypes (
 cmpTypes (Sid _ a b) (Sid _ a' b') = if cmpValues a a' && cmpValues b b' then Just EQ else Nothing
 cmpTypes Snat Snat = Just EQ
 cmpTypes (Stype k) (Stype k') = Just (compare k k')
-cmpTypes (Ne t) (Ne t') = if t == t' then Just EQ else Nothing
+cmpTypes (Ne l t) (Ne l' t') = if t == t' && l == l' then Just EQ else Nothing
 cmpTypes _ _ = Nothing
 
 cmpValues :: Value -> Value -> Bool
@@ -96,7 +82,7 @@ valueFreeVars Snat = []
 valueFreeVars (Sid t a b) = valueFreeVars t `union` valueFreeVars a `union` valueFreeVars b
 valueFreeVars (Stype _) = []
 valueFreeVars (Sidp e) = valueFreeVars e
-valueFreeVars (Ne e) = freeVars e
+valueFreeVars (Ne l e) = freeVars e `union` concatMap (\(x,y) -> freeVars x `union` freeVars y) l
 
 reifyFV :: ValueFV -> Term
 reifyFV (Slam x _ f, fv) =
@@ -116,7 +102,7 @@ reifyFV (Sid t a b,_) = Id (reifyFV (t,valueFreeVars t)) (reifyFV (a,valueFreeVa
 reifyFV (Stype u,_) = Universe u
 reifyFV (Snat,_) = Nat
 reifyFV (Sidp x,fv) = App Idp $ reifyFV (x,fv)
-reifyFV (Ne e,_) = e
+reifyFV (Ne _ e,_) = e
 
 reify :: Value -> Term
 reify v = reifyFV (v, valueFreeVars v)

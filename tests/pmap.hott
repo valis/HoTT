@@ -1,0 +1,16 @@
+typeTest1 = 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
+
+test1 : 0 = 1 -> (y' : Nat -> Nat) -> y' 0 = y' 1
+test1 p y = pmap y p
+
+test1' : typeTest1
+test1' p y = pmap y p
+
+test2'fail : 0 = 1 -> (y : (Nat -> Nat) -> Nat) -> y (\x -> x) = y (\x -> x)
+test2'fail p y = pmap y p
+
+test3 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
+test3 p y = pmap (\x -> y x) p
+
+test4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
+test4 g f p y = pmap (\x -> x y) p
