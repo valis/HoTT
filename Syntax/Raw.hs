@@ -31,7 +31,6 @@ getPos (Nat (PNat (p,_))) = p
 getPos (Suc (PSuc (p,_))) = p
 getPos (Rec (PR (p,_))) = p
 getPos (Idp (PIdp (p,_))) = p
-getPos (Pmap (Ppmap (p,_)) _) = p
 getPos (NatConst (PInt (p,_))) = p
 getPos (Universe (U (p,_))) = p
 getPos (Paren (PPar (p,_)) _) = p
@@ -72,7 +71,6 @@ freeVars (Nat _) = []
 freeVars (Suc _) = []
 freeVars (Rec _) = []
 freeVars (Idp _) = []
-freeVars (Pmap _ e) = freeVars e
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Paren _ e) = freeVars e
@@ -135,7 +133,6 @@ rename e@(Nat _) _ _ = e
 rename e@(Suc _) _ _ = e
 rename e@(Rec _) _ _ = e
 rename e@(Idp _) _ _ = e
-rename (Pmap i e) x y = Pmap i (rename e x y)
 rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
@@ -191,7 +188,6 @@ ppExpr = go False
     go False l (App e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2
-    go False l (Pmap _ e) = text "pmap" <+> go True (fmap pred l) e
     go False l (Paren _ e) = go False l e
 
 preprocessDefs :: [Def] -> EDocM [Def]

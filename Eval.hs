@@ -11,7 +11,6 @@ import Value
 
 eval :: Integer -> CtxV -> Term -> Value
 eval n ctx Idp = Slam "x" [] $ \_ _ -> idp
-eval n ctx (Pmap e) = Slam "p" (freeVars e) $ \k m -> pmap k $ eval k (M.map (action m) ctx) e
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -104,6 +103,3 @@ action _ (Stype _) = error "action.Stype"
 
 idp :: Value -> Value
 idp = action [Ud]
-
-pmap :: Integer -> Value -> Value -> Value
-pmap n a = app (n + 1) (idp a)

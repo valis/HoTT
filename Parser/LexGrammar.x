@@ -32,7 +32,6 @@ T y p e $d * { tok (\p s -> PT p (eitherResIdent (T_U . share) s)) }
 \\ { tok (\p s -> PT p (eitherResIdent (T_PLam . share) s)) }
 \( { tok (\p s -> PT p (eitherResIdent (T_PPar . share) s)) }
 $d + { tok (\p s -> PT p (eitherResIdent (T_PInt . share) s)) }
-p m a p { tok (\p s -> PT p (eitherResIdent (T_Ppmap . share) s)) }
 i d p { tok (\p s -> PT p (eitherResIdent (T_PIdp . share) s)) }
 R { tok (\p s -> PT p (eitherResIdent (T_PR . share) s)) }
 s u c { tok (\p s -> PT p (eitherResIdent (T_PSuc . share) s)) }
@@ -64,7 +63,6 @@ data Tok =
  | T_PLam !String
  | T_PPar !String
  | T_PInt !String
- | T_Ppmap !String
  | T_PIdp !String
  | T_PR !String
  | T_PSuc !String
@@ -100,7 +98,6 @@ prToken t = case t of
   PT _ (T_PLam s) -> s
   PT _ (T_PPar s) -> s
   PT _ (T_PInt s) -> s
-  PT _ (T_Ppmap s) -> s
   PT _ (T_PIdp s) -> s
   PT _ (T_PR s) -> s
   PT _ (T_PSuc s) -> s

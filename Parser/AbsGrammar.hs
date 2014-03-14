@@ -7,7 +7,6 @@ newtype U = U ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PLam = PLam ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PPar = PPar ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PInt = PInt ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdp = PIdp ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PR = PR ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PSuc = PSuc ((Int,Int),String) deriving (Eq,Ord,Show)
@@ -37,7 +36,6 @@ data Expr =
  | Suc PSuc
  | Rec PR
  | Idp PIdp
- | Pmap Ppmap Expr
  | NatConst PInt
  | Universe U
  | Paren PPar Expr

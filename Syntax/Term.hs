@@ -24,7 +24,6 @@ data Term
     | Suc
     | Rec
     | Idp
-    | Pmap Term
     | NatConst Integer
     | Universe Level
 
@@ -44,7 +43,6 @@ freeVars Nat = []
 freeVars Suc = []
 freeVars Rec = []
 freeVars Idp = []
-freeVars (Pmap e) = freeVars e
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 
@@ -80,7 +78,6 @@ instance Eq Term where
             (Nothing, Nothing) -> v1 == v2
             (Just c1, Just c2) -> c1 == c2
             _ -> False
-        cmp c m1 m2 (Pmap e1) (Pmap e2) = cmp c m1 m2 e1 e2
         cmp _ _ _ Nat Nat = True
         cmp _ _ _ Suc Suc = True
         cmp _ _ _ Rec Rec = True
@@ -104,6 +101,11 @@ ppTerm = go False
     ppArrow l e@(Lam _ _) = go True l e
     ppArrow l e@(Pi _ _) = go True l e
     ppArrow l e = go False l e
+    
+    ppId l e@(Lam _ _) = go True l e
+    ppId l e@(Pi _ _) = go True l e
+    ppId l e@(Id _ _ _) = go True l e
+    ppId l e = go False l e
     
     ppVars :: Bool -> Char -> Maybe Int -> [([String],Term)] -> Doc
     ppVars _ c l [] = char c
@@ -141,11 +143,10 @@ ppTerm = go False
         in ppVars False '×' l' ts <+> ppArrow l' e
     go False l (Id _ e1 e2) =
         let l' = fmap pred l
-        in go False l' e1 <+> equals <+> go False l' e2
+        in ppId l' e1 <+> equals <+> ppId l' e2
     go False l (App e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2
-    go False l (Pmap e) = text "pmap" <+> go True (fmap pred l) e
 
 simplify :: Term -> Term
 simplify (Let [] e) = simplify e
@@ -158,7 +159,7 @@ simplify (Lam args e) = Lam (simplifyArgs args $ args \\ freeVars e) (simplify e
     simplifyArgs args [] = args
     simplifyArgs [] _ = []
     simplifyArgs (a:as) (r:rs) | a == r = "_" : simplifyArgs as rs
-                               | otherwise = simplifyArgs as (r:rs)
+                               | otherwise = a : simplifyArgs as (r:rs)
 simplify (Pi [] e) = simplify e
 simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
 simplify (Pi (([v],t):ts) e)
@@ -194,7 +195,6 @@ simplify Nat = Nat
 simplify Suc = Suc
 simplify Rec = Rec
 simplify Idp = Idp
-simplify (Pmap e) = Pmap (simplify e)
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
 

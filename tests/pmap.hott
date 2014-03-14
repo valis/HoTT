@@ -1,3 +1,6 @@
+funTest : (A B : Type) -> (A -> B) -> A -> B
+funTest _ _ f a = f a
+
 typeTest1 = 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 
 test1 : 0 = 1 -> (y' : Nat -> Nat) -> y' 0 = y' 1
@@ -16,10 +19,19 @@ test4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
 test4 g f p y = idp (\x -> x y) p
 
 test5 : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
-test5 _ _ _ _ = idp (\f x -> f x)
+test5 g f x y p q = idp (\f x -> f x) p q
+
+test5' : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
+test5' g f x y p = idp (\f x -> f x) p
+
+test5'' : (g f : Nat -> Nat) (x y : Nat) -> f = g -> x = y -> f x = g y
+test5'' g f x y = idp (\f x -> f x)
 
 test6 : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
-test6 _ _ _ = idp
+test6 _ _ _ p = idp p
+
+test6' : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
+test6' _ _ _ = idp
 
 ext : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
 ext _ _ _ _ p a = p (idp a)
@@ -27,13 +39,10 @@ ext _ _ _ _ p a = p (idp a)
 ext'fail : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
 ext'fail A' _ _ _ p a = p a
 
-funTest : (A B : Type) -> (A -> B) -> A -> B
-funTest _ _ f a = f a
-
-pmap' : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
-pmap' _ _ f _ _ = idp f
+pmap : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
+pmap _ _ f _ _ = idp f
 
 typeTest2 = (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g -> (a : A) -> f a = g a
 
-depext : typeTest2
-depext _ _ _ _ p a = p (idp a)
+depext'fail : typeTest2
+depext'fail _ _ _ _ p a = p (idp a)

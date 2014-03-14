@@ -95,10 +95,6 @@ instance Print PInt where
   prt _ (PInt (_,i)) = doc (showString ( i))
 
 
-instance Print Ppmap where
-  prt _ (Ppmap (_,i)) = doc (showString ( i))
-
-
 instance Print PIdp where
   prt _ (PIdp (_,i)) = doc (showString ( i))
 
@@ -154,7 +150,6 @@ instance Print Expr where
    Suc psuc -> prPrec i 5 (concatD [prt 0 psuc])
    Rec pr -> prPrec i 5 (concatD [prt 0 pr])
    Idp pidp -> prPrec i 5 (concatD [prt 0 pidp])
-   Pmap ppmap expr -> prPrec i 5 (concatD [prt 0 ppmap , prt 5 expr])
    NatConst pint -> prPrec i 5 (concatD [prt 0 pint])
    Universe u -> prPrec i 5 (concatD [prt 0 u])
    Paren ppar expr -> prPrec i 5 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])

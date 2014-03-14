@@ -71,10 +71,13 @@ rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (raw
 rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in Id (reify $ typeOfTerm ctx e1') e1' (rawExprToTerm ctx e2 Nothing)
-rawExprToTerm ctx (E.App (E.Pmap _ e1) e2) _ = case typeOfTerm ctx (rawExprToTerm ctx e2 Nothing) of
+rawExprToTerm ctx (E.App (E.App (E.Idp _) e1) e2) _ = case typeOfTerm ctx (rawExprToTerm ctx e2 Nothing) of
     Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just (t `sarr` svar "_")
-                 in App (Pmap e') (rawExprToTerm ctx e2 Nothing)
-    _ -> error "rawExprToTerm.App.Pmap.Id"
+                 in App (App Idp e') (rawExprToTerm ctx e2 Nothing)
+    _ -> error "rawExprToTerm.App.App.Idp"
+rawExprToTerm ctx (E.App (E.Idp _) e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ error "rawExprToTerm.App.Idp.Var" of
+    Sid s _ _ -> App Idp $ rawExprToTerm ctx e $ Just (t `sarr` s)
+    _ -> error "rawExprToTerm.App.Idp.Sid"
 rawExprToTerm ctx (E.App (E.Idp _) e) _ = App Idp (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
@@ -82,10 +85,6 @@ rawExprToTerm ctx (E.App e1 e2) _ =
         Spi _ _ t2 _ -> App e1' $ rawExprToTerm ctx e2 (Just t2)
         Sid _ _ _ -> App e1' (rawExprToTerm ctx e2 Nothing)
         _ -> error "rawExprToTerm.App"
-rawExprToTerm ctx (E.Pmap _ e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ error "rawExprToTerm.Pmap.Var" of
-    Sid s _ _ -> Pmap $ rawExprToTerm ctx e $ Just (t `sarr` s)
-    _ -> error "rawExprToTerm.Pmap.Sid"
-rawExprToTerm _ (E.Pmap _ _) _ = error "rawExprToTerm.Pmap.Spi"
 rawExprToTerm _ (E.Var a) _ = Var (R.unArg a)
 rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
@@ -117,17 +116,17 @@ typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (upd
     updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
 typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) = let t = typeOfTerm ctx e in Spi "x" (valueFreeVars t) t $ \v -> Sid t v v
-typeOfTerm ctx (App (Pmap e1) e2) =
+typeOfTerm ctx (App (App Idp e1) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
-    in case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
-        (Spi _ _ _ s, Sid _ a b) -> Sid (s $ error "typeOfTerm.Pmap.App.Pi") (app 0 e' a) (app 0 e' b)
-        _ -> error "typeOfTerm.Pmap.App"
+    in case typeOfTerm ctx e2 of
+        Sid t a b -> Sid (typeOfLam ctx e1 t) (app 0 e' a) (app 0 e' b)
+        _ -> error "typeOfTerm.App.App.Idp"
 typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
 typeOfTerm ctx (Var v) = case M.lookup v ctx of
-    Nothing -> error $ "typeOfTerm.Var: " ++ v ++ " // " ++ show (M.keys ctx)
+    Nothing -> error $ "typeOfTerm.Var: " ++ v
     Just (_,t) -> t
 typeOfTerm _ Nat = Stype (Finite 0)
 typeOfTerm _ Suc = Snat `sarr` Snat
@@ -138,4 +137,10 @@ typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
-typeOfTerm _ (Pmap _) = error "typeOfTerm.Pmap"
+
+typeOfLam :: Ctx -> Term -> Value -> Value
+typeOfLam ctx (Lam [] e) t = typeOfLam ctx e t
+typeOfLam ctx (Lam (a:as) e) t = typeOfTerm (M.insert a (svar a, t) ctx) (Lam as e)
+typeOfLam ctx e _ = case typeOfTerm ctx e of
+    Spi _ _ _ r -> r $ error "typeOfLam.Var"
+    _ -> error "typeOfLam.Pi"

@@ -29,11 +29,6 @@ transPInt x = case x of
   PInt str  -> failure x
 
 
-transPpmap :: Ppmap -> Result
-transPpmap x = case x of
-  Ppmap str  -> failure x
-
-
 transPIdp :: PIdp -> Result
 transPIdp x = case x of
   PIdp str  -> failure x
@@ -90,7 +85,6 @@ transExpr x = case x of
   Suc psuc  -> failure x
   Rec pr  -> failure x
   Idp pidp  -> failure x
-  Pmap ppmap expr  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x

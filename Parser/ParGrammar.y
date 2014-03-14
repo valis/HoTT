@@ -30,7 +30,6 @@ L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
 L_PPar { PT _ (T_PPar _) }
 L_PInt { PT _ (T_PInt _) }
-L_Ppmap { PT _ (T_Ppmap _) }
 L_PIdp { PT _ (T_PIdp _) }
 L_PR { PT _ (T_PR _) }
 L_PSuc { PT _ (T_PSuc _) }
@@ -46,7 +45,6 @@ U    :: { U} : L_U { U (mkPosToken $1)}
 PLam    :: { PLam} : L_PLam { PLam (mkPosToken $1)}
 PPar    :: { PPar} : L_PPar { PPar (mkPosToken $1)}
 PInt    :: { PInt} : L_PInt { PInt (mkPosToken $1)}
-Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
 PIdp    :: { PIdp} : L_PIdp { PIdp (mkPosToken $1)}
 PR    :: { PR} : L_PR { PR (mkPosToken $1)}
 PSuc    :: { PSuc} : L_PSuc { PSuc (mkPosToken $1)}
@@ -103,7 +101,6 @@ Expr5 : Arg { Var $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
   | PIdp { Idp $1 }
-  | Ppmap Expr5 { Pmap $1 $2 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }
