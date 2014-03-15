@@ -48,7 +48,7 @@ rawExprToTerm'depType dt ctx (E.TypedVar _ vars t) e ty =
   where
     tv = evalRaw ctx t ty
     updateCtx ctx [] = ctx
-    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
+    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v tv, tv) ctx) vs
 
 rawExprToTerm :: Ctx -> E.Expr -> Maybe Value -> Term
 rawExprToTerm ctx e (Just (Ne _ (Var "_"))) = rawExprToTerm ctx e Nothing
@@ -58,7 +58,8 @@ rawExprToTerm ctx (E.Let defs expr) ty =
 rawExprToTerm ctx (E.Lam _ [] expr) ty = rawExprToTerm ctx expr ty
 rawExprToTerm ctx (E.Lam i (arg:args) expr) (Just (Spi _ fv t s)) =
     let (v,expr') = R.renameExpr fv (R.unBinder arg) (E.Lam i args expr)
-    in Lam [v] $ rawExprToTerm (M.insert v (svar v, t) ctx) expr' $ Just $ s (svar v)
+        vv = svar v t
+    in Lam [v] $ rawExprToTerm (M.insert v (vv, t) ctx) expr' $ Just (s vv)
 rawExprToTerm _ (E.Lam _ _ _) _ = error "rawExprToTerm.Lam"
 rawExprToTerm ctx (E.Pi [] e) ty = error "rawExprToTerm.Pi"
 rawExprToTerm ctx (E.Pi [t] e) ty = rawExprToTerm'depType Pi ctx t e ty
@@ -71,9 +72,9 @@ rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (raw
 rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
         t1 = typeOfTerm ctx e1'
-    in Id (reify t1) e1' $ rawExprToTerm ctx e2 (Just t1)
+    in Id (reify t1 $ Stype maxBound) e1' $ rawExprToTerm ctx e2 (Just t1)
 rawExprToTerm ctx (E.App (E.App (E.Idp _) e1) e2) _ = case typeOfTerm ctx (rawExprToTerm ctx e2 Nothing) of
-    Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just (t `sarr` svar "_")
+    Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just $ t `sarr` svar "_" (Stype maxBound)
                  in App (App Idp e') (rawExprToTerm ctx e2 Nothing)
     _ -> error "rawExprToTerm.App.App.Idp"
 rawExprToTerm ctx (E.App (E.Idp _) e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ error "rawExprToTerm.App.Idp.Var" of
@@ -108,7 +109,7 @@ typeOfTerm ctx (Pi ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (update
   where
     tv = eval 0 (ctxToCtxV ctx) t
     updateCtx ctx [] = ctx
-    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
+    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v tv, tv) ctx) vs
 typeOfTerm ctx (Sigma [] e) = typeOfTerm ctx e
 typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (updateCtx ctx vars) (Sigma vs e)) of
     (Stype k1, Stype k2) -> Stype (max k1 k2)
@@ -116,7 +117,7 @@ typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (upd
   where
     tv = eval 0 (ctxToCtxV ctx) t
     updateCtx ctx [] = ctx
-    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v, tv) ctx) vs
+    updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v tv, tv) ctx) vs
 typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) =
     let v = eval 0 (ctxToCtxV ctx) e
@@ -149,7 +150,7 @@ typeOfTerm _ Trans = error "typeOfTerm.Trans"
 
 typeOfLam :: Ctx -> Term -> Value -> Value
 typeOfLam ctx (Lam [] e) t = typeOfLam ctx e t
-typeOfLam ctx (Lam (a:as) e) t = typeOfTerm (M.insert a (svar a, t) ctx) (Lam as e)
+typeOfLam ctx (Lam (a:as) e) t = typeOfTerm (M.insert a (svar a t, t) ctx) (Lam as e)
 typeOfLam ctx e _ = case typeOfTerm ctx e of
     Spi _ _ _ r -> r $ error "typeOfLam.Var"
     _ -> error "typeOfLam.Pi"

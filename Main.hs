@@ -45,7 +45,7 @@ processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT Ctx EDocM (
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
-    let Def _ mty e' = simplifyDef $ Def name (Just (reify tv, [])) (reify ev)
+    let Def _ mty e' = simplifyDef $ Def name (Just (reify tv (Stype maxBound), [])) (reify ev tv)
         (ty,args) = fromMaybe (error "processDecl") mty
     return (args,e',ty)
 

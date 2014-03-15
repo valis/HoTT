@@ -11,7 +11,7 @@ import Value
 
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
-eval _ _ Trans = Slam "p" [] $ \k _ -> trans k
+eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -70,44 +70,20 @@ rec 0 p z s = go
   where
     go Szero = fst z
     go (Ssuc x) = app 0 (app 0 (fst s) x) (go x)
-    go t@(Ne [] e) = Ne [] $ Rec `aApp` reifyFV p `aApp` reifyFV z `aApp` reifyFV s `aApp` e
+    go t@(Ne [] e) =
+        let r = Rec `aApp` reifyFV p (Snat `sarr` Stype maxBound)
+                    `aApp` reifyFV z (app 0 (fst p) Szero)
+                    `aApp` reifyFV s (Spi "x" (snd p) Snat $ \x -> app 0 (fst p) x `sarr` app 0 (fst p) (Ssuc x))
+                    `aApp` e
+        in liftTerm r (app 0 (fst p) t)
     go _ = error "rec"
 rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\s -> Rec P z s x) (f : P = P) : P x = P x
     -- example: pmap (\z -> Rec P z s 0) p = p
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
 
-action :: GlobMap -> Value -> Value
-action [] v = v
-action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
-action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
-action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
-action (Ud:m) Snat = error "TODO: action.Snat"
-action (Ud:m) (Sid t a b) = error "TODO: action.Sid"
-action (Ud:m) (Stype _) = error "TODO: action.Stype"
-action (Ld:m) (Sidp x) = action m x
-action (Rd:m) (Sidp x) = action m x
-action (Ld:m) (Ne ((l,_):t) _) = action m (Ne t l)
-action (Ld:m) (Ne [] _) = error "action.Ld.Ne"
-action (Rd:m) (Ne ((_,r):t) _) = action m (Ne t r)
-action (Rd:m) (Ne [] _) = error "action.Rd.Ne"
-action (Ud:m) (Ne t e) = action m $ Ne ((e,e):t) (App Idp e)
-action (Ud:m) v = action m (Sidp v)
-
-action _ Szero = error "action.Szero"
-action _ (Ssuc _) = error "action.Ssuc"
-action _ (Spi _ _ _ _) = error "action.Spi"
-action _ (Ssigma _ _ _ _) = error "action.Ssigma"
-action _ Snat = error "action.Snat"
-action _ (Sid _ _ _) = error "action.Sid"
-action _ (Stype _) = error "action.Stype"
-
 idp :: Value -> Value
 idp = action [Ud]
 
-trans :: Integer -> Value -> Value
-trans 0 (Sidp _) = Slam "x" [] $ \_ _ -> id
-trans n (Sidp _) = error $ "TODO: trans.Sidp " ++ show n
-trans 0 (Ne _ e) = Ne [] (App Trans e)
-trans n (Ne l e) = error $ "TODO: trans.Ne " ++ show n
-trans _ _ = error "trans"
+trans :: Integer -> Value -> Value -> Value
+trans _ _ _ = error "trans"
