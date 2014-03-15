@@ -4,36 +4,36 @@ funTest _ _ f a = f a
 typeTest1 = 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 
 test1 : 0 = 1 -> (y' : Nat -> Nat) -> y' 0 = y' 1
-test1 p y = idp y p
+test1 p y = ext (idp y) p
 
 test1' : typeTest1
-test1' p y = idp y p
+test1' p y = ext (idp y) p
 
 test2'fail : 0 = 1 -> (y : (Nat -> Nat) -> Nat) -> y (\x -> x) = y (\x -> x)
-test2'fail p y = idp y p
+test2'fail p y = ext (idp y) p
 
 test3 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
-test3 p y = idp (\x -> y x) p
+test3 p y = ext (idp (\x -> y x)) p
 
 test4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
-test4 g f p y = idp (\x -> x y) p
+test4 g f p y = ext (idp (\x -> x y)) p
 
-test5 : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
+test5 : (A : Type) (a a' : A) (p : a = a') -> ext (idp (\x -> x)) p = p
 test5 _ _ _ p = idp p
 
-test5' : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) p = p
+test5' : (A : Type) (a a' : A) (p : a = a') -> ext (idp (\x -> x)) p = p
 test5' _ _ _ = idp
 
-ext : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
-ext _ _ _ _ p a = p (idp a)
+extensionality : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
+extensionality _ _ _ _ p a = ext p (idp a)
 
-ext'fail : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
-ext'fail A' _ _ _ p a = p a
+extensionality'fail : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
+extensionality'fail A' _ _ _ p a = ext p a
 
 pmap : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
-pmap _ _ f _ _ = idp f
+pmap _ _ f _ _ = ext (idp f)
 
 typeTest2 = (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g -> (a : A) -> f a = g a
 
 depext'fail : typeTest2
-depext'fail _ _ _ _ p a = p (idp a)
+depext'fail _ _ _ _ p a = ext p (idp a)

@@ -12,6 +12,7 @@ import Value
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
+eval _ _ Ext = Slam "p" [] $ \_ _ -> id
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)

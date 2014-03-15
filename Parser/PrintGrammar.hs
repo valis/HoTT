@@ -115,6 +115,10 @@ instance Print Pus where
   prt _ (Pus (_,i)) = doc (showString ( i))
 
 
+instance Print PExt where
+  prt _ (PExt (_,i)) = doc (showString ( i))
+
+
 instance Print PTrans where
   prt _ (PTrans (_,i)) = doc (showString ( i))
 
@@ -154,6 +158,7 @@ instance Print Expr where
    Suc psuc -> prPrec i 5 (concatD [prt 0 psuc])
    Rec pr -> prPrec i 5 (concatD [prt 0 pr])
    Idp pidp -> prPrec i 5 (concatD [prt 0 pidp])
+   Ext pext -> prPrec i 5 (concatD [prt 0 pext])
    Trans ptrans -> prPrec i 5 (concatD [prt 0 ptrans])
    NatConst pint -> prPrec i 5 (concatD [prt 0 pint])
    Universe u -> prPrec i 5 (concatD [prt 0 u])

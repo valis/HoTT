@@ -50,6 +50,10 @@ rawExprToTerm'depType dt ctx (E.TypedVar _ vars t) e ty =
     updateCtx ctx [] = ctx
     updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v tv, tv) ctx) vs
 
+dropParens :: E.Expr -> E.Expr
+dropParens (E.Paren _ e) = dropParens e
+dropParens e = e
+
 rawExprToTerm :: Ctx -> E.Expr -> Maybe Value -> Term
 rawExprToTerm ctx e (Just (Ne _ (Var "_"))) = rawExprToTerm ctx e Nothing
 rawExprToTerm ctx (E.Let defs expr) ty =
@@ -73,15 +77,22 @@ rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
         t1 = typeOfTerm ctx e1'
     in Id (reify t1 $ Stype maxBound) e1' $ rawExprToTerm ctx e2 (Just t1)
-rawExprToTerm ctx (E.App (E.App (E.Idp _) e1) e2) _ = case typeOfTerm ctx (rawExprToTerm ctx e2 Nothing) of
-    Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just $ t `sarr` svar "_" (Stype maxBound)
-                 in App (App Idp e') (rawExprToTerm ctx e2 Nothing)
-    _ -> error "rawExprToTerm.App.App.Idp"
-rawExprToTerm ctx (E.App (E.Idp _) e) (Just (Spi _ _ (Sid t _ _) b)) = case b $ error "rawExprToTerm.App.Idp.Var" of
-    Sid s _ _ -> App Idp $ rawExprToTerm ctx e $ Just (t `sarr` s)
-    _ -> error "rawExprToTerm.App.Idp.Sid"
-rawExprToTerm ctx (E.App (E.Idp _) e) _ = App Idp (rawExprToTerm ctx e Nothing)
-rawExprToTerm ctx (E.App (E.Trans _) e) _ = App Trans (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.Ext _) _ = Ext
+rawExprToTerm ctx (E.App e1 e) _ | E.Ext _ <- dropParens e1 = App Ext (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1' e2) _
+    | E.App e3 e4 <- dropParens e1'
+    , E.Ext _ <- dropParens e3
+    , E.App e5 e1 <- dropParens e4
+    , E.Idp _ <- dropParens e5 =
+        let e2' = rawExprToTerm ctx e2 Nothing
+        in case typeOfTerm ctx e2' of
+            Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just $ t `sarr` svar "_" (Stype maxBound)
+                         in App (App Ext (App Idp e')) e2'
+            _ -> error "rawExprToTerm.App.App.Idp"
+rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Ext _ <- dropParens e3 =
+    App (App Ext (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
+rawExprToTerm ctx (E.App e1 e) _ | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1 e) _ | E.Trans _ <- dropParens e1 = App Trans (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
@@ -122,11 +133,15 @@ typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) =
     let v = eval 0 (ctxToCtxV ctx) e
     in Sid (typeOfTerm ctx e) v v
-typeOfTerm ctx (App (App Idp e1) e2) =
+typeOfTerm ctx (App (App Ext (App Idp e1)) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case typeOfTerm ctx e2 of
         Sid t a b -> Sid (typeOfLam ctx e1 t) (app 0 e' a) (app 0 e' b)
-        _ -> error "typeOfTerm.App.App.Idp"
+        _ -> error "typeOfTerm.App.App.Ext.Idp"
+typeOfTerm ctx (App (App Ext e1) e2) =
+    case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
+        (Sid (Spi _ _ _ b) f g, Sid _ x y) -> Sid (b $ error "typeOfTerm.App.App.Ext.Var") (app 0 f x) (app 0 g y)
+        _ -> error "typeOfTerm.App.App.Ext"
 typeOfTerm ctx (App Trans e) = case typeOfTerm ctx e of
     Sid _ x y -> x `sarr` y
     _ -> error "typeOfTerm.App.Trans"
@@ -145,6 +160,7 @@ typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
+typeOfTerm _ Ext = error "typeOfTerm.Ext"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
 typeOfTerm _ Trans = error "typeOfTerm.Trans"
 

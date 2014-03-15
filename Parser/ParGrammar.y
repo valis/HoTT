@@ -35,6 +35,7 @@ L_PR { PT _ (T_PR _) }
 L_PSuc { PT _ (T_PSuc _) }
 L_PNat { PT _ (T_PNat _) }
 L_Pus { PT _ (T_Pus _) }
+L_PExt { PT _ (T_PExt _) }
 L_PTrans { PT _ (T_PTrans _) }
 L_PIdent { PT _ (T_PIdent _) }
 L_err    { _ }
@@ -51,6 +52,7 @@ PR    :: { PR} : L_PR { PR (mkPosToken $1)}
 PSuc    :: { PSuc} : L_PSuc { PSuc (mkPosToken $1)}
 PNat    :: { PNat} : L_PNat { PNat (mkPosToken $1)}
 Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
+PExt    :: { PExt} : L_PExt { PExt (mkPosToken $1)}
 PTrans    :: { PTrans} : L_PTrans { PTrans (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
 
@@ -103,6 +105,7 @@ Expr5 : Arg { Var $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
   | PIdp { Idp $1 }
+  | PExt { Ext $1 }
   | PTrans { Trans $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }

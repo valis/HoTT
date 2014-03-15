@@ -54,16 +54,6 @@ cmpTypes (Sid t a b) (Sid t' a' b') = cmpTypes t t' && cmpValues a a' t && cmpVa
 cmpTypes Snat Snat = True
 cmpTypes (Stype k) (Stype k') = k <= k'
 cmpTypes (Ne l t) (Ne l' t') = t == t' && l == l'
-cmpTypes (Spi v fv a@(Sid t x y) b) (Sid (Spi v' fv' c d) f g) = case (isArr v fv a b, isArr v' fv' c d) of
-    (Just b', Just d') | cmpTypes t c && cmpTypes b' (Sid d' (app 0 f x) (app 0 g y)) -> True
-    _ -> False
-  where
-    isArr :: String -> [String] -> Value -> (Value -> Value) -> Maybe Value
-    isArr x fv t f =
-        let x' = freshName x fv
-            r = f (svar x' t)
-        in if elem x' (valueFreeVars r) then Nothing else Just r
-cmpTypes a@(Sid _ _ _) b@(Spi _ _ _ _) = cmpTypes b a
 cmpTypes _ _ = False
 
 cmpValues :: Value -> Value -> Value -> Bool

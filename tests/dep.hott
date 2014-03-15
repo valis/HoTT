@@ -1,5 +1,5 @@
 pmap : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
-pmap _ _ f _ _ = idp f
+pmap _ _ f _ _ = ext (idp f)
 
 -- deptrans : (A : Type) (B : A -> Type0) (a a' : A) -> a = a' -> B a -> B a'
 -- deptrans A B a a' p = trans (pmap A Type0 B a a' p)
@@ -7,11 +7,13 @@ pmap _ _ f _ _ = idp f
 depTest : (A : Type) (B : A -> Type) (f : (a : A) -> B a) -> f = f
 depTest A B f = idp f
 
+{-
 transTest : (A : Type) -> trans (idp A) = (\a -> a)
 transTest A = idp (\a -> a)
 
 transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' -> B a -> B a'
 transport A B a a' p = trans (idp B p)
+-}
 
 {-
 contrPathSpace : (A : Type) (a a' : A) (p : a = a') -> (a, idp a) = (a', p)
@@ -25,5 +27,7 @@ J A B d a a' p =
 -- depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
 -- depmap A B f a a' p = 
 
+{-
 depmap'fail : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
 depmap'fail A B f a a' = idp f
+-}
