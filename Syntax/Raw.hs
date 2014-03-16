@@ -31,7 +31,8 @@ getPos (Nat (PNat (p,_))) = p
 getPos (Suc (PSuc (p,_))) = p
 getPos (Rec (PR (p,_))) = p
 getPos (Idp (PIdp (p,_))) = p
-getPos (Ext (PExt (p,_))) = p
+getPos (Ext (PExt (p,_)) _ _) = p
+getPos (Pmap (Ppmap (p,_))) = p
 getPos (Trans (PTrans (p,_))) = p
 getPos (NatConst (PInt (p,_))) = p
 getPos (Universe (U (p,_))) = p
@@ -67,13 +68,14 @@ freeVars (Sigma [] e) = freeVars e
 freeVars (Sigma (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Sigma xs e) \\ freeVars vars)
 freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Ext _ e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var (Arg (PIdent (_,x)))) = [x]
 freeVars (Var (NoArg _)) = []
 freeVars (Nat _) = []
 freeVars (Suc _) = []
 freeVars (Rec _) = []
 freeVars (Idp _) = []
-freeVars (Ext _) = []
+freeVars (Pmap _) = []
 freeVars (Trans _) = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
@@ -88,7 +90,8 @@ renameDefs [] e x y = ([], rename e x y)
 renameDefs r@(DefType (PIdent (i,z)) t : defs) e x y
     | z == x = (r,e)
     | z == y =
-        let (y', Let defs1 e1) = renameExpr [z,x] y (Let defs e)
+        let (y', e1') = renameExpr [z,x] y (Let defs e)
+            (defs1,e1) = case e1' of { Let defs1 e1 -> (defs1,e1); _ -> error "Raw.renameDefs.1" }
             (defs2, e2) = renameDefs defs1 e1 x y
         in (DefType (PIdent (i,y')) (rename t x y) : defs2, e2)
     | otherwise =
@@ -97,13 +100,16 @@ renameDefs r@(DefType (PIdent (i,z)) t : defs) e x y
 renameDefs r@(Def (PIdent (i,z)) as t : defs) e x y
     | z == x = (r,e)
     | z == y =
-        let (y', Let defs1 e1) = renameExpr [z,x] y (Let defs e)
+        let (y', e1') = renameExpr [z,x] y (Let defs e)
+            (defs1,e1) = case e1' of { Let defs1 e1 -> (defs1,e1); _ -> error "Raw.renameDefs.2" }
             (defs2, e2) = renameDefs defs1 e1 x y
-            Lam _ as' t' = rename (Lam (error "renameDefs.==") (map Binder as) t) x y
+            t2 = rename (Lam (error "renameDefs.==") (map Binder as) t) x y
+            (as',t') = case t2 of { Lam _ as' t' -> (as',t'); _ -> error "Raw.renameDefs.3" }
         in (Def (PIdent (i,y')) (map (\(Binder a) -> a) as') t' : defs2, e2)
     | otherwise =
         let (defs',e') = renameDefs defs e x y
-            Lam _ as' t' = rename (Lam (error "renameDefs./=") (map Binder as) t) x y
+            t2 = rename (Lam (error "renameDefs./=") (map Binder as) t) x y
+            (as',t') = case t2 of { Lam _ as' t' -> (as',t'); _ -> error "Raw.renameDefs.4" }
         in (Def (PIdent (i,z)) (map (\(Binder a) -> a) as') t' : defs', e')
 
 rename :: Expr -> String -> String -> Expr
@@ -132,12 +138,13 @@ rename (Sigma (TypedVar p v t : bs) e) x y = Sigma [TypedVar p v (rename t x y)]
 rename (Id e1 e2) x y = Id (rename e1 x y) (rename e2 x y)
 rename (App e1 e2) x y = App (rename e1 x y) (rename e2 x y)
 rename (Var (Arg (PIdent (i,z)))) x y | x == z = Var $ Arg $ PIdent (i,y)
+rename (Ext i e1 e2) x y = Ext i (rename e1 x y) (rename e2 x y)
 rename e@(Var _) _ _ = e
 rename e@(Nat _) _ _ = e
 rename e@(Suc _) _ _ = e
 rename e@(Rec _) _ _ = e
 rename e@(Idp _) _ _ = e
-rename e@(Ext _) _ _ = e
+rename e@(Pmap _) _ _ = e
 rename e@(Trans _) _ _ = e
 rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
@@ -170,7 +177,7 @@ ppExpr = go False
     go _ _ (Suc _) = text "suc"
     go _ _ (Rec _) = text "R"
     go _ _ (Idp _) = text "idp"
-    go _ _ (Ext _) = text "ext"
+    go _ _ (Pmap _) = text "pmap"
     go _ _ (Trans _) = text "trans"
     go _ _ (Universe (U (_,u))) = text u
     go True l e = parens (go False l e)
@@ -193,6 +200,9 @@ ppExpr = go False
     go False l (Id e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> equals <+> go False l' e2
+    go False l (Ext _ e1 e2) =
+        let l' = fmap pred l
+        in text "ext" <+> go True l' e1 <+> go True l' e2
     go False l (App e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2

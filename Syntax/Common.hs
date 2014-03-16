@@ -10,7 +10,7 @@ instance Show Level where
     show (Finite n) = "Type" ++ show n
     show Omega = "Type"
     show Omega1 = "TYPE"
-    show Omega2 = "TYPE1"
+    show Omega2 = "TYPE"
 
 instance Ord Level where
     compare (Finite x) (Finite y) = compare x y

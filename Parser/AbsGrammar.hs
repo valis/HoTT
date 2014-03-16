@@ -13,6 +13,7 @@ newtype PSuc = PSuc ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PNat = PNat ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Pus = Pus ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PExt = PExt ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PTrans = PTrans ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
 data Defs =
@@ -38,7 +39,8 @@ data Expr =
  | Suc PSuc
  | Rec PR
  | Idp PIdp
- | Ext PExt
+ | Ext PExt Expr Expr
+ | Pmap Ppmap
  | Trans PTrans
  | NatConst PInt
  | Universe U

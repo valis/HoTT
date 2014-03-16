@@ -7,12 +7,11 @@ module Value
     , cmpTypes
     , reify, reifyFV
     , valueFreeVars
-    , app, action, liftTerm
+    , app, liftTerm
     ) where
 
 import qualified Data.Map as M
 import Data.List
-import Text.PrettyPrint
 
 import Syntax.Common
 import Syntax.Term
@@ -76,42 +75,23 @@ svar x = liftTerm (Var x)
 
 app :: Integer -> Value -> Value -> Value
 app n (Slam _ _ f) a = f n [] a
-app _ (Ne _ e) _ = error $ "Value.app: " ++ render (ppTerm Nothing e)
 app _ _ _ = error "Value.app"
 
-action :: GlobMap -> Value -> Value
-action [] v = v
-action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
-action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
-action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
-action (Ud:m) Snat = error "TODO: action.Snat"
-action (Ud:m) (Sid t a b) = error "TODO: action.Sid"
-action (Ud:m) (Stype _) = error "TODO: action.Stype"
-action (Ld:m) (Sidp x) = action m x
-action (Rd:m) (Sidp x) = action m x
-action (Ld:m) (Ne ((l,_):t) _) = action m (Ne t l)
-action (Ld:m) (Ne [] _) = error "action.Ld.Ne"
-action (Rd:m) (Ne ((_,r):t) _) = action m (Ne t r)
-action (Rd:m) (Ne [] _) = error "action.Rd.Ne"
-action (Ud:m) (Ne t e) = action m $ Ne ((e,e):t) (App Idp e)
-action (Ud:m) v = action m (Sidp v)
-action _ Szero = error "action.Szero"
-action _ (Ssuc _) = error "action.Ssuc"
-action _ (Spi _ _ _ _) = error "action.Spi"
-action _ (Ssigma _ _ _ _) = error "action.Ssigma"
-action _ Snat = error "action.Snat"
-action _ (Sid _ _ _) = error "action.Sid"
-action _ (Stype _) = error "action.Stype"
+action :: [D] -> Term -> Term
+action [] e = e
+action (Ud:a) e = action a $ App Pmap (App Idp e)
+action (_:a) (App Pmap (App Idp e)) = action a e
+action _ _ = error "Value.action"
+
+-- TODO: remove this
+sid :: Value -> Value
+sid a = Sid a (error "sid.left") (error "sid.right")
 
 liftTerm :: Term -> Value -> Value
-liftTerm e (Spi x _ a _) = Slam x (freeVars e) $ \k m v ->
-    let Ne t e' = action m (Ne [] e)
-        v' = reify v a
-    in Ne (map (\(x,y) -> (App x v', App y v')) t) (App e' v')
-liftTerm e (Sid (Spi x _ a _) _ _) = Slam x (freeVars e) $ \k m v ->
-    let Ne t e' = action m (Ne [] e)
-        v' = reify v $ Sid a (error "liftTerm.left") (error "lifTerm.right")
-    in Ne (map (\(x,y) -> (App x v', App y v')) t) (App e' v')
+liftTerm e (Spi x _ a b) = Slam x (freeVars e) $ \k m v ->
+    liftTerm (App (action m e) $ reify v a) (b v)
+liftTerm e (Sid (Spi x _ a b) f g) = Slam x (freeVars e) $ \k m v ->
+    liftTerm (App (action m $ App Pmap e) (reify v $ sid a)) $ sid (b v)
 liftTerm e _ = Ne [] e
 
 reifyFV :: ValueFV -> Value -> Term
@@ -119,6 +99,10 @@ reifyFV (Slam x _ f, fv) (Spi _ _ a b) =
     let x' = freshName x fv
         v = svar x' a
     in Lam [x'] $ reifyFV (f 0 [] v, x':fv) (b v)
+reifyFV (Slam x _ h, fv) (Sid t@(Spi _ _ a b) f g) =
+    let x' = freshName x fv
+        v = svar x' (sid a)
+    in App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] v, x':fv) (b v)
 reifyFV (Slam _ _ _, _) _ = error "reify.Slam"
 reifyFV (Szero,_) Snat = NatConst 0
 reifyFV (Szero,_) _ = error "reify.Szero"

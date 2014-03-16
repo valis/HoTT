@@ -35,6 +35,15 @@ exprToVars = reverse . go
     go (E.App a (E.Var (E.Arg (E.PIdent (_,x))))) = x : go a
     go _ = error "exprToVars"
 
+updateCtxVar :: Ctx -> [Def] -> Ctx
+updateCtxVar ctx [] = ctx
+updateCtxVar ctx (Def name Nothing expr : ds) =
+    let t = typeOfTerm ctx expr
+    in updateCtxVar (M.insert name (svar name t, t) ctx) ds
+updateCtxVar ctx (Def name (Just (ty,args)) expr : ds) =
+    let t = eval 0 (ctxToCtxV ctx) ty
+    in updateCtxVar (M.insert name (svar name t, t) ctx) ds
+
 updateCtx :: Ctx -> [Def] -> Ctx
 updateCtx ctx [] = ctx
 updateCtx ctx (Def name Nothing expr : ds) =
@@ -58,7 +67,7 @@ rawExprToTerm :: Ctx -> E.Expr -> Maybe Value -> Term
 rawExprToTerm ctx e (Just (Ne _ (Var "_"))) = rawExprToTerm ctx e Nothing
 rawExprToTerm ctx (E.Let defs expr) ty =
     let defs' = rawDefsToTerm ctx defs
-    in Let defs' $ rawExprToTerm (updateCtx ctx defs') expr ty
+    in Let defs' $ rawExprToTerm (updateCtxVar ctx defs') expr ty
 rawExprToTerm ctx (E.Lam _ [] expr) ty = rawExprToTerm ctx expr ty
 rawExprToTerm ctx (E.Lam i (arg:args) expr) (Just (Spi _ fv t s)) =
     let (v,expr') = R.renameExpr fv (R.unBinder arg) (E.Lam i args expr)
@@ -77,20 +86,20 @@ rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
         t1 = typeOfTerm ctx e1'
     in Id (reify t1 $ Stype maxBound) e1' $ rawExprToTerm ctx e2 (Just t1)
-rawExprToTerm ctx (E.Ext _) _ = Ext
-rawExprToTerm ctx (E.App e1 e) _ | E.Ext _ <- dropParens e1 = App Ext (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.Pmap _) _ = Pmap
+rawExprToTerm ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = App Pmap (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1' e2) _
     | E.App e3 e4 <- dropParens e1'
-    , E.Ext _ <- dropParens e3
+    , E.Pmap _ <- dropParens e3
     , E.App e5 e1 <- dropParens e4
     , E.Idp _ <- dropParens e5 =
         let e2' = rawExprToTerm ctx e2 Nothing
         in case typeOfTerm ctx e2' of
             Sid t _ _ -> let e' = rawExprToTerm ctx e1 $ Just $ t `sarr` svar "_" (Stype maxBound)
-                         in App (App Ext (App Idp e')) e2'
+                         in App (App Pmap (App Idp e')) e2'
             _ -> error "rawExprToTerm.App.App.Idp"
-rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Ext _ <- dropParens e3 =
-    App (App Ext (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
+rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- dropParens e3 =
+    App (App Pmap (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Trans _ <- dropParens e1 = App Trans (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e2) _ =
@@ -99,6 +108,12 @@ rawExprToTerm ctx (E.App e1 e2) _ =
         Spi _ _ t2 _ -> App e1' $ rawExprToTerm ctx e2 (Just t2)
         Sid _ _ _ -> App e1' (rawExprToTerm ctx e2 Nothing)
         _ -> error "rawExprToTerm.App"
+rawExprToTerm ctx (E.Ext _ t e) _ =
+    let a = rawExprToTerm ctx t Nothing
+        a' = eval 0 (ctxToCtxV ctx) a
+        (x,t1,t2,t3) = typeOfLamId ctx e a'
+        r t = Pi [([x],a)] $ reify t (Stype maxBound)
+    in Ext (Id (r t1) (r t2) (r t3)) $ rawExprToTerm ctx e $ Just $ a' `sarr` svar "_" (Stype maxBound)
 rawExprToTerm _ (E.Var a) _ = Var (R.unArg a)
 rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
@@ -108,6 +123,22 @@ rawExprToTerm _ (E.Trans _) _ = Trans
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
+
+typeOfLamId :: Ctx -> E.Expr -> Value -> (String,Value,Value,Value)
+typeOfLamId ctx (E.Paren _ e) a = typeOfLamId ctx e a
+typeOfLamId ctx (E.Let defs e) a = typeOfLamId (updateCtx ctx $ rawDefsToTerm ctx defs) e a
+typeOfLamId ctx (E.Lam _ [] e) a = typeOfLamId ctx e a
+typeOfLamId ctx (E.Lam i (x:xs) e) a =
+    case typeOfTerm (M.insert (R.unBinder x) (svar (R.unBinder x) a,a) ctx) $ rawExprToTerm ctx (E.Lam i xs e) Nothing of
+        Sid t1 t2 t3 -> (R.unBinder x,t1,t2,t3)
+        _ -> error "typeOfLamId.Lam"
+typeOfLamId ctx e _ = case typeOfTerm ctx (rawExprToTerm ctx e Nothing) of
+    Spi x fv a b ->
+        let x' = freshName x fv
+        in case b (svar x' a) of
+            Sid t1 t2 t3 -> (x',t1,t2,t3)
+            _ -> error "typeOfLamId.Sid"
+    _ -> error "typeOfLamId.Spi"
 
 typeOfTerm :: Ctx -> Term -> Value
 typeOfTerm ctx (Let defs e) = typeOfTerm (updateCtx ctx defs) e
@@ -133,15 +164,15 @@ typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) =
     let v = eval 0 (ctxToCtxV ctx) e
     in Sid (typeOfTerm ctx e) v v
-typeOfTerm ctx (App (App Ext (App Idp e1)) e2) =
+typeOfTerm ctx (App (App Pmap (App Idp e1)) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case typeOfTerm ctx e2 of
         Sid t a b -> Sid (typeOfLam ctx e1 t) (app 0 e' a) (app 0 e' b)
-        _ -> error "typeOfTerm.App.App.Ext.Idp"
-typeOfTerm ctx (App (App Ext e1) e2) =
+        _ -> error "typeOfTerm.App.App.Pmap.Idp"
+typeOfTerm ctx (App (App Pmap e1) e2) =
     case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
-        (Sid (Spi _ _ _ b) f g, Sid _ x y) -> Sid (b $ error "typeOfTerm.App.App.Ext.Var") (app 0 f x) (app 0 g y)
-        _ -> error "typeOfTerm.App.App.Ext"
+        (Sid (Spi _ _ _ b) f g, Sid _ x y) -> Sid (b $ error "typeOfTerm.App.App.Pmap.Var") (app 0 f x) (app 0 g y)
+        _ -> error "typeOfTerm.App.App.Pmap"
 typeOfTerm ctx (App Trans e) = case typeOfTerm ctx e of
     Sid _ x y -> x `sarr` y
     _ -> error "typeOfTerm.App.Trans"
@@ -149,6 +180,7 @@ typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
+typeOfTerm ctx (Ext t e) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm ctx (Var v) = case M.lookup v ctx of
     Nothing -> error $ "typeOfTerm.Var: " ++ v
     Just (_,t) -> t
@@ -160,11 +192,12 @@ typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
-typeOfTerm _ Ext = error "typeOfTerm.Ext"
+typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
 typeOfTerm _ Trans = error "typeOfTerm.Trans"
 
 typeOfLam :: Ctx -> Term -> Value -> Value
+typeOfLam ctx (Let defs e) a = typeOfLam (updateCtx ctx defs) e a
 typeOfLam ctx (Lam [] e) t = typeOfLam ctx e t
 typeOfLam ctx (Lam (a:as) e) t = typeOfTerm (M.insert a (svar a t, t) ctx) (Lam as e)
 typeOfLam ctx e _ = case typeOfTerm ctx e of

@@ -59,6 +59,11 @@ transPExt x = case x of
   PExt str  -> failure x
 
 
+transPpmap :: Ppmap -> Result
+transPpmap x = case x of
+  Ppmap str  -> failure x
+
+
 transPTrans :: PTrans -> Result
 transPTrans x = case x of
   PTrans str  -> failure x
@@ -95,7 +100,8 @@ transExpr x = case x of
   Suc psuc  -> failure x
   Rec pr  -> failure x
   Idp pidp  -> failure x
-  Ext pext  -> failure x
+  Ext pext expr1 expr2  -> failure x
+  Pmap ppmap  -> failure x
   Trans ptrans  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x

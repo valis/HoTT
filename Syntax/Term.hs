@@ -19,12 +19,13 @@ data Term
     | Sigma [([String],Term)] Term
     | Id Term Term Term
     | App Term Term
+    | Ext Term Term
     | Var String
     | Nat
     | Suc
     | Rec
     | Idp
-    | Ext
+    | Pmap
     | Trans
     | NatConst Integer
     | Universe Level
@@ -39,13 +40,14 @@ freeVars (Sigma [] e) = freeVars e
 freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ vars)
 freeVars (Id t e1 e2) = freeVars t `union` freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Ext e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var "_") = []
 freeVars (Var v) = [v]
 freeVars Nat = []
 freeVars Suc = []
 freeVars Rec = []
 freeVars Idp = []
-freeVars Ext = []
+freeVars Pmap = []
 freeVars Trans = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
@@ -78,6 +80,7 @@ instance Eq Term where
             cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Sigma ts1 e1) (Sigma ts2 e2)
         cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
             (Nothing, Nothing) -> v1 == v2
             (Just c1, Just c2) -> c1 == c2
@@ -86,7 +89,7 @@ instance Eq Term where
         cmp _ _ _ Suc Suc = True
         cmp _ _ _ Rec Rec = True
         cmp _ _ _ Idp Idp = True
-        cmp _ _ _ Ext Ext = True
+        cmp _ _ _ Pmap Pmap = True
         cmp _ _ _ Trans Trans = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
@@ -137,7 +140,7 @@ ppTerm = go False
     go _ _ Suc = text "suc"
     go _ _ Rec = text "R"
     go _ _ Idp = text "idp"
-    go _ _ Ext = text "ext"
+    go _ _ Pmap = text "pmap"
     go _ _ Trans = text "trans"
     go _ _ (Universe u) = text (show u)
     go True l e = parens (go False l e)
@@ -152,6 +155,9 @@ ppTerm = go False
     go False l (Id _ e1 e2) =
         let l' = fmap pred l
         in ppId l' e1 <+> equals <+> ppId l' e2
+    go False l (Ext e1 e2) =
+        let l' = fmap pred l
+        in text "ext" <+> go True l' e1 <+> go True l' e2
     go False l (App e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2
@@ -198,12 +204,13 @@ simplify (Sigma ((v:vs,t):ts) e)
     | otherwise = Sigma [([], simplify t)] $ simplify (Sigma ((vs,t):ts) e)
 simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)
+simplify (Ext e1 e2) = Ext (simplify e1) (simplify e2)
 simplify e@(Var _) = e
 simplify Nat = Nat
 simplify Suc = Suc
 simplify Rec = Rec
 simplify Idp = Idp
-simplify Ext = Ext
+simplify Pmap = Pmap
 simplify Trans = Trans
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e

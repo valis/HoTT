@@ -1,6 +1,3 @@
-pmap : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
-pmap _ _ f _ _ = ext (idp f)
-
 -- deptrans : (A : Type) (B : A -> Type0) (a a' : A) -> a = a' -> B a -> B a'
 -- deptrans A B a a' p = trans (pmap A Type0 B a a' p)
 

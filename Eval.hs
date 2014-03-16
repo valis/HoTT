@@ -12,7 +12,8 @@ import Value
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
-eval _ _ Ext = Slam "p" [] $ \_ _ -> id
+eval _ _ Pmap = Slam "p" [] $ \_ _ -> id
+eval n ctx (Ext _ e) = Slam "p" (freeVars e) $ \k m v -> undefined (action [Ld] v) -- TODO: define it
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -88,3 +89,27 @@ idp = action [Ud]
 
 trans :: Integer -> Value -> Value -> Value
 trans _ _ _ = error "trans"
+
+action :: GlobMap -> Value -> Value
+action [] v = v
+action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m)) -- or m ++ n ??
+action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
+action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
+action (Ud:m) Snat = error "TODO: action.Snat"
+action (Ud:m) (Sid t a b) = error "TODO: action.Sid"
+action (Ud:m) (Stype _) = error "TODO: action.Stype"
+action (Ld:m) (Sidp x) = action m x
+action (Rd:m) (Sidp x) = action m x
+action (Ld:m) (Ne ((l,_):t) _) = action m (Ne t l)
+action (Ld:m) (Ne [] _) = error "action.Ld.Ne"
+action (Rd:m) (Ne ((_,r):t) _) = action m (Ne t r)
+action (Rd:m) (Ne [] _) = error "action.Rd.Ne"
+action (Ud:m) (Ne t e) = action m $ Ne ((e,e):t) (App Idp e)
+action (Ud:m) v = action m (Sidp v)
+action _ Szero = error "action.Szero"
+action _ (Ssuc _) = error "action.Ssuc"
+action _ (Spi _ _ _ _) = error "action.Spi"
+action _ (Ssigma _ _ _ _) = error "action.Ssigma"
+action _ Snat = error "action.Snat"
+action _ (Sid _ _ _) = error "action.Sid"
+action _ (Stype _) = error "action.Stype"
