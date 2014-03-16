@@ -1,0 +1,21 @@
+extTest1 : (A B : Type) (f : A -> B) -> f = f
+extTest1 A B f = idp f
+
+extTest2 : (A B : Type) (f : A -> B) -> f = f
+extTest2 A B f = ext A (\a -> idp (f a))
+
+extTest3 : (A B : Type) (f : A -> B) -> idp f = ext A (\x -> idp (f x))
+extTest3 A B f = idp (idp f)
+
+extTest4 : (A B : Type) (f : A -> B) -> idp f = idp f
+extTest4 A B f = pmap (idp (\h -> ext A h)) (ext A (\x -> idp (idp (f x))))
+
+extTest5 : (A B : Type) (f : A -> B) -> ((a : A) -> f a = f a) -> f = f
+extTest5 A B f h = ext A h
+
+extTest6 : (A B : Type) (f : A -> B) -> idp f = idp f
+extTest6 A B f = pmap (ext ((a : A) -> f a = f a) (\h -> idp (ext A h))) (ext A (\x -> idp (idp (f x))))
+
+-- ext A : ((a : A) -> f a = g a) -> f = g
+
+-- pmap (ext A) (ext A (\x -> idp (idp (f x)))) : ext A (\x -> idp (f x)) = ext A (\x -> idp (f x))

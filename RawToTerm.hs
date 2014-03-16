@@ -85,7 +85,7 @@ rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (raw
 rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
         t1 = typeOfTerm ctx e1'
-    in Id (reify t1 $ Stype maxBound) e1' $ rawExprToTerm ctx e2 (Just t1)
+    in Id (reifyType t1) e1' $ rawExprToTerm ctx e2 (Just t1)
 rawExprToTerm ctx (E.Pmap _) _ = Pmap
 rawExprToTerm ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = App Pmap (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1' e2) _
@@ -112,8 +112,9 @@ rawExprToTerm ctx (E.Ext _ t e) _ =
     let a = rawExprToTerm ctx t Nothing
         a' = eval 0 (ctxToCtxV ctx) a
         (x,t1,t2,t3) = typeOfLamId ctx e a'
-        r t = Pi [([x],a)] $ reify t (Stype maxBound)
-    in Ext (Id (r t1) (r t2) (r t3)) $ rawExprToTerm ctx e $ Just $ a' `sarr` svar "_" (Stype maxBound)
+        t1' = Pi [([x],a)] $ reifyType t1
+        r t = Lam [x] $ reify t (eval 0 (ctxToCtxV ctx) t1')
+    in Ext (Id t1' (r t2) (r t3)) $ rawExprToTerm ctx e $ Just $ a' `sarr` svar "_" (Stype maxBound)
 rawExprToTerm _ (E.Var a) _ = Var (R.unArg a)
 rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc

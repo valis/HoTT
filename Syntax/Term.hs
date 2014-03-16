@@ -30,6 +30,8 @@ data Term
     | NatConst Integer
     | Universe Level
 
+infixl 5 `App`
+
 freeVars :: Term -> [String]
 freeVars (Let defs e) = freeVars e \\ map (\(Def name _ _) -> name) defs
 freeVars (Lam [] e) = freeVars e

@@ -1,9 +1,6 @@
 funTest1 : (A B : Type) -> (A -> B) -> A -> B
 funTest1 _ _ f a = f a
 
-funTest2 : (A B : Type) (f : A -> B) -> f = f
-funTest2 A B f = idp f
-
 typeTest1 = 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
 
 test1 : 0 = 1 -> (y' : Nat -> Nat) -> y' 0 = y' 1

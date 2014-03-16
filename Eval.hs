@@ -9,11 +9,16 @@ import Data.List
 import Syntax.Term
 import Value
 
+-- ext (f = g) (e : (x : A) -> f x = g x) : f = g
+
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
-eval _ _ Pmap = Slam "p" [] $ \_ _ -> id
-eval n ctx (Ext _ e) = Slam "p" (freeVars e) $ \k m v -> undefined (action [Ld] v) -- TODO: define it
+eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
+eval n ctx (Ext (Id _ f g) e) = Slam "p" (freeVars e) $ \k m v ->
+    let ctx' = M.map (action m) ctx
+    in comp k (app k (eval k ctx' e) $ action [Ld] v) (pmap k (idp $ eval k ctx' g) v)
+eval _ _ (Ext _ _) = error "eval.Ext"
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -64,19 +69,16 @@ eval _ _ (Id _ _ _) = error "TODO: eval.Id > 0"
 eval _ _ (Pi _ _) = error "TODO: eval.Pi > 0"
 eval _ _ (Sigma _ _) = error "TODO: eval.Sigma > 0"
 
-infixl 5 `aApp`
-aApp = App
-
 rec :: Integer -> ValueFV -> ValueFV -> ValueFV -> Value -> Value
 rec 0 p z s = go
   where
     go Szero = fst z
     go (Ssuc x) = app 0 (app 0 (fst s) x) (go x)
     go t@(Ne [] e) =
-        let r = Rec `aApp` reifyFV p (Snat `sarr` Stype maxBound)
-                    `aApp` reifyFV z (app 0 (fst p) Szero)
-                    `aApp` reifyFV s (Spi "x" (snd p) Snat $ \x -> app 0 (fst p) x `sarr` app 0 (fst p) (Ssuc x))
-                    `aApp` e
+        let r = Rec `App` reifyFV p (Snat `sarr` Stype maxBound)
+                    `App` reifyFV z (app 0 (fst p) Szero)
+                    `App` reifyFV s (Spi "x" (snd p) Snat $ \x -> app 0 (fst p) x `sarr` app 0 (fst p) (Ssuc x))
+                    `App` e
         in liftTerm r (app 0 (fst p) t)
     go _ = error "rec"
 rec _ _ _ _ = error "TODO: rec > 0"
@@ -84,32 +86,18 @@ rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\z -> Rec P z s 0) p = p
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
 
-idp :: Value -> Value
-idp = action [Ud]
-
 trans :: Integer -> Value -> Value -> Value
-trans _ _ _ = error "trans"
+trans _ _ _ = error "TODO: trans"
 
-action :: GlobMap -> Value -> Value
-action [] v = v
-action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m)) -- or m ++ n ??
-action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
-action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
-action (Ud:m) Snat = error "TODO: action.Snat"
-action (Ud:m) (Sid t a b) = error "TODO: action.Sid"
-action (Ud:m) (Stype _) = error "TODO: action.Stype"
-action (Ld:m) (Sidp x) = action m x
-action (Rd:m) (Sidp x) = action m x
-action (Ld:m) (Ne ((l,_):t) _) = action m (Ne t l)
-action (Ld:m) (Ne [] _) = error "action.Ld.Ne"
-action (Rd:m) (Ne ((_,r):t) _) = action m (Ne t r)
-action (Rd:m) (Ne [] _) = error "action.Rd.Ne"
-action (Ud:m) (Ne t e) = action m $ Ne ((e,e):t) (App Idp e)
-action (Ud:m) v = action m (Sidp v)
-action _ Szero = error "action.Szero"
-action _ (Ssuc _) = error "action.Ssuc"
-action _ (Spi _ _ _ _) = error "action.Spi"
-action _ (Ssigma _ _ _ _) = error "action.Ssigma"
-action _ Snat = error "action.Snat"
-action _ (Sid _ _ _) = error "action.Sid"
-action _ (Stype _) = error "action.Stype"
+comp :: Integer -> Value -> Value -> Value
+comp 0 (Sidp _) x = x
+comp 0 x (Sidp _) = x
+comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
+comp 0 (Ne _ (App Idp _)) x = x
+comp 0 x (Ne _ (App Idp _)) = x
+comp 1 (Ne _ (App Idp (App Idp _))) x = x
+comp 1 x (Ne _ (App Idp (App Idp _))) = x
+comp n _ _ = error $ "TODO: comp " ++ show n
+
+pmap :: Integer -> Value -> Value -> Value
+pmap n = app (n + 1)
