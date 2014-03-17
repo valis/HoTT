@@ -62,12 +62,16 @@ run fn (Ok (R.Defs defs)) =
             $ fmap processDefs (preprocessDefs defs)
     in (intercalate "\n\n" $ map (erenderWithFilename fn) (concat errs), intercalate "\n\n" $ map (P.render . ppDef) res)
 
-runFile :: String -> IO ()
-runFile input = do
+runFile :: Bool -> String -> IO ()
+runFile b input = do
     cnt <- readFile input
     let (errs,res) = run input (parser cnt)
     when (not $ null errs) (hPutStrLn stderr errs)
-    when (not $ null res) $ writeFile (outputFilename input) (res ++ "\n")
+    when (b && not (null res)) $ writeFile (outputFilename input) (res ++ "\n")
 
 main :: IO ()
-main = getArgs >>= mapM_ runFile
+main = do
+    args <- getArgs
+    if elem "-t" args
+        then mapM_ (runFile False) (delete "-t" args)
+        else mapM_ (runFile True) args

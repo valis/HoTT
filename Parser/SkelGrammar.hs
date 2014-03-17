@@ -91,6 +91,7 @@ transExpr x = case x of
   Lam plam binders expr  -> failure x
   Arr expr1 expr2  -> failure x
   Pi typedvars expr  -> failure x
+  Typed expr1 expr2  -> failure x
   Prod expr1 expr2  -> failure x
   Sigma typedvars expr  -> failure x
   Id expr1 expr2  -> failure x
@@ -100,7 +101,7 @@ transExpr x = case x of
   Suc psuc  -> failure x
   Rec pr  -> failure x
   Idp pidp  -> failure x
-  Ext pext expr1 expr2  -> failure x
+  Ext pext  -> failure x
   Pmap ppmap  -> failure x
   Trans ptrans  -> failure x
   NatConst pint  -> failure x

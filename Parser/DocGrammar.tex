@@ -92,7 +92,7 @@ The symbols used in Grammar are the following: \\
 \begin{tabular}{lll}
 {\symb{{$=$}}} &{\symb{:}} &{\symb{;}} \\
 {\symb{\{}} &{\symb{\}}} &{\symb{{$-$}{$>$}}} \\
-{\symb{*}} &{\symb{)}} & \\
+{\symb{::}} &{\symb{*}} &{\symb{)}} \\
 \end{tabular}\\
 
 \subsection*{Comments}
@@ -128,6 +128,7 @@ All other symbols are terminals.\\
 \begin{tabular}{lll}
 {\nonterminal{Expr1}} & {\arrow}  &{\nonterminal{Expr3}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr1}}  \\
  & {\delimit}  &{\nonterminal{ListTypedVar}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr1}}  \\
+ & {\delimit}  &{\nonterminal{Expr4}} {\terminal{::}} {\nonterminal{Expr1}}  \\
  & {\delimit}  &{\nonterminal{Expr2}}  \\
 \end{tabular}\\
 
@@ -153,7 +154,7 @@ All other symbols are terminals.\\
  & {\delimit}  &{\nonterminal{PSuc}}  \\
  & {\delimit}  &{\nonterminal{PR}}  \\
  & {\delimit}  &{\nonterminal{PIdp}}  \\
- & {\delimit}  &{\nonterminal{PExt}} {\nonterminal{Expr5}} {\nonterminal{Expr5}}  \\
+ & {\delimit}  &{\nonterminal{PExt}}  \\
  & {\delimit}  &{\nonterminal{Ppmap}}  \\
  & {\delimit}  &{\nonterminal{PTrans}}  \\
  & {\delimit}  &{\nonterminal{PInt}}  \\

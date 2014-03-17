@@ -74,7 +74,8 @@ The reserved words used in Grammar are the following:
 
 The symbols used in Grammar are the following:
   | = | : | ; | {
-  | } | -> | * | )
+  | } | -> | :: | *
+  | ) |  |  | 
 
 ===Comments===
 Single-line comments begin with --.Multiple-line comments are  enclosed with {- and -}.
@@ -96,6 +97,7 @@ All other symbols are terminals.
   |  |  **|**  | //Expr1// 
   | //Expr1// | -> | //Expr3// ``->`` //Expr1// 
   |  |  **|**  | //[TypedVar]// ``->`` //Expr1// 
+  |  |  **|**  | //Expr4// ``::`` //Expr1// 
   |  |  **|**  | //Expr2// 
   | //Expr2// | -> | //Expr3// ``*`` //Expr2// 
   |  |  **|**  | //[TypedVar]// ``*`` //Expr2// 
@@ -109,7 +111,7 @@ All other symbols are terminals.
   |  |  **|**  | //PSuc// 
   |  |  **|**  | //PR// 
   |  |  **|**  | //PIdp// 
-  |  |  **|**  | //PExt// //Expr5// //Expr5// 
+  |  |  **|**  | //PExt// 
   |  |  **|**  | //Ppmap// 
   |  |  **|**  | //PTrans// 
   |  |  **|**  | //PInt// 

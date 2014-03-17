@@ -5,6 +5,7 @@ module RawToTerm
     ) where
 
 import qualified Data.Map as M
+import Data.List
 
 import Syntax.Common
 import Syntax.Term
@@ -102,44 +103,28 @@ rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- 
     App (App Pmap (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Trans _ <- dropParens e1 = App Trans (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1 e) (Just (Sid (Spi x fv a b) f g)) | E.Ext _ <- dropParens e1 =
+    App Ext $ rawExprToTerm ctx e $ Just $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $
+        \v -> Sid (b v) (app 0 f v) (app 0 g v)
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
         Spi _ _ t2 _ -> App e1' $ rawExprToTerm ctx e2 (Just t2)
         Sid _ _ _ -> App e1' (rawExprToTerm ctx e2 Nothing)
         _ -> error "rawExprToTerm.App"
-rawExprToTerm ctx (E.Ext _ t e) _ =
-    let a = rawExprToTerm ctx t Nothing
-        a' = eval 0 (ctxToCtxV ctx) a
-        (x,t1,t2,t3) = typeOfLamId ctx e a'
-        t1' = Pi [([x],a)] $ reifyType t1
-        r t = Lam [x] $ reify t (eval 0 (ctxToCtxV ctx) t1')
-    in Ext (Id t1' (r t2) (r t3)) $ rawExprToTerm ctx e $ Just $ a' `sarr` svar "_" (Stype maxBound)
 rawExprToTerm _ (E.Var a) _ = Var (R.unArg a)
 rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
 rawExprToTerm _ (E.Rec _) _ = Rec
 rawExprToTerm _ (E.Idp _) _ = Idp
+rawExprToTerm _ (E.Ext _) _ = Ext
 rawExprToTerm _ (E.Trans _) _ = Trans
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
-
-typeOfLamId :: Ctx -> E.Expr -> Value -> (String,Value,Value,Value)
-typeOfLamId ctx (E.Paren _ e) a = typeOfLamId ctx e a
-typeOfLamId ctx (E.Let defs e) a = typeOfLamId (updateCtx ctx $ rawDefsToTerm ctx defs) e a
-typeOfLamId ctx (E.Lam _ [] e) a = typeOfLamId ctx e a
-typeOfLamId ctx (E.Lam i (x:xs) e) a =
-    case typeOfTerm (M.insert (R.unBinder x) (svar (R.unBinder x) a,a) ctx) $ rawExprToTerm ctx (E.Lam i xs e) Nothing of
-        Sid t1 t2 t3 -> (R.unBinder x,t1,t2,t3)
-        _ -> error "typeOfLamId.Lam"
-typeOfLamId ctx e _ = case typeOfTerm ctx (rawExprToTerm ctx e Nothing) of
-    Spi x fv a b ->
-        let x' = freshName x fv
-        in case b (svar x' a) of
-            Sid t1 t2 t3 -> (x',t1,t2,t3)
-            _ -> error "typeOfLamId.Sid"
-    _ -> error "typeOfLamId.Spi"
+rawExprToTerm ctx (E.Typed e1 e2) _ =
+    let e2' = rawExprToTerm ctx e2 $ Just (Stype maxBound)
+    in Typed (rawExprToTerm ctx e1 $ Just $ eval 0 (ctxToCtxV ctx) e2') e2'
 
 typeOfTerm :: Ctx -> Term -> Value
 typeOfTerm ctx (Let defs e) = typeOfTerm (updateCtx ctx defs) e
@@ -181,20 +166,21 @@ typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
-typeOfTerm ctx (Ext t e) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm ctx (Var v) = case M.lookup v ctx of
     Nothing -> error $ "typeOfTerm.Var: " ++ v
     Just (_,t) -> t
 typeOfTerm _ Nat = Stype (Finite 0)
 typeOfTerm _ Suc = Snat `sarr` Snat
+-- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
     let pfv = valueFreeVars p
     in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
--- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
+typeOfTerm ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
+typeOfTerm _ Ext = error "typeOfTerm.Ext"
 typeOfTerm _ Trans = error "typeOfTerm.Trans"
 
 typeOfLam :: Ctx -> Term -> Value -> Value

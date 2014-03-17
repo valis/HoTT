@@ -9,16 +9,16 @@ import Data.List
 import Syntax.Term
 import Value
 
--- ext (f = g) (e : (x : A) -> f x = g x) : f = g
+-- ext : ((x : A) -> f x = g x) -> f = g
 
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
-eval n ctx (Ext (Id _ f g) e) = Slam "p" (freeVars e) $ \k m v ->
-    let ctx' = M.map (action m) ctx
-    in comp k (app k (eval k ctx' e) $ action [Ld] v) (pmap k (idp $ eval k ctx' g) v)
-eval _ _ (Ext _ _) = error "eval.Ext"
+eval n ctx Ext = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
+    let ctx' = M.map (action (n ++ m)) ctx
+        e1 = Slam "x" (valueFreeVars h) $ \k1 m1 v1 -> action [Rd] $ app k1 (action (m ++ m1) h) v1
+    in comp k (app k h $ action [Ld] p) (pmap k (idp e1) p)
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -62,6 +62,7 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
     genConst 0 = Szero
     genConst k = Ssuc $ genConst (k - 1)
 eval 0 ctx (Universe u) = Stype u
+eval n ctx (Typed e _) = eval n ctx e
 
 eval _ _ Nat = error "TODO: eval.Nat > 0"
 eval _ _ (Universe _) = error "TODO: eval.U > 0"
@@ -97,6 +98,8 @@ comp 0 (Ne _ (App Idp _)) x = x
 comp 0 x (Ne _ (App Idp _)) = x
 comp 1 (Ne _ (App Idp (App Idp _))) x = x
 comp 1 x (Ne _ (App Idp (App Idp _))) = x
+comp 1 (Sidp (Sidp _)) x = x
+comp 1 x (Sidp (Sidp _)) = x
 comp n _ _ = error $ "TODO: comp " ++ show n
 
 pmap :: Integer -> Value -> Value -> Value

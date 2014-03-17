@@ -96,6 +96,8 @@ liftTerm e (Spi x _ a b) = Slam x (freeVars e) $ \k m v ->
     liftTerm (appTerm (actionTerm m e) $ reify v a) (b v)
 liftTerm e (Sid (Spi x _ a b) f g) = Slam x (freeVars e) $ \k m v ->
     liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid a)) $ sid (b v)
+liftTerm e (Sid (Sid (Spi x _ a b) _ _) _ _) = Slam x (freeVars e) $ \k m v ->
+    liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid $ sid a)) $ sid $ sid (b v)
 liftTerm e _ = Ne [] e
 
 idp :: Value -> Value
@@ -103,7 +105,7 @@ idp = action [Ud]
 
 action :: GlobMap -> Value -> Value
 action [] v = v
-action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m)) -- or n ++ m ??
+action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
 action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
 action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
 action (Ud:m) Snat = error "TODO: action.Snat"
@@ -133,14 +135,12 @@ reifyFV (Slam x _ f, fv) (Spi _ _ a b) =
 reifyFV (Slam _ _ h, fv) (Sid t@(Spi x _ a b) f g) =
     let x' = freshName x fv
         v = svar x' a
-    in Ext (reifyType a) $ Lam [x'] $ reifyFV (h 0 [] (idp v), x':fv) $ sid (b v)
-reifyFV (Slam _ _ h, fv) (Sid (Sid (Spi x _ a b) _ _) _ _) =
+    in App Ext $ Lam [x'] $ reifyFV (h 0 [] (idp v), x':fv) $ sid (b v)
+reifyFV (Slam _ _ h, fv) (Sid (Sid (Spi x _ a b) _ _) f g) =
     let x' = freshName x fv
         v = svar x' a
-        y = freshName x (valueFreeVars a)
-        a' = reifyType a
-    in App (App Pmap $ App Idp $ Lam [y] $ Ext a' $ Var y) $
-        Ext a' $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
+    in App (App Pmap $ App Idp Ext) $
+        App Ext $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
 reifyFV (Slam _ _ _, _) _ = error "reify.Slam"
 reifyFV (Szero,_) Snat = NatConst 0
 reifyFV (Szero,_) _ = error "reify.Szero"

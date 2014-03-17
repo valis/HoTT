@@ -47,7 +47,7 @@ dropParens :: Expr -> Expr
 dropParens (Paren _ e) = dropParens e
 dropParens e = e
 
-data H = P Expr Value | E Value | T Value | N
+data H = P Expr Value | T Value | N
 
 typeOf :: Ctx -> Expr -> EDocM Value
 typeOf ctx e = typeOfH ctx e N
@@ -62,12 +62,12 @@ typeOfH ctx (Let defs e) h = do
     typeOfH ctx' e h
 typeOfH ctx (Paren _ e) h = typeOfH ctx e h
 typeOfH ctx (Lam _ [] e) h = typeOfH ctx e h
-typeOfH ctx (Lam (PLam ((l,c),_)) (x:xs) e) (P _ (Sid ty _ _)) = do
+typeOfH ctx (Lam (PLam (lc,_)) (x:xs) e) (P _ (Sid ty _ _)) = do
     let p = if null xs then getPos e else binderGetPos (head xs)
-        x' = freshName (unBinder x) (M.keys ctx)
-    s <- typeOf (M.insert x' (svar x' ty,ty) ctx) $ Lam (PLam (p,"\\")) xs e
+        (x',e') = renameExpr (freeVars $ Lam (PLam (p,"\\")) xs e) (unBinder x) $ Lam (PLam (p,"\\")) xs e
+    s <- typeOf (M.insert x' (svar x' ty,ty) ctx) e'
     if elem x' $ T.freeVars (reifyType s)
-        then Left [emsgLC l c "Cannot infer type of lambda expression" enull]
+        then inferErrorMsg lc "lambda expression"
         else Right s
 typeOfH ctx e (P e2 (Sid act _ _)) = do
     t <- typeOf ctx e
@@ -80,25 +80,6 @@ typeOfH ctx e (P e2 (Sid act _ _)) = do
                      (l,c) = getPos e2
                  in Left [emsgLC l c "" $ em (etext "Expected type: Id") exp $$
                     em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
-        _ -> expTypeBut "pi" e t
--- ext a (e : (x : a) -> f x = g x) : f = g
-typeOfH ctx (Lam (PLam (lc,_)) (x:xs) e) (E a) = do
-    let p = if null xs then getPos e else binderGetPos (head xs)
-        x' = unBinder x
-        r v = typeOf (M.insert x' (v,a) ctx) (Lam (PLam (p,"\\")) xs e)
-        fromRight (Right r) = r
-        fromRight (Left _) = error "typeOfH.fromRight"
-    t <- r (svar x' a)
-    typeOfExt lc x' x' (fromRight . r) a t
-typeOfH ctx e (E a) = do
-    t <- typeOf ctx e
-    case t of
-        Spi x fv a' b' -> if cmpTypes a a'
-            then let x' = freshName x fv
-                 in typeOfExt (getPos e) x x' b' a $ b' (svar x' a')
-            else let (l,c) = getPos e
-                 in Left [emsgLC l c "" $ etext "Expected type of the form (x :" <+> eprettyType a <> etext ") -> _" $$
-                          etext "But term" <+> epretty e <+> etext "has type" <+> eprettyType t]
         _ -> expTypeBut "pi" e t
 typeOfH ctx (Lam _ (x:xs) e) (T r@(Spi z fv a b)) =
     let p = if null xs then getPos e else binderGetPos (head xs)
@@ -142,12 +123,8 @@ typeOfH ctx ea@(App e1 e) (T ty@(Spi v fv a'@(Sid a x y) b')) | Pmap (Ppmap ((l,
             then cmpTypesErr ty (a' `sarr` Sid b1 (app 0 f x) (app 0 g y)) ea >> return ty
             else Left [emsgLC l c "" $ expType (-1) ty $$ etext "But term" <+> epretty ea <+>
                  etext "has type of the form Id" <+> epretty (reifyType a1) <+> etext "_ _ -> Id _ _ _"]
-        _ -> ext1ErrorMsg (l,c) ty
-typeOfH ctx (App e1 e) (T ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = ext1ErrorMsg lc ty
-typeOfH ctx e (T exp) = do
-    act <- typeOf ctx e
-    cmpTypesErr exp act e
-    return exp
+        _ -> pmapErrorMsg (l,c) ty
+typeOfH ctx (App e1 e) (T ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = pmapErrorMsg lc ty
 typeOfH _ (Lam (PLam (lc,_)) _ _) _ = inferErrorMsg lc "the argument"
 typeOfH _ (Idp (PIdp (lc,_))) _ = inferErrorMsg lc "idp"
 typeOfH _ (Trans (PTrans (lc,_))) _ = inferErrorMsg lc "trans"
@@ -156,6 +133,21 @@ typeOfH ctx (App e1 e) _ | Idp _ <- dropParens e1 = do
     let v = evalRaw ctx e (Just t)
     Right (Sid t v v)
 typeOfH _ (Pmap (Ppmap (lc,_))) _ = inferErrorMsg lc "ext"
+typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case isArr x' fv' s t of
+    Just (Sid (Spi x fv a b) f g) | cmpTypes a a' ->
+        let v = svar (freshName x $ fv `union` fv' `union` valueFreeVars f `union` valueFreeVars g) a
+        in if cmpTypes (b' v) (Sid (b v) (app 0 f v) (app 0 g v)) then Right ty else extErrorMsg lc ty
+    _ -> extErrorMsg lc ty
+typeOfH ctx (Ext (PExt (lc,_))) (T ty) = extErrorMsg lc ty
+typeOfH ctx (Ext (PExt (lc,_))) _ = inferErrorMsg lc "ext"
+typeOfH ctx (App e1 e) (T (Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = typeOfH ctx e $ T
+    $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+typeOfH ctx ea@(App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
+    $$ etext "But term" <+> epretty ea <+> etext "has type of the form Id ((x : A) -> B x) _ _"]
+typeOfH ctx e (T exp) = do
+    act <- typeOf ctx e
+    cmpTypesErr exp act e
+    return exp
 typeOfH _ (App e1 _) _ | Pmap (Ppmap (lc,_)) <- dropParens e1 = inferErrorMsg lc "ext"
 -- pmap (idp e1) e2
 typeOfH ctx (App e1' e2) _
@@ -189,9 +181,6 @@ typeOfH ctx (App e1 e) _ | Trans _ <- dropParens e1 = do
     case t of
         Sid (Stype _) x y -> Right (x `sarr` y)
         _ -> expTypeBut "Id Type _ _" e t
-typeOfH ctx (Ext _ a e) _ = do
-    typeOfH ctx a $ T (Stype maxBound)
-    typeOfH ctx e $ E $ evalRaw ctx a $ Just (Stype maxBound)
 typeOfH ctx (Arr e1 e2) _ =
     liftErr2 (maxType e1 e2) (typeOf ctx e1) (typeOf ctx e2)
 typeOfH ctx (Prod e1 e2) _ = typeOf ctx (Arr e1 e2)
@@ -220,21 +209,9 @@ typeOfH _ (NatConst _) _ = Right Snat
 typeOfH _ (Rec _) _ = Right $ Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
     let pfv = valueFreeVars p
     in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
-
-typeOfExt :: (Int,Int) -> String -> String -> (Value -> Value) -> Value -> Value -> EDocM Value
-typeOfExt _ x x' r a (Sid t1 t2 t3) =
-    let get1 (Sid r _ _) = r
-        get1 _ = error "typeOfExt.get1"
-        get2 (Sid _ r _) = r
-        get2 _ = error "typeOfExt.get2"
-        get3 (Sid _ _ r) = r
-        get3 _ = error "typeOfExt.get3"
-        lamErr f 0 _ = f . r
-        lamErr _ _ _ = error "typeOfExt.Lam" -- Hmm
-    in Right $ Sid (Spi x (delete x' $ valueFreeVars t1) a $ get1 . r)
-                   (Slam x (delete x' $ valueFreeVars t2) $ lamErr get2)
-                   (Slam x (delete x' $ valueFreeVars t3) $ lamErr get3)
-typeOfExt (l,c) _ _ _ _ _ = Left [emsgLC l c "Expected type of the form (x : _) -> _ = _" enull]
+typeOfH ctx (Typed e t) _ = do
+    typeOfH ctx t $ T (Stype maxBound)
+    typeOfH ctx e $ T $ evalRaw ctx t $ Just (Stype maxBound)
 
 isArr :: String -> [String] -> Value -> (Value -> Value) -> Maybe Value
 isArr x fv t f =
@@ -266,12 +243,12 @@ transErrorMsg :: (Int,Int) -> Value -> EDocM a
 transErrorMsg (l,c) ty =
     Left [emsgLC l c "" $ expType 1 ty $$ etext "But trans has type of the form Id Type A B -> A -> B"]
 
-ext1ErrorMsg :: (Int,Int) -> Value -> EDocM a
-ext1ErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext "But ext _ has type of the form x = y -> _ x = _ y"]
+pmapErrorMsg :: (Int,Int) -> Value -> EDocM a
+pmapErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext "But ext _ has type of the form x = y -> _ x = _ y"]
 
 extErrorMsg :: (Int,Int) -> Value -> EDocM a
-extErrorMsg (l,c) ty =
-    Left [emsgLC l c "" $ expType (-1) ty $$ etext "But ext has type of the form Id (A -> B) f g -> a = a' -> f a = g a'"]
+extErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
+    etext "But term ext has type of the form ((x : A) -> f x = g x) -> f = g"]
 
 expType :: Int -> Value -> EDoc
 expType l ty = etext "Expected type:" <+> eprettyLevel l (T.simplify $ reifyType ty)

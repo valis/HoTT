@@ -19,12 +19,13 @@ import Parser.ErrM
  '*' { PT _ (TS _ 2) }
  '->' { PT _ (TS _ 3) }
  ':' { PT _ (TS _ 4) }
- ';' { PT _ (TS _ 5) }
- '=' { PT _ (TS _ 6) }
- 'in' { PT _ (TS _ 7) }
- 'let' { PT _ (TS _ 8) }
- '{' { PT _ (TS _ 9) }
- '}' { PT _ (TS _ 10) }
+ '::' { PT _ (TS _ 5) }
+ ';' { PT _ (TS _ 6) }
+ '=' { PT _ (TS _ 7) }
+ 'in' { PT _ (TS _ 8) }
+ 'let' { PT _ (TS _ 9) }
+ '{' { PT _ (TS _ 10) }
+ '}' { PT _ (TS _ 11) }
 
 L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
@@ -82,6 +83,7 @@ Expr : 'let' '{' ListDef '}' 'in' Expr { Let $3 $6 }
 Expr1 :: { Expr }
 Expr1 : Expr3 '->' Expr1 { Arr $1 $3 } 
   | ListTypedVar '->' Expr1 { Pi $1 $3 }
+  | Expr4 '::' Expr1 { Typed $1 $3 }
   | Expr2 { $1 }
 
 
@@ -107,7 +109,7 @@ Expr5 : Arg { Var $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
   | PIdp { Idp $1 }
-  | PExt Expr5 Expr5 { Ext $1 $2 $3 }
+  | PExt { Ext $1 }
   | Ppmap { Pmap $1 }
   | PTrans { Trans $1 }
   | PInt { NatConst $1 }

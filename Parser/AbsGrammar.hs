@@ -30,6 +30,7 @@ data Expr =
  | Lam PLam [Binder] Expr
  | Arr Expr Expr
  | Pi [TypedVar] Expr
+ | Typed Expr Expr
  | Prod Expr Expr
  | Sigma [TypedVar] Expr
  | Id Expr Expr
@@ -39,7 +40,7 @@ data Expr =
  | Suc PSuc
  | Rec PR
  | Idp PIdp
- | Ext PExt Expr Expr
+ | Ext PExt
  | Pmap Ppmap
  | Trans PTrans
  | NatConst PInt
