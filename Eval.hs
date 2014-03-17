@@ -15,10 +15,8 @@ eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
-eval n ctx Ext = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
-    let ctx' = M.map (action (n ++ m)) ctx
-        e1 = Slam "x" (valueFreeVars h) $ \k1 m1 v1 -> action [Rd] $ app k1 (action (m ++ m1) h) v1
-    in comp k (app k h $ action [Ld] p) (pmap k (idp e1) p)
+eval n ctx (Ext _ g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
+    comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k ctx g) p
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -96,6 +94,7 @@ comp 0 x (Sidp _) = x
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Ne _ (App Idp _)) x = x
 comp 0 x (Ne _ (App Idp _)) = x
+comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
 comp 1 (Ne _ (App Idp (App Idp _))) x = x
 comp 1 x (Ne _ (App Idp (App Idp _))) = x
 comp 1 (Sidp (Sidp _)) x = x

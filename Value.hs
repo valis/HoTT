@@ -98,6 +98,7 @@ liftTerm e (Sid (Spi x _ a b) f g) = Slam x (freeVars e) $ \k m v ->
     liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid a)) $ sid (b v)
 liftTerm e (Sid (Sid (Spi x _ a b) _ _) _ _) = Slam x (freeVars e) $ \k m v ->
     liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid $ sid a)) $ sid $ sid (b v)
+liftTerm e (Sid t a b) = Ne [(reify a t, reify b t)] e
 liftTerm e _ = Ne [] e
 
 idp :: Value -> Value
@@ -135,12 +136,12 @@ reifyFV (Slam x _ f, fv) (Spi _ _ a b) =
 reifyFV (Slam _ _ h, fv) (Sid t@(Spi x _ a b) f g) =
     let x' = freshName x fv
         v = svar x' a
-    in App Ext $ Lam [x'] $ reifyFV (h 0 [] (idp v), x':fv) $ sid (b v)
-reifyFV (Slam _ _ h, fv) (Sid (Sid (Spi x _ a b) _ _) f g) =
+    in App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] (idp v), x':fv) $ sid (b v)
+reifyFV (Slam _ _ h, fv) (Sid t@(Sid t'@(Spi x _ a b) f' g') f g) =
     let x' = freshName x fv
         v = svar x' a
-    in App (App Pmap $ App Idp Ext) $
-        App Ext $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
+    in App (App Pmap $ App Idp (Ext (reify f' t') (reify g' t'))) $
+        App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
 reifyFV (Slam _ _ _, _) _ = error "reify.Slam"
 reifyFV (Szero,_) Snat = NatConst 0
 reifyFV (Szero,_) _ = error "reify.Szero"

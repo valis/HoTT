@@ -103,9 +103,13 @@ rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- 
     App (App Pmap (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e) _ | E.Trans _ <- dropParens e1 = App Trans (rawExprToTerm ctx e Nothing)
-rawExprToTerm ctx (E.App e1 e) (Just (Sid (Spi x fv a b) f g)) | E.Ext _ <- dropParens e1 =
-    App Ext $ rawExprToTerm ctx e $ Just $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $
-        \v -> Sid (b v) (app 0 f v) (app 0 g v)
+rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Spi x fv a b) f g)) | E.Ext _ <- dropParens e1 =
+    App (Ext (reify f t) (reify g t)) $ rawExprToTerm ctx e $ Just $
+    Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+rawExprToTerm _ (E.Ext _) (Just (Spi _ _ a b)) = case b (error "rawExprToTerm.Ext.Var") of
+    Sid t f g -> Ext (reify f t) (reify g t)
+    _ -> error "rawExprToTerm.Ext.Pi"
+rawExprToTerm _ (E.Ext _) _ = error "rawExprToTerm.Ext"
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
@@ -117,7 +121,6 @@ rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
 rawExprToTerm _ (E.Rec _) _ = Rec
 rawExprToTerm _ (E.Idp _) _ = Idp
-rawExprToTerm _ (E.Ext _) _ = Ext
 rawExprToTerm _ (E.Trans _) _ = Trans
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
@@ -176,11 +179,11 @@ typeOfTerm _ Rec = Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
     let pfv = valueFreeVars p
     in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
 typeOfTerm ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
+typeOfTerm ctx (Ext f g) = Sid (typeOfTerm ctx f) (eval 0 (ctxToCtxV ctx) f) (eval 0 (ctxToCtxV ctx) g)
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
-typeOfTerm _ Ext = error "typeOfTerm.Ext"
 typeOfTerm _ Trans = error "typeOfTerm.Trans"
 
 typeOfLam :: Ctx -> Term -> Value -> Value

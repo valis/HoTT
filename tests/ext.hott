@@ -10,16 +10,17 @@ extTest3 A B f = idp (idp f)
 extTest4 : (A B : Type) (f : A -> B) -> ((a : A) -> f a = f a) -> f = f
 extTest4 A B f = ext
 
-{-
 extTest4' : (A B : Type) (f : A -> B) -> ((a : A) -> f a = f a) -> f = f
 extTest4' A B f g = ext g
 
 extTest5 : (A B : Type) (f : A -> B) -> idp f = idp f
-extTest5 A B f = pmap (idp ext) (ext (\x -> idp (idp (f x))))
+extTest5 A B f = pmap (idp (ext :: ((x : A) -> f x = f x) -> f = f))
+    (ext (\x -> idp (idp (f x))) :: ((\x -> idp (f x)) :: (x : A) -> f x = f x) = (\x -> idp (f x)))
 
-extTest6 : (A B : Type) (f : A -> B) -> idp f = idp f
-extTest6 A B f = pmap (ext (\f -> idp (ext f))) (ext (\x -> idp (idp (f x))))
+extTest5'fail : (A B : Type) (f : A -> B) -> idp f = idp f
+extTest5'fail A B f = pmap (idp (ext :: ((x : A) -> f x = f x) -> f = f)) (ext (\x -> idp (idp (f x))))
 
-extTest7 : (A B : Type) (f : A -> B) -> idp f = idp f
-extTest7 A B f = pmap (idp ext) (ext (\x -> idp (idp (idp (f x)))))
--}
+extTest6'fail : (A B : Type) (f : A -> B) -> idp f = idp f
+extTest6'fail A B f = pmap
+    (ext (\g -> idp (ext g)) :: f = f)
+    (ext (\x -> idp (idp (f x))) :: ((\x -> idp (f x)) :: (x : A) -> f x = f x) = (\x -> idp (f x)))

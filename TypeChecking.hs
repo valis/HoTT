@@ -140,8 +140,9 @@ typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case i
     _ -> extErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) (T ty) = extErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) _ = inferErrorMsg lc "ext"
-typeOfH ctx (App e1 e) (T (Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = typeOfH ctx e $ T
-    $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+typeOfH ctx (App e1 e) (T r@(Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = do
+    typeOfH ctx e $ T $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+    return r
 typeOfH ctx ea@(App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
     $$ etext "But term" <+> epretty ea <+> etext "has type of the form Id ((x : A) -> B x) _ _"]
 typeOfH ctx e (T exp) = do
