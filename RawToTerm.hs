@@ -109,8 +109,10 @@ rawExprToTerm ctx (E.App e1' e2) _
             _ -> error "rawExprToTerm.App.App.Idp"
 rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- dropParens e3 =
     App (App Pmap (rawExprToTerm ctx e1 Nothing)) (rawExprToTerm ctx e2 Nothing)
-rawExprToTerm ctx (E.App e1 e) _ | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
-rawExprToTerm ctx (E.App e1 e) _ | E.Trans _ <- dropParens e1 = App Trans (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1 e) (Just (Sid t _ _)) | E.Idp _ <- dropParens e1 = App Idp $ rawExprToTerm ctx e (Just t)
+rawExprToTerm ctx (E.App e1 e) (Just _) | E.Idp _ <- dropParens e1 = error "rawExrToTerm.App.Idp"
+rawExprToTerm ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 = App Coe (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Spi x fv a b) f g)) | E.Ext _ <- dropParens e1 =
     App (Ext (reify f t) (reify g t)) $ rawExprToTerm ctx e $ Just $
     Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
@@ -129,7 +131,7 @@ rawExprToTerm _ (E.Nat _) _ = Nat
 rawExprToTerm _ (E.Suc _) _ = Suc
 rawExprToTerm _ (E.Rec _) _ = Rec
 rawExprToTerm _ (E.Idp _) _ = Idp
-rawExprToTerm _ (E.Trans _) _ = Trans
+rawExprToTerm _ (E.Coe _) _ = Coe
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
@@ -179,9 +181,9 @@ typeOfTerm ctx (App (App Pmap e1) e2) =
     case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
         (Sid (Spi _ _ _ b) f g, Sid _ x y) -> Sid (b $ error "typeOfTerm.App.App.Pmap.Var") (app 0 f x) (app 0 g y)
         _ -> error "typeOfTerm.App.App.Pmap"
-typeOfTerm ctx (App Trans e) = case typeOfTerm ctx e of
+typeOfTerm ctx (App Coe e) = case typeOfTerm ctx e of
     Sid _ x y -> x `sarr` y
-    _ -> error "typeOfTerm.App.Trans"
+    _ -> error "typeOfTerm.App.Coe"
 typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
@@ -201,7 +203,7 @@ typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
-typeOfTerm _ Trans = error "typeOfTerm.Trans"
+typeOfTerm _ Coe = error "typeOfTerm.Coe"
 
 typeOfLam :: Ctx -> Term -> Value -> Value
 typeOfLam ctx (Let defs e) a = typeOfLam (updateCtx ctx defs) e a

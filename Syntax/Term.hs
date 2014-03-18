@@ -25,7 +25,7 @@ data Term
     | Rec
     | Idp
     | Pmap
-    | Trans
+    | Coe
     | Proj1
     | Proj2
     | NatConst Integer
@@ -55,7 +55,7 @@ freeVars Suc = []
 freeVars Rec = []
 freeVars Idp = []
 freeVars Pmap = []
-freeVars Trans = []
+freeVars Coe = []
 freeVars Proj1 = []
 freeVars Proj2 = []
 freeVars (NatConst _) = []
@@ -102,7 +102,7 @@ instance Eq Term where
         cmp _ _ _ Rec Rec = True
         cmp _ _ _ Idp Idp = True
         cmp _ _ _ Pmap Pmap = True
-        cmp _ _ _ Trans Trans = True
+        cmp _ _ _ Coe Coe = True
         cmp _ _ _ Proj1 Proj1 = True
         cmp _ _ _ Proj2 Proj2 = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
@@ -163,7 +163,7 @@ ppTerm = go False
     go _ _ Idp = text "idp"
     go _ _ (Ext _ _) = text "ext"
     go _ _ Pmap = text "pmap"
-    go _ _ Trans = text "trans"
+    go _ _ Coe = text "coe"
     go _ _ Proj1 = text "proj1"
     go _ _ Proj2 = text "proj2"
     go _ _ (Universe u) = text (show u)
@@ -240,7 +240,7 @@ simplify Suc = Suc
 simplify Rec = Rec
 simplify Idp = Idp
 simplify Pmap = Pmap
-simplify Trans = Trans
+simplify Coe = Coe
 simplify Proj1 = Proj1
 simplify Proj2 = Proj2
 simplify e@(NatConst _) = e

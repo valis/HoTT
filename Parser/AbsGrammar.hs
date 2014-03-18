@@ -14,7 +14,7 @@ newtype PNat = PNat ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Pus = Pus ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PExt = PExt ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype PTrans = PTrans ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PCoe = PCoe ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjl = PProjl ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
@@ -45,7 +45,7 @@ data Expr =
  | Idp PIdp
  | Ext PExt
  | Pmap Ppmap
- | Trans PTrans
+ | Coe PCoe
  | Proj1 PProjl
  | Proj2 PProjr
  | NatConst PInt

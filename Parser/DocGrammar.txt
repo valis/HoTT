@@ -61,8 +61,8 @@ PExt literals are recognized by the regular expression
 Ppmap literals are recognized by the regular expression
 `````'p' 'm' 'a' 'p'`````
 
-PTrans literals are recognized by the regular expression
-`````'t' 'r' 'a' 'n' 's'`````
+PCoe literals are recognized by the regular expression
+`````'c' 'o' 'e'`````
 
 PProjl literals are recognized by the regular expression
 `````'p' 'r' 'o' 'j' '1'`````
@@ -123,7 +123,7 @@ All other symbols are terminals.
   |  |  **|**  | //PIdp// 
   |  |  **|**  | //PExt// 
   |  |  **|**  | //Ppmap// 
-  |  |  **|**  | //PTrans// 
+  |  |  **|**  | //PCoe// 
   |  |  **|**  | //PProjl// 
   |  |  **|**  | //PProjr// 
   |  |  **|**  | //PInt// 

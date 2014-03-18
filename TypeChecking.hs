@@ -99,12 +99,12 @@ typeOfH _ i@(Idp _) (T exp@(Spi x _ a _)) = do
     return exp
 typeOfH _ (Idp (PIdp ((l,c),_))) (T ty) =
     Left [emsgLC l c "" $ expType 1 ty $$ etext "But idp has pi type"]
-typeOfH ctx e@(Trans (PTrans (lc,_))) (T ty@(Spi v fv a@(Sid (Stype _) x y) b)) = case b $ svar (freshName v fv) a of
+typeOfH ctx e@(Coe (PCoe (lc,_))) (T ty@(Spi v fv a@(Sid (Stype _) x y) b)) = case b $ svar (freshName v fv) a of
     Spi v' fv' x' y' -> if cmpTypes x x' && cmpTypes y (y' $ svar (freshName v' fv') x')
         then return ty
-        else transErrorMsg lc ty
-    _ -> transErrorMsg lc ty
-typeOfH ctx (Trans (PTrans (lc,_))) (T ty) = transErrorMsg lc ty
+        else coeErrorMsg lc ty
+    _ -> coeErrorMsg lc ty
+typeOfH ctx (Coe (PCoe (lc,_))) (T ty) = coeErrorMsg lc ty
 typeOfH ctx ea@(App e1 e) (T exp@(Sid t a b)) | Idp _ <- dropParens e1 = do
     typeOfH ctx e (T t)
     let e' = evalRaw ctx e (Just t)
@@ -135,7 +135,8 @@ typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case i
     _ -> extErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) (T ty) = extErrorMsg lc ty
 typeOfH ctx (App e1 e) (T r@(Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = do
-    typeOfH ctx e $ T $ Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+    let fv' = fv `union` valueFreeVars f `union` valueFreeVars g
+    typeOfH ctx e $ T $ Spi x fv' a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
     return r
 typeOfH ctx ea@(App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
     $$ etext "But term" <+> epretty ea <+> etext "has type of the form Id ((x : A) -> B x) _ _"]
@@ -143,7 +144,9 @@ typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
     typeOfH ctx e2 $ T $ b $ evalRaw ctx e1 (Just a)
     return r
-typeOfH ctx e@(Pair _ _) (T exp) = expTypeBut "Sigma" e exp
+typeOfH ctx e@(Pair _ _) (T exp) =
+    let (l,c) = getPos e
+    in Left [emsgLC l c "" $ expType (-1) exp $$ etext "But term" <+> epretty e <+> etext "has Sigma type"]
 typeOfH ctx (Proj1 (PProjl (lc,_))) (T r@(Spi x fv a'@(Ssigma _ _ a _) b)) = case isArr x fv a' b of
     Just b' | cmpTypes a b' -> Right r
     _ -> proj1ErrorMsg lc r
@@ -166,7 +169,7 @@ typeOfH ctx (Pair e1 e2) N = do
     return $ Ssigma "_" (valueFreeVars b) a (const b)
 typeOfH _ (Lam (PLam (lc,_)) _ _) N = inferErrorMsg lc "the argument"
 typeOfH _ (Idp (PIdp (lc,_))) N = inferErrorMsg lc "idp"
-typeOfH _ (Trans (PTrans (lc,_))) N = inferErrorMsg lc "trans"
+typeOfH _ (Coe (PCoe (lc,_))) N = inferErrorMsg lc "coe"
 typeOfH ctx (App e1 e) N | Idp _ <- dropParens e1 = do
     t <- typeOf ctx e
     let v = evalRaw ctx e (Just t)
@@ -213,7 +216,7 @@ typeOfH ctx (App e1' e2) N | App e3 e1 <- dropParens e1', Pmap _ <- dropParens e
         let (l,c) = getPos expr
         in Left [emsgLC l c "" $ etext "Expected type of the form Id(" <> i <> etext ") _ _" $$
                  etext "But term" <+> epretty expr <+> etext "has type Id(" <> eprettyType ty <> etext ") _ _"]
-typeOfH ctx (App e1 e) N | Trans _ <- dropParens e1 = do
+typeOfH ctx (App e1 e) N | Coe _ <- dropParens e1 = do
     t <- typeOf ctx e
     case t of
         Sid (Stype _) x y -> Right (x `sarr` y)
@@ -276,9 +279,9 @@ eprettyType t = epretty $ T.simplify (reifyType t)
 inferErrorMsg :: (Int,Int) -> String -> EDocM a
 inferErrorMsg (l,c) s = Left [emsgLC l c ("Cannot infer type of " ++ s) enull]
 
-transErrorMsg :: (Int,Int) -> Value -> EDocM a
-transErrorMsg (l,c) ty =
-    Left [emsgLC l c "" $ expType 1 ty $$ etext "But trans has type of the form Id Type A B -> A -> B"]
+coeErrorMsg :: (Int,Int) -> Value -> EDocM a
+coeErrorMsg (l,c) ty =
+    Left [emsgLC l c "" $ expType 1 ty $$ etext "But coe has type of the form Id Type A B -> A -> B"]
 
 pmapErrorMsg :: (Int,Int) -> Value -> EDocM a
 pmapErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext "But ext _ has type of the form x = y -> _ x = _ y"]

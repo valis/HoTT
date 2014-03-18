@@ -123,8 +123,8 @@ instance Print Ppmap where
   prt _ (Ppmap (_,i)) = doc (showString ( i))
 
 
-instance Print PTrans where
-  prt _ (PTrans (_,i)) = doc (showString ( i))
+instance Print PCoe where
+  prt _ (PCoe (_,i)) = doc (showString ( i))
 
 
 instance Print PProjl where
@@ -174,7 +174,7 @@ instance Print Expr where
    Idp pidp -> prPrec i 6 (concatD [prt 0 pidp])
    Ext pext -> prPrec i 6 (concatD [prt 0 pext])
    Pmap ppmap -> prPrec i 6 (concatD [prt 0 ppmap])
-   Trans ptrans -> prPrec i 6 (concatD [prt 0 ptrans])
+   Coe pcoe -> prPrec i 6 (concatD [prt 0 pcoe])
    Proj1 pprojl -> prPrec i 6 (concatD [prt 0 pprojl])
    Proj2 pprojr -> prPrec i 6 (concatD [prt 0 pprojr])
    NatConst pint -> prPrec i 6 (concatD [prt 0 pint])

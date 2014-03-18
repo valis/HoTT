@@ -39,7 +39,7 @@ L_PNat { PT _ (T_PNat _) }
 L_Pus { PT _ (T_Pus _) }
 L_PExt { PT _ (T_PExt _) }
 L_Ppmap { PT _ (T_Ppmap _) }
-L_PTrans { PT _ (T_PTrans _) }
+L_PCoe { PT _ (T_PCoe _) }
 L_PProjl { PT _ (T_PProjl _) }
 L_PProjr { PT _ (T_PProjr _) }
 L_PIdent { PT _ (T_PIdent _) }
@@ -59,7 +59,7 @@ PNat    :: { PNat} : L_PNat { PNat (mkPosToken $1)}
 Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
 PExt    :: { PExt} : L_PExt { PExt (mkPosToken $1)}
 Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
-PTrans    :: { PTrans} : L_PTrans { PTrans (mkPosToken $1)}
+PCoe    :: { PCoe} : L_PCoe { PCoe (mkPosToken $1)}
 PProjl    :: { PProjl} : L_PProjl { PProjl (mkPosToken $1)}
 PProjr    :: { PProjr} : L_PProjr { PProjr (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
@@ -121,7 +121,7 @@ Expr6 : Arg { Var $1 }
   | PIdp { Idp $1 }
   | PExt { Ext $1 }
   | Ppmap { Pmap $1 }
-  | PTrans { Trans $1 }
+  | PCoe { Coe $1 }
   | PProjl { Proj1 $1 }
   | PProjr { Proj2 $1 }
   | PInt { NatConst $1 }

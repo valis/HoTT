@@ -64,9 +64,9 @@ transPpmap x = case x of
   Ppmap str  -> failure x
 
 
-transPTrans :: PTrans -> Result
-transPTrans x = case x of
-  PTrans str  -> failure x
+transPCoe :: PCoe -> Result
+transPCoe x = case x of
+  PCoe str  -> failure x
 
 
 transPProjl :: PProjl -> Result
@@ -114,7 +114,7 @@ transExpr x = case x of
   Idp pidp  -> failure x
   Ext pext  -> failure x
   Pmap ppmap  -> failure x
-  Trans ptrans  -> failure x
+  Coe pcoe  -> failure x
   Proj1 pprojl  -> failure x
   Proj2 pprojr  -> failure x
   NatConst pint  -> failure x

@@ -9,12 +9,11 @@ import Data.List
 import Syntax.Term
 import Value
 
--- ext : ((x : A) -> f x = g x) -> f = g
-
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
-eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m v)
+eval _ _ Coe = Slam "p" [] $ \k _ -> coe k
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
+-- ext : ((x : A) -> f x = g x) -> f = g
 eval n ctx (Ext _ g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
     comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k ctx g) p
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
@@ -88,8 +87,9 @@ rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\z -> Rec P z s 0) p = p
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
 
-trans :: Integer -> Value -> Value -> Value
-trans _ _ _ = error "TODO: trans"
+coe :: Integer -> Value -> Value
+coe _ (Siso _ _ f _) = f
+coe _ _ = error "coe"
 
 comp :: Integer -> Value -> Value -> Value
 comp 0 (Sidp _) x = x
