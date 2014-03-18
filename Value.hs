@@ -21,6 +21,7 @@ type GlobMap = [D]
 data Value
     = Slam String [String] (Integer -> GlobMap -> Value -> Value) -- Constructor for Pi-types
     | Szero | Ssuc Value -- Constructors for Nat
+    | Spair Value Value -- Constructor for Sigma-types
     | Spi String [String] Value (Value -> Value) | Ssigma String [String] Value (Value -> Value) -- Constructors for Type_k
     | Snat | Sid Value Value Value | Stype Level -- Constructors for Type_k
     | Sidp Value -- Constructor for Id
@@ -62,6 +63,7 @@ valueFreeVars :: Value -> [String]
 valueFreeVars (Slam _ fv _) = fv
 valueFreeVars Szero = []
 valueFreeVars (Ssuc e) = valueFreeVars e
+valueFreeVars (Spair a b) = valueFreeVars a `union` valueFreeVars b
 valueFreeVars (Spi _ fv _ _) = fv
 valueFreeVars (Ssigma _ fv _ _) = fv
 valueFreeVars Snat = []
@@ -87,19 +89,30 @@ appTerm :: Term -> Term -> Term
 appTerm (App Pmap (App Idp e1)) (App Idp e2) = App Idp (appTerm e1 e2)
 appTerm e1 e2 = App e1 e2
 
--- TODO: remove this
 sid :: Value -> Value
 sid a = Sid a (error "sid.left") (error "sid.right")
 
+sidr :: Integer -> Value -> Value
+sidr k v = iterate sid v `genericIndex` k
+
+getBase :: Value -> (Integer,Value)
+getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
+getBase r = (0,r)
+
 liftTerm :: Term -> Value -> Value
-liftTerm e (Spi x _ a b) = Slam x (freeVars e) $ \k m v ->
-    liftTerm (appTerm (actionTerm m e) $ reify v a) (b v)
-liftTerm e (Sid (Spi x _ a b) f g) = Slam x (freeVars e) $ \k m v ->
-    liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid a)) $ sid (b v)
-liftTerm e (Sid (Sid (Spi x _ a b) _ _) _ _) = Slam x (freeVars e) $ \k m v ->
-    liftTerm (appTerm (actionTerm m $ App Pmap e) (reify v $ sid $ sid a)) $ sid $ sid (b v)
-liftTerm e (Sid t a b) = Ne [(reify a t, reify b t)] e
-liftTerm e _ = Ne [] e
+liftTerm (App Idp e) (Sid t _ _) = Sidp (liftTerm e t)
+liftTerm e t | (n, Spi x _ a b) <- getBase t = Slam x (freeVars e) $ \k m v ->
+    let e' = appTerm (actionTerm m $ iterate (App Pmap) e `genericIndex` n) (reify v $ sidr (k + n) a)
+    in liftTerm e' $ sidr (k + n) (b v)
+liftTerm e (Ssigma _ _ a b) =
+    let a' = liftTerm (App Proj1 e) a
+    in Spair a' $ liftTerm (App Proj2 e) (b a')
+liftTerm _ (Sid (Ssigma _ _ _ _) _ _) = error "TODO: liftTerm.Sid.Ssigma"
+liftTerm e t = Ne (sidToList t) e
+  where
+    sidToList :: Value -> [(Term,Term)]
+    sidToList (Sid t a b) = (reify a t, reify b t) : sidToList t
+    sidToList _ = []
 
 idp :: Value -> Value
 idp = action [Ud]
@@ -107,6 +120,7 @@ idp = action [Ud]
 action :: GlobMap -> Value -> Value
 action [] v = v
 action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
+action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
 action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
 action (Ud:m) Snat = error "TODO: action.Snat"
@@ -143,6 +157,9 @@ reifyFV (Slam _ _ h, fv) (Sid t@(Sid t'@(Spi x _ a b) f' g') f g) =
     in App (App Pmap $ App Idp (Ext (reify f' t') (reify g' t'))) $
         App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
 reifyFV (Slam _ _ _, _) _ = error "reify.Slam"
+reifyFV (Spair e1 e2, _) (Ssigma _ _ a b) = Pair (reify e1 a) (reify e2 $ b e1)
+reifyFV (Spair _ _, _) t | (n, Ssigma _ _ _ _) <- getBase t = error $ "TODO: reify.Spair: " ++ show n
+reifyFV (Spair _ _, _) _ = error "reify.Spair"
 reifyFV (Szero,_) Snat = NatConst 0
 reifyFV (Szero,_) _ = error "reify.Szero"
 reifyFV (Ssuc e,fv) Snat = case reifyFV (e,fv) Snat of

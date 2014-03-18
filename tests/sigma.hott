@@ -1,0 +1,3 @@
+sigma'elim : (A : Type) (B : A -> Type) (P : (a : A) * B a -> Type)
+    -> ((a : A) (b : B a) -> P (a,b)) -> (x : (a : A) * B a) -> P x
+sigma'elim A B P d x = d (proj1 x) (proj2 x)

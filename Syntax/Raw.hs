@@ -38,6 +38,9 @@ getPos (NatConst (PInt (p,_))) = p
 getPos (Universe (U (p,_))) = p
 getPos (Paren (PPar (p,_)) _) = p
 getPos (Typed e _) = getPos e
+getPos (Pair e _) = getPos e
+getPos (Proj1 (PProjl (lc,_))) = lc
+getPos (Proj2 (PProjr (lc,_))) = lc
 
 unArg :: Arg -> String
 unArg (NoArg _) = "_"
@@ -69,6 +72,7 @@ freeVars (Sigma [] e) = freeVars e
 freeVars (Sigma (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Sigma xs e) \\ freeVars vars)
 freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var (Arg (PIdent (_,x)))) = [x]
 freeVars (Var (NoArg _)) = []
 freeVars (Nat _) = []
@@ -78,6 +82,8 @@ freeVars (Idp _) = []
 freeVars (Ext _) = []
 freeVars (Pmap _) = []
 freeVars (Trans _) = []
+freeVars (Proj1 _) = []
+freeVars (Proj2 _) = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Paren _ e) = freeVars e
@@ -139,6 +145,7 @@ rename (Sigma (TypedVar p (Var (Arg (PIdent (i,z)))) t : bs) e) x y | x == z
 rename (Sigma (TypedVar p v t : bs) e) x y = Sigma [TypedVar p v (rename t x y)] $ rename (Sigma bs e) x y
 rename (Id e1 e2) x y = Id (rename e1 x y) (rename e2 x y)
 rename (App e1 e2) x y = App (rename e1 x y) (rename e2 x y)
+rename (Pair e1 e2) x y = Pair (rename e1 x y) (rename e2 x y)
 rename (Var (Arg (PIdent (i,z)))) x y | x == z = Var $ Arg $ PIdent (i,y)
 rename e@(Var _) _ _ = e
 rename e@(Nat _) _ _ = e
@@ -148,6 +155,8 @@ rename e@(Idp _) _ _ = e
 rename e@(Ext _) _ _ = e
 rename e@(Pmap _) _ _ = e
 rename e@(Trans _) _ _ = e
+rename e@(Proj1 _) _ _ = e
+rename e@(Proj2 _) _ _ = e
 rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
@@ -192,6 +201,8 @@ ppExpr = go False
     go _ _ (Ext _) = text "ext"
     go _ _ (Pmap _) = text "pmap"
     go _ _ (Trans _) = text "trans"
+    go _ _ (Proj1 _) = text "proj1"
+    go _ _ (Proj2 _) = text "proj2"
     go _ _ (Universe (U (_,u))) = text u
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -220,6 +231,9 @@ ppExpr = go False
     go False l (Typed e1 e2) =
         let l' = fmap pred l
         in go (isComp e1) l' e1 <+> text "::" <+> go False l' e2
+    go False l (Pair e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> comma <+> go False l' e2
 
 preprocessDefs :: [Def] -> EDocM [Def]
 preprocessDefs defs =

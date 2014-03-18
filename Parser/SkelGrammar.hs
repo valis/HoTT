@@ -69,6 +69,16 @@ transPTrans x = case x of
   PTrans str  -> failure x
 
 
+transPProjl :: PProjl -> Result
+transPProjl x = case x of
+  PProjl str  -> failure x
+
+
+transPProjr :: PProjr -> Result
+transPProjr x = case x of
+  PProjr str  -> failure x
+
+
 transPIdent :: PIdent -> Result
 transPIdent x = case x of
   PIdent str  -> failure x
@@ -95,6 +105,7 @@ transExpr x = case x of
   Prod expr1 expr2  -> failure x
   Sigma typedvars expr  -> failure x
   Id expr1 expr2  -> failure x
+  Pair expr1 expr2  -> failure x
   App expr1 expr2  -> failure x
   Var arg  -> failure x
   Nat pnat  -> failure x
@@ -104,6 +115,8 @@ transExpr x = case x of
   Ext pext  -> failure x
   Pmap ppmap  -> failure x
   Trans ptrans  -> failure x
+  Proj1 pprojl  -> failure x
+  Proj2 pprojr  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x

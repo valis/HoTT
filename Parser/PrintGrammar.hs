@@ -127,6 +127,14 @@ instance Print PTrans where
   prt _ (PTrans (_,i)) = doc (showString ( i))
 
 
+instance Print PProjl where
+  prt _ (PProjl (_,i)) = doc (showString ( i))
+
+
+instance Print PProjr where
+  prt _ (PProjr (_,i)) = doc (showString ( i))
+
+
 instance Print PIdent where
   prt _ (PIdent (_,i)) = doc (showString ( i))
 
@@ -151,24 +159,27 @@ instance Print Expr where
   prt i e = case e of
    Let defs expr -> prPrec i 0 (concatD [doc (showString "let") , doc (showString "{") , prt 0 defs , doc (showString "}") , doc (showString "in") , prt 0 expr])
    Lam plam binders expr -> prPrec i 0 (concatD [prt 0 plam , prt 0 binders , doc (showString "->") , prt 0 expr])
-   Arr expr0 expr -> prPrec i 1 (concatD [prt 3 expr0 , doc (showString "->") , prt 1 expr])
+   Arr expr0 expr -> prPrec i 1 (concatD [prt 2 expr0 , doc (showString "->") , prt 1 expr])
    Pi typedvars expr -> prPrec i 1 (concatD [prt 0 typedvars , doc (showString "->") , prt 1 expr])
    Typed expr0 expr -> prPrec i 1 (concatD [prt 4 expr0 , doc (showString "::") , prt 1 expr])
    Prod expr0 expr -> prPrec i 2 (concatD [prt 3 expr0 , doc (showString "*") , prt 2 expr])
    Sigma typedvars expr -> prPrec i 2 (concatD [prt 0 typedvars , doc (showString "*") , prt 2 expr])
    Id expr0 expr -> prPrec i 3 (concatD [prt 4 expr0 , doc (showString "=") , prt 4 expr])
-   App expr0 expr -> prPrec i 4 (concatD [prt 4 expr0 , prt 5 expr])
-   Var arg -> prPrec i 5 (concatD [prt 0 arg])
-   Nat pnat -> prPrec i 5 (concatD [prt 0 pnat])
-   Suc psuc -> prPrec i 5 (concatD [prt 0 psuc])
-   Rec pr -> prPrec i 5 (concatD [prt 0 pr])
-   Idp pidp -> prPrec i 5 (concatD [prt 0 pidp])
-   Ext pext -> prPrec i 5 (concatD [prt 0 pext])
-   Pmap ppmap -> prPrec i 5 (concatD [prt 0 ppmap])
-   Trans ptrans -> prPrec i 5 (concatD [prt 0 ptrans])
-   NatConst pint -> prPrec i 5 (concatD [prt 0 pint])
-   Universe u -> prPrec i 5 (concatD [prt 0 u])
-   Paren ppar expr -> prPrec i 5 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])
+   Pair expr0 expr -> prPrec i 4 (concatD [prt 4 expr0 , doc (showString ",") , prt 5 expr])
+   App expr0 expr -> prPrec i 5 (concatD [prt 5 expr0 , prt 6 expr])
+   Var arg -> prPrec i 6 (concatD [prt 0 arg])
+   Nat pnat -> prPrec i 6 (concatD [prt 0 pnat])
+   Suc psuc -> prPrec i 6 (concatD [prt 0 psuc])
+   Rec pr -> prPrec i 6 (concatD [prt 0 pr])
+   Idp pidp -> prPrec i 6 (concatD [prt 0 pidp])
+   Ext pext -> prPrec i 6 (concatD [prt 0 pext])
+   Pmap ppmap -> prPrec i 6 (concatD [prt 0 ppmap])
+   Trans ptrans -> prPrec i 6 (concatD [prt 0 ptrans])
+   Proj1 pprojl -> prPrec i 6 (concatD [prt 0 pprojl])
+   Proj2 pprojr -> prPrec i 6 (concatD [prt 0 pprojr])
+   NatConst pint -> prPrec i 6 (concatD [prt 0 pint])
+   Universe u -> prPrec i 6 (concatD [prt 0 u])
+   Paren ppar expr -> prPrec i 6 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])
 
 
 instance Print Arg where

@@ -17,15 +17,16 @@ import Parser.ErrM
 %token 
  ')' { PT _ (TS _ 1) }
  '*' { PT _ (TS _ 2) }
- '->' { PT _ (TS _ 3) }
- ':' { PT _ (TS _ 4) }
- '::' { PT _ (TS _ 5) }
- ';' { PT _ (TS _ 6) }
- '=' { PT _ (TS _ 7) }
- 'in' { PT _ (TS _ 8) }
- 'let' { PT _ (TS _ 9) }
- '{' { PT _ (TS _ 10) }
- '}' { PT _ (TS _ 11) }
+ ',' { PT _ (TS _ 3) }
+ '->' { PT _ (TS _ 4) }
+ ':' { PT _ (TS _ 5) }
+ '::' { PT _ (TS _ 6) }
+ ';' { PT _ (TS _ 7) }
+ '=' { PT _ (TS _ 8) }
+ 'in' { PT _ (TS _ 9) }
+ 'let' { PT _ (TS _ 10) }
+ '{' { PT _ (TS _ 11) }
+ '}' { PT _ (TS _ 12) }
 
 L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
@@ -39,6 +40,8 @@ L_Pus { PT _ (T_Pus _) }
 L_PExt { PT _ (T_PExt _) }
 L_Ppmap { PT _ (T_Ppmap _) }
 L_PTrans { PT _ (T_PTrans _) }
+L_PProjl { PT _ (T_PProjl _) }
+L_PProjr { PT _ (T_PProjr _) }
 L_PIdent { PT _ (T_PIdent _) }
 L_err    { _ }
 
@@ -57,6 +60,8 @@ Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
 PExt    :: { PExt} : L_PExt { PExt (mkPosToken $1)}
 Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
 PTrans    :: { PTrans} : L_PTrans { PTrans (mkPosToken $1)}
+PProjl    :: { PProjl} : L_PProjl { PProjl (mkPosToken $1)}
+PProjr    :: { PProjr} : L_PProjr { PProjr (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
 
 Defs :: { Defs }
@@ -81,7 +86,7 @@ Expr : 'let' '{' ListDef '}' 'in' Expr { Let $3 $6 }
 
 
 Expr1 :: { Expr }
-Expr1 : Expr3 '->' Expr1 { Arr $1 $3 } 
+Expr1 : Expr2 '->' Expr1 { Arr $1 $3 } 
   | ListTypedVar '->' Expr1 { Pi $1 $3 }
   | Expr4 '::' Expr1 { Typed $1 $3 }
   | Expr2 { $1 }
@@ -99,12 +104,17 @@ Expr3 : Expr4 '=' Expr4 { Id $1 $3 }
 
 
 Expr4 :: { Expr }
-Expr4 : Expr4 Expr5 { App $1 $2 } 
+Expr4 : Expr4 ',' Expr5 { Pair $1 $3 } 
   | Expr5 { $1 }
 
 
 Expr5 :: { Expr }
-Expr5 : Arg { Var $1 } 
+Expr5 : Expr5 Expr6 { App $1 $2 } 
+  | Expr6 { $1 }
+
+
+Expr6 :: { Expr }
+Expr6 : Arg { Var $1 } 
   | PNat { Nat $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
@@ -112,6 +122,8 @@ Expr5 : Arg { Var $1 }
   | PExt { Ext $1 }
   | Ppmap { Pmap $1 }
   | PTrans { Trans $1 }
+  | PProjl { Proj1 $1 }
+  | PProjr { Proj2 $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }

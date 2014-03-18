@@ -17,6 +17,9 @@ eval _ _ Trans = Slam "p" [] $ \_ _ v -> Slam "x" [] $ \k m -> trans k (action m
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
 eval n ctx (Ext _ g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
     comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k ctx g) p
+eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
+eval n ctx Proj1 = Slam "p" [] $ \_ _ -> proj1
+eval n ctx Proj2 = Slam "p" [] $ \_ _ -> proj2
 eval n ctx (Let [] e) = eval n ctx e
 eval n ctx (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n ctx d) ctx) (Let ds e)
 eval n ctx (Let (Def v (Just (_,args)) d : ds) e) = eval n (M.insert v (eval n ctx $ Lam args d) ctx) (Let ds e)
@@ -35,14 +38,14 @@ eval 0 ctx (Pi ((vars,t):ts) e) = go ctx vars
     go ctx [v]      = Spi v (delete v efv) tv $ \a -> eval 0 (M.insert v a ctx) (Pi ts e)
     go ctx s@(v:vs) = Spi v (pefv \\ s)    tv $ \a -> go     (M.insert v a ctx) vs
 eval n ctx (Sigma [] e) = eval n ctx e
-eval 0 ctx (Sigma ((v:vars,t):ts) e) = go ctx vars
+eval 0 ctx (Sigma ((vars,t):ts) e) = go ctx vars
   where
-    tv = eval 0 ctx t
-    efv = freeVars (Sigma ts e)
+    tv   = eval 0 ctx t
+    efv  = freeVars (Sigma ts e)
     pefv = freeVars t `union` efv
-    go ctx [] = eval 0 ctx t `sprod` (eval 0 ctx (Sigma ts e),efv)
-    go ctx [v]    = Ssigma v  efv tv $ \a -> eval 0 (M.insert v a ctx) (Sigma ts e)
-    go ctx (v:vs) = Ssigma v pefv tv $ \a -> go     (M.insert v a ctx) vs
+    go ctx []       = eval 0 ctx t `sprod` (eval 0 ctx (Sigma ts e),efv)
+    go ctx [v]      = Ssigma v (delete v efv) tv $ \a -> eval 0 (M.insert v a ctx) (Sigma ts e)
+    go ctx s@(v:vs) = Ssigma v (pefv \\ s)    tv $ \a -> go     (M.insert v a ctx) vs
 eval 0 ctx (Id t e1 e2) = Sid (eval 0 ctx t) (eval 0 ctx e1) (eval 0 ctx e2)
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n ctx (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
@@ -92,14 +95,18 @@ comp :: Integer -> Value -> Value -> Value
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
-comp 0 (Ne _ (App Idp _)) x = x
-comp 0 x (Ne _ (App Idp _)) = x
 comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
-comp 1 (Ne _ (App Idp (App Idp _))) x = x
-comp 1 x (Ne _ (App Idp (App Idp _))) = x
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
 comp n _ _ = error $ "TODO: comp " ++ show n
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
+
+proj1 :: Value -> Value
+proj1 (Spair a _) = a
+proj1 _ = error "proj1"
+
+proj2 :: Value -> Value
+proj2 (Spair _ b) = b
+proj2 _ = error "proj1"

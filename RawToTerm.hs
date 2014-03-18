@@ -83,6 +83,14 @@ rawExprToTerm ctx (E.Sigma [t] e) ty = rawExprToTerm'depType Sigma ctx t e ty
 rawExprToTerm ctx (E.Sigma (t:ts) e) ty = rawExprToTerm ctx (E.Sigma [t] $ E.Sigma ts e) ty
 rawExprToTerm ctx (E.Arr e1 e2) ty = Pi [([], rawExprToTerm ctx e1 ty)] (rawExprToTerm ctx e2 ty)
 rawExprToTerm ctx (E.Prod e1 e2) ty = Sigma [([], rawExprToTerm ctx e1 ty)] (rawExprToTerm ctx e2 ty)
+rawExprToTerm ctx (E.Pair e1 e2) (Just (Ssigma _ _ a b)) =
+    Pair (rawExprToTerm ctx e1 $ Just a) (rawExprToTerm ctx e2 $ Just $ b $ evalRaw ctx e1 $ Just a)
+rawExprToTerm ctx (E.Pair e1 e2) (Just _) = error "rawExprToTerm.Pair"
+rawExprToTerm ctx (E.Proj1 _) _ = Proj1
+rawExprToTerm ctx (E.App e1 e) _ | E.Proj1 _ <- dropParens e1 = App Proj1 (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.Proj2 _) _ = Proj2
+rawExprToTerm ctx (E.App e1 e) _ | E.Proj2 _ <- dropParens e1 = App Proj2 (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.Pair e1 e2) Nothing = Pair (rawExprToTerm ctx e1 Nothing) (rawExprToTerm ctx e2 Nothing)
 rawExprToTerm ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
         t1 = typeOfTerm ctx e1'
@@ -149,6 +157,15 @@ typeOfTerm ctx (Sigma ((vars,t):vs) e) = case (typeOfTerm ctx t, typeOfTerm (upd
     tv = eval 0 (ctxToCtxV ctx) t
     updateCtx ctx [] = ctx
     updateCtx ctx (v:vs) = updateCtx (M.insert v (svar v tv, tv) ctx) vs
+typeOfTerm ctx (Pair e1 e2) = Ssigma "_" (freeVars e2) (typeOfTerm ctx e1) (\_ -> typeOfTerm ctx e2)
+typeOfTerm ctx Proj1 = error "typeOfTerm.Proj1"
+typeOfTerm ctx (App Proj1 e) = case typeOfTerm ctx e of
+    Ssigma _ _ a _ -> a
+    _ -> error "typeOfTerm.App.Proj1"
+typeOfTerm ctx Proj2 = error "typeOfTerm.Proj2"
+typeOfTerm ctx (App Proj2 e) = case typeOfTerm ctx e of
+    Ssigma _ _ _ b -> b $ eval 0 (ctxToCtxV ctx) (App Proj1 e)
+    _ -> error "typeOfTerm.App.Proj1"
 typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) =
     let v = eval 0 (ctxToCtxV ctx) e

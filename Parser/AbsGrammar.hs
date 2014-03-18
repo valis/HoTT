@@ -15,6 +15,8 @@ newtype Pus = Pus ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PExt = PExt ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PTrans = PTrans ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PProjl = PProjl ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
 data Defs =
    Defs [Def]
@@ -34,6 +36,7 @@ data Expr =
  | Prod Expr Expr
  | Sigma [TypedVar] Expr
  | Id Expr Expr
+ | Pair Expr Expr
  | App Expr Expr
  | Var Arg
  | Nat PNat
@@ -43,6 +46,8 @@ data Expr =
  | Ext PExt
  | Pmap Ppmap
  | Trans PTrans
+ | Proj1 PProjl
+ | Proj2 PProjr
  | NatConst PInt
  | Universe U
  | Paren PPar Expr

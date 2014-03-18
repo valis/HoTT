@@ -20,7 +20,7 @@ $i = [$l $d _ ']          -- identifier character
 $u = [\0-\255]          -- universal: any character
 
 @rsyms =    -- symbols and non-identifier-like reserved words
-   \= | \: | \; | \{ | \} | \- \> | \: \: | \* | \)
+   \= | \: | \; | \{ | \} | \- \> | \: \: | \* | \, | \)
 
 :-
 "--" [.]* ; -- Toss single line comments
@@ -40,6 +40,8 @@ N a t { tok (\p s -> PT p (eitherResIdent (T_PNat . share) s)) }
 e x t { tok (\p s -> PT p (eitherResIdent (T_PExt . share) s)) }
 p m a p { tok (\p s -> PT p (eitherResIdent (T_Ppmap . share) s)) }
 t r a n s { tok (\p s -> PT p (eitherResIdent (T_PTrans . share) s)) }
+p r o j 1 { tok (\p s -> PT p (eitherResIdent (T_PProjl . share) s)) }
+p r o j 2 { tok (\p s -> PT p (eitherResIdent (T_PProjr . share) s)) }
 $l ($l | $d | \' | \_)* { tok (\p s -> PT p (eitherResIdent (T_PIdent . share) s)) }
 
 $l $i*   { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
@@ -74,6 +76,8 @@ data Tok =
  | T_PExt !String
  | T_Ppmap !String
  | T_PTrans !String
+ | T_PProjl !String
+ | T_PProjr !String
  | T_PIdent !String
 
  deriving (Eq,Show,Ord)
@@ -112,6 +116,8 @@ prToken t = case t of
   PT _ (T_PExt s) -> s
   PT _ (T_Ppmap s) -> s
   PT _ (T_PTrans s) -> s
+  PT _ (T_PProjl s) -> s
+  PT _ (T_PProjr s) -> s
   PT _ (T_PIdent s) -> s
 
 
@@ -125,7 +131,7 @@ eitherResIdent tv s = treeFind resWords
                               | s > a  = treeFind right
                               | s == a = t
 
-resWords = b ";" 6 (b "->" 3 (b "*" 2 (b ")" 1 N N) N) (b "::" 5 (b ":" 4 N N) N)) (b "let" 9 (b "in" 8 (b "=" 7 N N) N) (b "}" 11 (b "{" 10 N N) N))
+resWords = b ";" 7 (b "->" 4 (b "*" 2 (b ")" 1 N N) (b "," 3 N N)) (b "::" 6 (b ":" 5 N N) N)) (b "let" 10 (b "in" 9 (b "=" 8 N N) N) (b "}" 12 (b "{" 11 N N) N))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

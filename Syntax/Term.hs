@@ -24,12 +24,15 @@ data Term
     | Suc
     | Rec
     | Idp
-    | Ext Term Term
     | Pmap
     | Trans
+    | Proj1
+    | Proj2
     | NatConst Integer
     | Universe Level
     | Typed Term Term
+    | Ext Term Term
+    | Pair Term Term
 
 infixl 5 `App`
 
@@ -44,6 +47,7 @@ freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ 
 freeVars (Id t e1 e2) = freeVars t `union` freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Ext e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var "_") = []
 freeVars (Var v) = [v]
 freeVars Nat = []
@@ -52,6 +56,8 @@ freeVars Rec = []
 freeVars Idp = []
 freeVars Pmap = []
 freeVars Trans = []
+freeVars Proj1 = []
+freeVars Proj2 = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Typed e1 e2) = freeVars e1 `union` freeVars e2
@@ -86,6 +92,7 @@ instance Eq Term where
         cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Typed a1 b1) (Typed a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
             (Nothing, Nothing) -> v1 == v2
             (Just c1, Just c2) -> c1 == c2
@@ -96,6 +103,8 @@ instance Eq Term where
         cmp _ _ _ Idp Idp = True
         cmp _ _ _ Pmap Pmap = True
         cmp _ _ _ Trans Trans = True
+        cmp _ _ _ Proj1 Proj1 = True
+        cmp _ _ _ Proj2 Proj2 = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
         cmp _ _ _ _ _ = False
@@ -155,6 +164,8 @@ ppTerm = go False
     go _ _ (Ext _ _) = text "ext"
     go _ _ Pmap = text "pmap"
     go _ _ Trans = text "trans"
+    go _ _ Proj1 = text "proj1"
+    go _ _ Proj2 = text "proj2"
     go _ _ (Universe u) = text (show u)
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -174,6 +185,9 @@ ppTerm = go False
     go False l (Typed e1 e2) =
         let l' = fmap pred l
         in go (isComp e1) l' e1 <+> text "::" <+> go False l' e2
+    go False l (Pair e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> comma <+> go False l' e2
 
 simplify :: Term -> Term
 simplify (Let [] e) = simplify e
@@ -218,6 +232,7 @@ simplify (Sigma ((v:vs,t):ts) e)
 simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)
 simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)
+simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify e@(Ext _ _) = e
 simplify e@(Var _) = e
 simplify Nat = Nat
@@ -226,6 +241,8 @@ simplify Rec = Rec
 simplify Idp = Idp
 simplify Pmap = Pmap
 simplify Trans = Trans
+simplify Proj1 = Proj1
+simplify Proj2 = Proj2
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
 
