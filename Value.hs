@@ -1,13 +1,14 @@
 module Value
     ( Value(..), ValueFV
     , D(..), GlobMap
-    , svar, sarr, sarrFV, sprod
+    , svar, sarr, sarrFV, sprod, sprodFV
     , Ctx, CtxV
     , ctxToCtxV
     , cmpTypes
     , reify, reifyType, reifyFV
     , valueFreeVars
-    , app, idp, action, liftTerm
+    , proj1, proj2, app, coe, pmap, trans
+    , idp, action, liftTerm
     ) where
 
 import qualified Data.Map as M
@@ -15,6 +16,7 @@ import Data.List
 
 import Syntax.Common
 import Syntax.Term
+import ErrorDoc
 
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
@@ -22,7 +24,8 @@ data Value
     = Slam String [String] (Integer -> GlobMap -> Value -> Value) -- Constructor for Pi-types
     | Szero | Ssuc Value -- Constructors for Nat
     | Spair Value Value -- Constructor for Sigma-types
-    | Spi String [String] Value (Value -> Value) | Ssigma String [String] Value (Value -> Value) -- Constructors for Type_k
+    | Spi String [String] Value (Integer -> GlobMap -> Value -> Value) -- Constructor for Type_k
+    | Ssigma String [String] Value (Integer -> GlobMap -> Value -> Value) -- Constructor for Type_k
     | Snat | Sid Value Value Value | Stype Level -- Constructors for Type_k
     | Sidp Value -- Constructor for Id
     | Ne [(Term,Term)] Term
@@ -35,22 +38,25 @@ type ValueFV = (Value,[String])
 
 infixr 5 `sarrFV`
 sarrFV :: Value -> ValueFV -> Value
-sarrFV a (b,fv) = Spi "_" fv a (const b)
+sarrFV a (b,fv) = Spi "_" fv a $ \k _ _ -> action (genericReplicate k Ud) b
 
 infixr 5 `sarr`
 sarr :: Value -> Value -> Value
 sarr a b = sarrFV a (b,valueFreeVars b)
 
-sprod :: Value -> ValueFV -> Value
-sprod a (b,fv) = Ssigma "_" fv a (const b)
+sprodFV :: Value -> ValueFV -> Value
+sprodFV a (b,fv) = Ssigma "_" fv a $ \k _ _ -> action (genericReplicate k Ud) b
+
+sprod :: Value -> Value -> Value
+sprod a b = sprodFV a (b,valueFreeVars b)
 
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV = M.map fst
 
 cmpTypes :: Value -> Value -> Bool
-cmpTypes (Spi x v1 a b) (Spi _ v2 a' b') = cmpTypes a' a && cmpTypes (b $ svar fresh a) (b' $ svar fresh a')
+cmpTypes (Spi x v1 a b) (Spi _ v2 a' b') = cmpTypes a' a && cmpTypes (b 0 [] $ svar fresh a) (b' 0 [] $ svar fresh a')
     where fresh = freshName x (v1 `union` v2)
-cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = cmpTypes a a' && cmpTypes (b $ svar fresh a) (b' $ svar fresh a')
+cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = cmpTypes a a' && cmpTypes (b 0 [] $ svar fresh a) (b' 0 [] $ svar fresh a')
     where fresh = freshName x (v1 `union` v2)
 cmpTypes (Sid t a b) (Sid t' a' b') = cmpTypes t t' && cmpValues a a' t && cmpValues b b' t
 cmpTypes Snat Snat = True
@@ -81,9 +87,27 @@ valueFreeVars (Ne l e) = freeVars e `union` concatMap (\(x,y) -> freeVars x `uni
 svar :: String -> Value -> Value
 svar x = liftTerm (Var x)
 
+proj1 :: Value -> Value
+proj1 (Spair a _) = a
+proj1 _ = error "proj1"
+
+proj2 :: Value -> Value
+proj2 (Spair _ b) = b
+proj2 _ = error "proj1"
+
 app :: Integer -> Value -> Value -> Value
 app n (Slam _ _ f) a = f n [] a
 app _ _ _ = error "Value.app"
+
+coe :: Integer -> Value -> Value
+coe _ (Siso _ _ f _) = f
+coe _ _ = error "coe"
+
+pmap :: Integer -> Value -> Value -> Value
+pmap n = app (n + 1)
+
+trans :: Integer -> Value -> Value -> Value -> Value
+trans n b p = app n (coe n $ app (n + 1) (idp b) p)
 
 actionTerm :: [D] -> Term -> Term
 actionTerm [] e = e
@@ -95,28 +119,35 @@ appTerm :: Term -> Term -> Term
 appTerm (App Pmap (App Idp e1)) (App Idp e2) = App Idp (appTerm e1 e2)
 appTerm e1 e2 = App e1 e2
 
-sid :: Value -> Value
-sid a = Sid a (error "sid.left") (error "sid.right")
-
-sidr :: Integer -> Value -> Value
-sidr k v = iterate sid v `genericIndex` k
-
 getBase :: Value -> (Integer,Value)
 getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
 liftTerm :: Term -> Value -> Value
 liftTerm e (Stype _) = Swtype e
-liftTerm e (Sid (Stype _) a b) = Siso a b (Ne [] r) (Ne [] $ App (Var "inv") r)
+liftTerm e (Sid (Stype _) a b) = Siso a b (liftTerm r $ a `sarr` b) (liftTerm (App (Var "inv") r) $ b `sarr` a)
   where r = App Coe e
 liftTerm (App Idp e) (Sid t _ _) = Sidp (liftTerm e t)
-liftTerm (App Idp e) _ = error "liftTerm.Idp"
 liftTerm e t | (n, Spi x _ a b) <- getBase t = Slam x (freeVars e) $ \k m v ->
-    let e' = appTerm (actionTerm m $ iterate (App Pmap) e `genericIndex` n) (reify v $ sidr (k + n) a)
-    in liftTerm e' $ sidr (k + n) (b v)
+    let e' = actionTerm m $ iterate (App Pmap) e `genericIndex` n
+        v' = action (genericReplicate k Rd) v
+    in go (liftTypeValue n v a) (liftTypePi n t v' (b 0 [] $ action (genericReplicate n Rd) v')) e' k v
+  where
+    liftTypePi :: Integer -> Value -> Value -> Value -> Value
+    liftTypePi 0 _ _ a = a
+    liftTypePi n (Sid t f g) v a =
+        Sid (liftTypePi (n - 1) t (action [Ld] v) a) (app (n - 1) f $ action [Ld] v) (app (n - 1) g $ action [Rd] v)
+    liftTypePi _ _ _ _ = error "liftTerm.liftTypePi"
+    
+    liftTypeValue 0 _ a = a
+    liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
+    
+    go a b e' 0 v = liftTerm (appTerm e' $ reify v a) b
+    go a b e' k v = liftTerm (appTerm e' $ reify v $ liftTypeValue k v a) $
+        Sid b (go a b e' (k - 1) $ action [Ld] v) (go a b e' (k - 1) $ action [Rd] v)
 liftTerm e (Ssigma _ _ a b) =
     let a' = liftTerm (App Proj1 e) a
-    in Spair a' $ liftTerm (App Proj2 e) (b a')
+    in Spair a' $ liftTerm (App Proj2 e) (b 0 [] a')
 liftTerm _ (Sid (Ssigma _ _ _ _) _ _) = error "TODO: liftTerm.Sid.Ssigma"
 liftTerm e t = Ne (sidToList t) e
   where
@@ -131,6 +162,8 @@ action :: GlobMap -> Value -> Value
 action [] v = v
 action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
+action _ Szero = Szero
+action _ v@(Ssuc _) = v
 action (Ud:m) (Spi x fv a b) = error "TODO: action.Spi"
 action (Ud:m) (Ssigma x fv a b) = error "TODO: action.Ssigma"
 action (Ud:m) Snat = error "TODO: action.Snat"
@@ -149,8 +182,6 @@ action (Ud:m) t@(Swtype e) = action m (Siso t t idlam idlam)
     idlam = Slam "x" [] $ \_ _ -> id
 action _ (Swtype _) = error "action.Swtype"
 action (Ud:m) v = action m (Sidp v)
-action _ Szero = error "action.Szero"
-action _ (Ssuc _) = error "action.Ssuc"
 action _ (Spi _ _ _ _) = error "action.Spi"
 action _ (Ssigma _ _ _ _) = error "action.Ssigma"
 action _ Snat = error "action.Snat"
@@ -161,37 +192,40 @@ reifyFV :: ValueFV -> Value -> Term
 reifyFV (Slam x _ f, fv) (Spi _ _ a b) =
     let x' = freshName x fv
         v = svar x' a
-    in Lam [x'] $ reifyFV (f 0 [] v, x':fv) (b v)
+    in Lam [x'] $ reifyFV (f 0 [] v, x':fv) (b 0 [] v)
 reifyFV (Slam _ _ h, fv) (Sid t@(Spi x _ a b) f g) =
     let x' = freshName x fv
         v = svar x' a
-    in App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 1 [] (idp v), x':fv) $ sid (b v)
+    in App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] (idp v), x':fv) $
+        Sid (b 0 [] v) (app 0 f v) (app 0 g v)
 reifyFV (Slam _ _ h, fv) (Sid t@(Sid t'@(Spi x _ a b) f' g') f g) =
     let x' = freshName x fv
         v = svar x' a
     in App (App Pmap $ App Idp (Ext (reify f' t') (reify g' t'))) $
-        App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 2 [] $ idp (idp v), x':fv) $ sid $ sid (b v)
+        App (Ext (reify f t) (reify g t)) $ Lam [x'] $ reifyFV (h 0 [] $ idp (idp v), x':fv) $
+        Sid (Sid (b 0 [] v) (app 0 f' v) (app 0 g' v)) (app 1 f $ idp v) (app 1 g $ idp v)
 reifyFV (Slam _ _ _, _) _ = error "reify.Slam"
-reifyFV (Spair e1 e2, _) (Ssigma _ _ a b) = Pair (reify e1 a) (reify e2 $ b e1)
+reifyFV (Spair e1 e2, _) (Ssigma _ _ a b) = Pair (reify e1 a) (reify e2 $ b 0 [] e1)
 reifyFV (Spair _ _, _) t | (n, Ssigma _ _ _ _) <- getBase t = error $ "TODO: reify.Spair: " ++ show n
 reifyFV (Spair _ _, _) _ = error "reify.Spair"
 reifyFV (Swtype e,_) (Stype _) = e
 reifyFV (Swtype _,_) _ = error "reify.Swtype"
 reifyFV (Siso _ _ _ _, _) (Sid _ _ _) = error "TODO: reify.Siso"
 reifyFV (Siso _ _ _ _, _) _ = error "reify.Siso"
-reifyFV (Szero,_) Snat = NatConst 0
+reifyFV (Szero,_) t | (n, Snat) <- getBase t = iterate (App Idp) (NatConst 0) `genericIndex` n
 reifyFV (Szero,_) _ = error "reify.Szero"
-reifyFV (Ssuc e,fv) Snat = case reifyFV (e,fv) Snat of
+reifyFV (Ssuc e,fv) t | (n, Snat) <- getBase t = iidp n $ case reifyFV (e,fv) Snat of
     NatConst n -> NatConst (n + 1)
     t -> App Suc t
+  where iidp n x = iterate (App Idp) x `genericIndex` n
 reifyFV (Ssuc _,_) _ = error "reify.Ssuc"
 reifyFV (Spi x _ a b,fv) u@(Stype _) =
     let x' = freshName x fv
-    in Pi [([x'],reifyFV (a,valueFreeVars a) u)] $ reifyFV (b $ svar x' a, x':fv) u
+    in Pi [([x'],reifyFV (a,valueFreeVars a) u)] $ reifyFV (b 0 [] $ svar x' a, x':fv) u
 reifyFV (Spi _ _ _ _, _) _ = error "reify.Spi"
 reifyFV (Ssigma x _ a b,fv) u@(Stype _) =
     let x' = freshName x fv
-    in Sigma [([x'],reifyFV (a,valueFreeVars a) u)] $ reifyFV (b $ svar x' a, x':fv) u
+    in Sigma [([x'],reifyFV (a,valueFreeVars a) u)] $ reifyFV (b 0 [] $ svar x' a, x':fv) u
 reifyFV (Ssigma _ _ _ _, _) _ = error "reify.Ssigma"
 reifyFV (Sid t a b,_) u@(Stype _) =
     Id (reifyFV (t,valueFreeVars t) u) (reifyFV (a,valueFreeVars a) t) $ reifyFV (b,valueFreeVars b) t

@@ -8,6 +8,7 @@ import Data.List
 
 import Syntax.Term
 import Value
+import ErrorDoc
 
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
@@ -15,7 +16,7 @@ eval _ _ Coe = Slam "p" [] $ \k _ -> coe k
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
 eval n ctx (Ext _ g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
-    comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k ctx g) p
+    comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k (M.map (action $ n ++ m) ctx) g) p
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" [] $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" [] $ \_ _ -> proj2
@@ -28,28 +29,32 @@ eval n ctx (Lam args e) = go n ctx args
     go n ctx []     = eval n ctx e
     go n ctx s@(a:as) = Slam a (fv \\ s) $ \k m v -> go k (M.insert a v $ M.map (action m) ctx) as
 eval n ctx (Pi [] e) = eval n ctx e
-eval 0 ctx (Pi ((vars,t):ts) e) = go ctx vars
+eval n ctx (Pi ((vars,t):ts) e) = go n ctx vars
   where
-    tv   = eval 0 ctx t
     efv  = freeVars (Pi ts e)
     pefv = freeVars t `union` efv
-    go ctx []       = eval 0 ctx t `sarrFV` (eval 0 ctx (Pi ts e),efv)
-    go ctx [v]      = Spi v (delete v efv) tv $ \a -> eval 0 (M.insert v a ctx) (Pi ts e)
-    go ctx s@(v:vs) = Spi v (pefv \\ s)    tv $ \a -> go     (M.insert v a ctx) vs
+    go 0 ctx []       = eval n ctx t `sarrFV` (eval n ctx (Pi ts e),efv)
+    go 0 ctx [v]      = Spi v (delete v efv) (eval n ctx t) $
+        \k m a -> eval k (M.insert v a $ M.map (action m) ctx) (Pi ts e)
+    go 0 ctx s@(v:vs) = Spi v (pefv \\ s)    (eval n ctx t) $
+        \k m a -> go   k (M.insert v a $ M.map (action m) ctx) vs
+    go n _ _ = error $ "TODO: eval.Pi: " ++ show n
 eval n ctx (Sigma [] e) = eval n ctx e
-eval 0 ctx (Sigma ((vars,t):ts) e) = go ctx vars
+eval n ctx (Sigma ((vars,t):ts) e) = go n ctx vars
   where
-    tv   = eval 0 ctx t
     efv  = freeVars (Sigma ts e)
     pefv = freeVars t `union` efv
-    go ctx []       = eval 0 ctx t `sprod` (eval 0 ctx (Sigma ts e),efv)
-    go ctx [v]      = Ssigma v (delete v efv) tv $ \a -> eval 0 (M.insert v a ctx) (Sigma ts e)
-    go ctx s@(v:vs) = Ssigma v (pefv \\ s)    tv $ \a -> go     (M.insert v a ctx) vs
+    go 0 ctx []       = eval n ctx t `sarrFV` (eval n ctx (Sigma ts e),efv)
+    go 0 ctx [v]      = Ssigma v (delete v efv) (eval n ctx t) $
+        \k m a -> eval k (M.insert v a $ M.map (action m) ctx) (Sigma ts e)
+    go 0 ctx s@(v:vs) = Ssigma v (pefv \\ s)    (eval n ctx t) $
+        \k m a -> go   k (M.insert v a $ M.map (action m) ctx) vs
+    go n _ _ = error $ "TODO: eval.Sigma: " ++ show n
 eval 0 ctx (Id t e1 e2) = Sid (eval 0 ctx t) (eval 0 ctx e1) (eval 0 ctx e2)
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n ctx (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval 0 ctx Nat = Snat
-eval _ ctx Suc = Slam "n" [] $ \k _ v -> action (genericReplicate k Ud) $ Ssuc $ action (genericReplicate k Ld) v
+eval _ ctx Suc = Slam "n" [] $ \_ _ -> Ssuc
 eval _ ctx Rec =                                            Slam "P" []    $ \pk pm pv ->
     let pfv = valueFreeVars pv                           in Slam "z" pfv   $ \zk zm zv ->
     let zfv = valueFreeVars zv; pzfv  = pfv  `union` zfv in Slam "s" pzfv  $ \sk sm sv ->
@@ -67,8 +72,6 @@ eval n ctx (Typed e _) = eval n ctx e
 eval _ _ Nat = error "TODO: eval.Nat > 0"
 eval _ _ (Universe _) = error "TODO: eval.U > 0"
 eval _ _ (Id _ _ _) = error "TODO: eval.Id > 0"
-eval _ _ (Pi _ _) = error "TODO: eval.Pi > 0"
-eval _ _ (Sigma _ _) = error "TODO: eval.Sigma > 0"
 
 rec :: Integer -> ValueFV -> ValueFV -> ValueFV -> Value -> Value
 rec 0 p z s = go
@@ -78,7 +81,8 @@ rec 0 p z s = go
     go t@(Ne [] e) =
         let r = Rec `App` reifyFV p (Snat `sarr` Stype maxBound)
                     `App` reifyFV z (app 0 (fst p) Szero)
-                    `App` reifyFV s (Spi "x" (snd p) Snat $ \x -> app 0 (fst p) x `sarr` app 0 (fst p) (Ssuc x))
+                    `App` reifyFV s (Spi "x" (snd p) Snat $ \k m x ->
+                        app k (action m $ fst p) x `sarr` app k (action m $ fst p) (Ssuc x))
                     `App` e
         in liftTerm r (app 0 (fst p) t)
     go _ = error "rec"
@@ -87,26 +91,12 @@ rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\z -> Rec P z s 0) p = p
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
 
-coe :: Integer -> Value -> Value
-coe _ (Siso _ _ f _) = f
-coe _ _ = error "coe"
-
 comp :: Integer -> Value -> Value -> Value
+-- comp 0 (Sidp _) x@(Sidp _) = x
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
-comp 1 (Sidp (Sidp _)) x = x
-comp 1 x (Sidp (Sidp _)) = x
+comp 1 (Sidp (Sidp _)) x@(Sidp (Sidp _)) = x
+comp 1 (Ne _ e1) (Sidp (Ne _ e2)) = error $ "comp.Ne" ++ erender (emsg "" $ epretty e1) ++ erender (emsg "" $ epretty e2)
 comp n _ _ = error $ "TODO: comp " ++ show n
-
-pmap :: Integer -> Value -> Value -> Value
-pmap n = app (n + 1)
-
-proj1 :: Value -> Value
-proj1 (Spair a _) = a
-proj1 _ = error "proj1"
-
-proj2 :: Value -> Value
-proj2 (Spair _ b) = b
-proj2 _ = error "proj1"

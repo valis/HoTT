@@ -14,6 +14,7 @@ import Syntax.Common
 import Syntax.Raw
 import qualified Syntax.Term as T
 import RawToTerm
+import Eval
 
 maxType :: Expr -> Expr -> Value -> Value -> EDocM Value
 maxType _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
@@ -63,14 +64,14 @@ typeOfH ctx (Let defs e) h = do
 typeOfH ctx (Paren _ e) h = typeOfH ctx e h
 typeOfH ctx (Lam _ [] e) h = typeOfH ctx e h
 
-typeOfH ctx (Lam (PLam (lc,_)) (x:xs) e) (P _ (Sid ty _ _)) = do
+typeOfH ctx (Lam (PLam (lc,_)) (x:xs) e) (P _ ty) = do
     let p = if null xs then getPos e else binderGetPos (head xs)
         (x',e') = renameExpr (freeVars $ Lam (PLam (p,"\\")) xs e) (unBinder x) $ Lam (PLam (p,"\\")) xs e
     s <- typeOf (M.insert x' (svar x' ty,ty) ctx) e'
     if elem x' $ T.freeVars (reifyType s)
         then inferErrorMsg lc "lambda expression"
         else Right s
-typeOfH ctx e (P e2 (Sid act _ _)) = do
+typeOfH ctx e (P e2 act) = do
     t <- typeOf ctx e
     case t of
         Spi x fv exp r -> if cmpTypes act exp
@@ -82,25 +83,25 @@ typeOfH ctx e (P e2 (Sid act _ _)) = do
                  in Left [emsgLC l c "" $ em (etext "Expected type: Id") exp $$
                     em (etext "But term" <+> epretty e2 <+> etext "has type Id") act]
         _ -> expTypeBut "pi" e t
-typeOfH ctx e (P _ _) = error "typeOfH.P"
 
 typeOfH ctx (Lam _ (x:xs) e) (T r@(Spi z fv a b)) =
     let p = if null xs then getPos e else binderGetPos (head xs)
         (x',e') = renameExpr fv (unBinder x) (Lam (PLam (p,"\\")) xs e)
         v = svar x' a
-    in typeOfH (M.insert x' (v,a) ctx) e' (T (b v)) >> return r
+    in typeOfH (M.insert x' (v,a) ctx) e' (T (b 0 [] v)) >> return r
 typeOfH _ (Lam _ (Binder arg : _) _) (T ty) =
     let (l,c) = case arg of
             Arg (PIdent (p,_)) -> p
             NoArg (Pus (p,_)) -> p
     in Left [emsgLC l c "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
 typeOfH _ i@(Idp _) (T exp@(Spi x _ a _)) = do
-    cmpTypesErr exp (Spi x (valueFreeVars a) a $ \v -> Sid a v v) i
+    let ctx = M.singleton (freshName "a" [x]) a
+    cmpTypesErr exp (eval 0 ctx $ T.Pi [([x],T.Var "a")] $ T.Id (T.Var "a") (T.Var x) (T.Var x)) i
     return exp
 typeOfH _ (Idp (PIdp ((l,c),_))) (T ty) =
     Left [emsgLC l c "" $ expType 1 ty $$ etext "But idp has pi type"]
-typeOfH ctx e@(Coe (PCoe (lc,_))) (T ty@(Spi v fv a@(Sid (Stype _) x y) b)) = case b $ svar (freshName v fv) a of
-    Spi v' fv' x' y' -> if cmpTypes x x' && cmpTypes y (y' $ svar (freshName v' fv') x')
+typeOfH ctx e@(Coe (PCoe (lc,_))) (T ty@(Spi v fv a@(Sid (Stype _) x y) b)) = case b 0 [] $ svar (freshName v fv) a of
+    Spi v' fv' x' y' -> if cmpTypes x x' && cmpTypes y (y' 0 [] $ svar (freshName v' fv') x')
         then return ty
         else coeErrorMsg lc ty
     _ -> coeErrorMsg lc ty
@@ -131,18 +132,18 @@ typeOfH ctx (App e1 e) (T ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = pmapError
 typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case isArr x' fv' s t of
     Just (Sid (Spi x fv a b) f g) | cmpTypes a a' ->
         let v = svar (freshName x $ fv `union` fv' `union` valueFreeVars f `union` valueFreeVars g) a
-        in if cmpTypes (b' v) (Sid (b v) (app 0 f v) (app 0 g v)) then Right ty else extErrorMsg lc ty
+        in if cmpTypes (b' 0 [] v) (Sid (b 0 [] v) (app 0 f v) (app 0 g v)) then Right ty else extErrorMsg lc ty
     _ -> extErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) (T ty) = extErrorMsg lc ty
 typeOfH ctx (App e1 e) (T r@(Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = do
     let fv' = fv `union` valueFreeVars f `union` valueFreeVars g
-    typeOfH ctx e $ T $ Spi x fv' a $ \v -> Sid (b v) (app 0 f v) (app 0 g v)
+    typeOfH ctx e $ T $ Spi x fv' a $ \k m v -> Sid (b k m v) (app k (action m f) v) (app k (action m g) v)
     return r
-typeOfH ctx ea@(App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
-    $$ etext "But term" <+> epretty ea <+> etext "has type of the form Id ((x : A) -> B x) _ _"]
+typeOfH ctx (App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
+    $$ etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
 typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
-    typeOfH ctx e2 $ T $ b $ evalRaw ctx e1 (Just a)
+    typeOfH ctx e2 $ T $ b 0 [] $ evalRaw ctx e1 (Just a)
     return r
 typeOfH ctx e@(Pair _ _) (T exp) =
     let (l,c) = getPos e
@@ -154,7 +155,7 @@ typeOfH ctx (Proj1 (PProjl (lc,_))) (T exp) = proj1ErrorMsg lc exp
 -- proj2 : (p : (x : A) -> B x) -> B (proj1 p)
 typeOfH ctx (Proj2 (PProjr (lc,_))) (T r@(Spi x fv a'@(Ssigma _ _ a b) b')) =
     let x' = freshName x fv
-    in if cmpTypes (b $ liftTerm (T.App T.Proj1 $ T.Var x') a) (b' $ svar x' a')
+    in if cmpTypes (b 0 [] $ liftTerm (T.App T.Proj1 $ T.Var x') a) (b' 0 [] $ svar x' a')
         then Right r
         else proj2ErrorMsg lc r
 typeOfH ctx (Proj2 (PProjr (lc,_))) (T exp) = proj2ErrorMsg lc exp
@@ -163,10 +164,7 @@ typeOfH ctx e (T exp) = do
     cmpTypesErr exp act e
     return exp
 
-typeOfH ctx (Pair e1 e2) N = do
-    a <- typeOf ctx e1
-    b <- typeOf ctx e2
-    return $ Ssigma "_" (valueFreeVars b) a (const b)
+typeOfH ctx (Pair e1 e2) N = liftErr2' sprod (typeOf ctx e1) (typeOf ctx e2)
 typeOfH _ (Lam (PLam (lc,_)) _ _) N = inferErrorMsg lc "the argument"
 typeOfH _ (Idp (PIdp (lc,_))) N = inferErrorMsg lc "idp"
 typeOfH _ (Coe (PCoe (lc,_))) N = inferErrorMsg lc "coe"
@@ -186,7 +184,7 @@ typeOfH ctx (App e1 e) N | Proj1 _ <- dropParens e1 = do
 typeOfH ctx (App e1 e) N | Proj2 (PProjr p) <- dropParens e1 = do
     t <- typeOf ctx e
     case t of
-        Ssigma _ _ a b -> Right $ b $ evalRaw ctx (App (Proj1 $ PProjl p) e) (Just a)
+        Ssigma _ _ a b -> Right $ b 0 [] $ evalRaw ctx (App (Proj1 $ PProjl p) e) (Just a)
         _ -> expTypeBut "Sigma" e t
 typeOfH _ (App e1 _) N | Pmap (Ppmap (lc,_)) <- dropParens e1 = inferErrorMsg lc "ext"
 -- pmap (idp e1) e2
@@ -198,7 +196,7 @@ typeOfH ctx (App e1' e2) N
         t2 <- typeOf ctx e2
         case t2 of
             Sid s a b -> do
-                t <- typeOfH ctx e1 (P e2 t2)
+                t <- typeOfH ctx e1 (P e2 s)
                 let e' = evalRaw ctx e1 $ Just (s `sarr` t)
                 Right $ Sid t (app 0 e' a) (app 0 e' b)
             _ -> expTypeBut "Id" e2 t2
@@ -237,7 +235,7 @@ typeOfH ctx (App e1 e2) N = do
     case t1 of
         Spi _ _ a b -> do
             typeOfH ctx e2 (T a)
-            return $ b $ evalRaw ctx e2 (Just a)
+            return $ b 0 [] $ evalRaw ctx e2 (Just a)
         _ -> expTypeBut "pi" e1 t1
 typeOfH _ (Var (NoArg (Pus ((l,c),_)))) N = Left [emsgLC l c "Expected identifier" enull]
 typeOfH ctx (Var (Arg (PIdent ((l,c),x)))) N = case M.lookup x ctx of
@@ -246,17 +244,17 @@ typeOfH ctx (Var (Arg (PIdent ((l,c),x)))) N = case M.lookup x ctx of
 typeOfH _ (Suc _) N = Right (sarr Snat Snat)
 typeOfH _ (NatConst _) N = Right Snat
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
-typeOfH _ (Rec _) N = Right $ Spi "P" [] (Snat `sarr` Stype maxBound) $ \p ->
-    let pfv = valueFreeVars p
-    in app 0 p Szero `sarr` (Spi "x" pfv Snat $ \x -> app 0 p x `sarr` app 0 p (Ssuc x)) `sarr` Spi "x" pfv Snat (app 0 p)
+typeOfH _ (Rec _) N = Right $ eval 0 M.empty $ T.Pi [(["P"], T.Pi [([],T.Nat)] $ T.Universe Omega)] $
+    T.Pi [([], T.App (T.Var "P") $ T.NatConst 0)] $ T.Pi [([], iht)] $ T.Pi [(["x"],T.Nat)] $ T.App (T.Var "P") (T.Var "x")
+  where iht = T.Pi [(["x"],T.Nat)] $ T.Pi [([], T.App (T.Var "P") (T.Var "x"))] $ T.App (T.Var "P") $ T.App T.Suc (T.Var "x")
 typeOfH ctx (Typed e t) N = do
     typeOfH ctx t $ T (Stype maxBound)
     typeOfH ctx e $ T $ evalRaw ctx t $ Just (Stype maxBound)
 
-isArr :: String -> [String] -> Value -> (Value -> Value) -> Maybe Value
+isArr :: String -> [String] -> Value -> (Integer -> [D] -> Value -> Value) -> Maybe Value
 isArr x fv t f =
     let x' = freshName x fv
-        r = f (svar x' t)
+        r = f 0 [] (svar x' t)
     in if elem x' (valueFreeVars r) then Nothing else Just r
 
 evalDecl :: String -> Expr -> Maybe Expr -> StateT Ctx EDocM (Value,Value)
