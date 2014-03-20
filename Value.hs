@@ -121,7 +121,7 @@ pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
 
 trans :: Integer -> Value -> Value -> Value -> Value
-trans n b p = app n (coe n $ app (n + 1) (idp b) p)
+trans n b p = app n (coe n $ pmap n (idp b) p)
 
 actionTerm :: [D] -> Term -> Term
 actionTerm [] e = e

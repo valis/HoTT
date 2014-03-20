@@ -32,6 +32,7 @@ data Term
     | Universe Level
     | Typed Term Term
     | Ext Term Term
+    | ExtSigma Term Term
     | Pair Term Term
 
 infixl 5 `App`
@@ -47,6 +48,7 @@ freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ 
 freeVars (Id t e1 e2) = freeVars t `union` freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Ext e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (ExtSigma e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var "_") = []
 freeVars (Var v) = [v]
@@ -92,6 +94,7 @@ instance Eq Term where
         cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Typed a1 b1) (Typed a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (ExtSigma a1 b1) (ExtSigma a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
             (Nothing, Nothing) -> v1 == v2
@@ -162,6 +165,7 @@ ppTerm = go False
     go _ _ Rec = text "R"
     go _ _ Idp = text "idp"
     go _ _ (Ext _ _) = text "ext"
+    go _ _ (ExtSigma _ _) = text "ext"
     go _ _ Pmap = text "pmap"
     go _ _ Coe = text "coe"
     go _ _ Proj1 = text "proj1"
@@ -234,6 +238,7 @@ simplify (App e1 e2) = App (simplify e1) (simplify e2)
 simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)
 simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify e@(Ext _ _) = e
+simplify e@(ExtSigma _ _) = e
 simplify e@(Var _) = e
 simplify Nat = Nat
 simplify Suc = Suc

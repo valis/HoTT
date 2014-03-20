@@ -115,10 +115,21 @@ rawExprToTerm ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 = App Idp (raw
 rawExprToTerm ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 = App Coe (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Spi x fv a b) f g)) | E.Ext _ <- dropParens e1 =
     App (Ext (reify f t) (reify g t)) $ rawExprToTerm ctx e $ Just $
-    Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $
-        \k m v -> Sid (b k m v) (app k (action m f) v) (app k (action m g) v)
+    Spi x (fv `union` valueFreeVars f `union` valueFreeVars g) a $ \k m v ->
+        let r1 = b k m v
+            r2 = app k (action m f) v 
+            r3 = app k (action m g) v
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ Id (Var "r1") (Var "r2") (Var "r3")
+rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Ssigma x fv a b) p q)) | E.Ext _ <- dropParens e1 =
+    App (Ext (reify p t) (reify q t)) $ rawExprToTerm ctx e $ Just $
+    Ssigma x (fv `union` valueFreeVars p `union` valueFreeVars q) (Sid a (proj1 p) (proj1 q)) $ \k m v ->
+        let r1 = action m $ b 0 [] (proj1 q)
+            r2 = trans k (action m $ Slam x fv b) v (action m $ proj2 p)
+            r3 = proj2 q
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm _ (E.Ext _) (Just (Spi _ _ a b)) = case b 0 [] (error "rawExprToTerm.Ext.Var") of
-    Sid t f g -> Ext (reify f t) (reify g t)
+    Sid t@(Spi _ _ _ _) f g -> Ext (reify f t) (reify g t)
+    Sid t@(Ssigma _ _ _ _) p q -> ExtSigma (reify p t) (reify q t)
     _ -> error "rawExprToTerm.Ext.Pi"
 rawExprToTerm _ (E.Ext _) _ = error "rawExprToTerm.Ext"
 rawExprToTerm ctx (E.App e1 e2) _ =
@@ -200,6 +211,7 @@ typeOfTerm _ Rec = eval 0 M.empty $ Pi [(["P"], Pi [([],Nat)] $ Universe Omega)]
   where iht = Pi [(["x"],Nat)] $ Pi [([], App (Var "P") (Var "x"))] $ App (Var "P") $ App Suc (Var "x")
 typeOfTerm ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm ctx (Ext f g) = Sid (typeOfTerm ctx f) (eval 0 (ctxToCtxV ctx) f) (eval 0 (ctxToCtxV ctx) g)
+typeOfTerm ctx (ExtSigma p q) = Sid (typeOfTerm ctx p) (eval 0 (ctxToCtxV ctx) p) (eval 0 (ctxToCtxV ctx) q)
 typeOfTerm _ (NatConst _) = Snat
 typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Pmap = error "typeOfTerm.Pmap"

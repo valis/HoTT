@@ -118,8 +118,8 @@ typeOfH ctx (Pmap (Ppmap (lc,_))) (T exp@(Spi v fv a@(Sid (Spi v' fv' a' b') f g
     case (isArr v fv a b, isArr v' fv' a' b') of
         (Just (Spi v2 fv2 a2'@(Sid a2 x y) b2'), Just t) | Just (Sid b2 x' y') <- isArr v2 fv2 a2' b2', cmpTypes a2 a'
             && cmpTypes t b2 && reify x' b2 == reify (app 0 f x) t && reify y' b2 == reify (app 0 g y) t -> return exp
-        _ -> extErrorMsg lc exp
-typeOfH ctx (Pmap (Ppmap (lc,_))) (T exp) = extErrorMsg lc exp
+        _ -> pmapErrorMsg lc exp
+typeOfH ctx (Pmap (Ppmap (lc,_))) (T exp) = pmapErrorMsg lc exp
 typeOfH ctx ea@(App e1 e) (T ty@(Spi v fv a'@(Sid a x y) b')) | Pmap (Ppmap ((l,c),_)) <- dropParens e1 = do
     t <- typeOf ctx e
     case t of
@@ -134,13 +134,33 @@ typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case i
         let v = svar (freshName x $ fv `union` fv' `union` valueFreeVars f `union` valueFreeVars g) a
         in if cmpTypes (b' 0 [] v) (Sid (b 0 [] v) (app 0 f v) (app 0 g v)) then Right ty else extErrorMsg lc ty
     _ -> extErrorMsg lc ty
+-- ext : (s : Id A x x') * Id (B x') (trans B s y) y' -> Id ((x : A) * B x) (x,y) (x',y')
+--       a'              * b'                         -> Id (a       * b  ) p     q
+typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Ssigma _ _ a' b') t)) = case isArr x' fv' s t of
+    Just (Sid (Ssigma x fv a b) p q) ->
+        let fva = fv `union` fv' `union` valueFreeVars p `union` valueFreeVars q
+            v = svar (freshName x fva) $ Sid a (proj1 p) (proj1 q)
+        in if cmpTypes a' (Sid a (proj1 p) (proj1 q)) &&
+              cmpTypes (b' 0 [] v) (Sid (b 0 [] $ proj1 q) (trans 0 (Slam x fv b) s $ proj2 p) (proj2 q))
+           then Right ty
+           else extErrorMsg lc ty
+    _ -> extErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) (T ty) = extErrorMsg lc ty
 typeOfH ctx (App e1 e) (T r@(Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 = do
     let fv' = fv `union` valueFreeVars f `union` valueFreeVars g
     typeOfH ctx e $ T $ Spi x fv' a $ \k m v -> Sid (b k m v) (app k (action m f) v) (app k (action m g) v)
     return r
+-- (s : Id a (proj1 p) (proj1 q)) * (Id (B (proj1 q)) (trans B s (proj2 p)) (proj2 q))
+typeOfH ctx (App e1 e) (T r@(Sid (Ssigma x fv a b) p q)) | Ext _ <- dropParens e1 = do
+    let fv' = fv `union` valueFreeVars p `union` valueFreeVars q
+    typeOfH ctx e $ T $ Ssigma x fv' (Sid a (proj1 p) (proj1 q)) $ \k m s ->
+        let r1 = action m $ b 0 [] (proj1 q)
+            r2 = trans k (action m $ Slam x fv b) s $ action m (proj2 p)
+            r3 = action m (proj2 q)
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ T.Id (T.Var "r1") (T.Var "r2") (T.Var "r3")
+    return r
 typeOfH ctx (App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
-    $$ etext "But term ext _ has type of the form Id ((x : A) -> B x) _ _"]
+    $$ etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
 typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
     typeOfH ctx e2 $ T $ b 0 [] $ evalRaw ctx e1 (Just a)
@@ -282,7 +302,7 @@ coeErrorMsg (l,c) ty =
     Left [emsgLC l c "" $ expType 1 ty $$ etext "But coe has type of the form Id Type A B -> A -> B"]
 
 pmapErrorMsg :: (Int,Int) -> Value -> EDocM a
-pmapErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext "But ext _ has type of the form x = y -> _ x = _ y"]
+pmapErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext "But pmap _ has type of the form x = y -> _ x = _ y"]
 
 proj1ErrorMsg :: (Int,Int) -> Value -> EDocM a
 proj1ErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
@@ -293,8 +313,9 @@ proj2ErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
     etext "But proj2 has type of the form (p : (a : A) -> B a) -> B (proj1 p)"]
 
 extErrorMsg :: (Int,Int) -> Value -> EDocM a
-extErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
-    etext "But ext has type of the form ((x : A) -> f x = g x) -> f = g"]
+extErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp
+    $$ etext ("But ext has type either of the form ((x : A) -> f x = g x) -> f = g or "
+    ++ "of the form (s : Id A a a') * Id (B a') (trans B s b) b' -> Id ((a : A) * B a) (a,b) (a',b')")]
 
 expType :: Int -> Value -> EDoc
 expType l ty = etext "Expected type:" <+> eprettyLevel l (T.simplify $ reifyType ty)

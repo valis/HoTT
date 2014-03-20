@@ -19,6 +19,7 @@ eval n ctx (Ext f g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m
     (0,m'@(Rd:_)) -> eval 0 (M.map (action $ n ++ m') ctx) g
     (0,_) -> error "eval.Ext"
     _ -> comp (k - 1) (app k (action m h) $ action [Ld] p) $ app k (eval k (M.map (action $ n ++ m ++ [Ud]) ctx) g) p
+eval n ctx (ExtSigma _ _) = Slam "t" [] $ \_ _ -> id
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" [] $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" [] $ \_ _ -> proj2
