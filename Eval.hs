@@ -6,6 +6,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.List
 
+import Syntax.Common
 import Syntax.Term
 import Value
 
@@ -88,11 +89,30 @@ rec 0 p z s = go
                         app k (action m $ fst p) x `sarr` app k (action m $ fst p) (Ssuc x))
                     `App` e
         in liftTerm r (app 0 (fst p) t)
-    go _ = error "rec"
-rec _ _ _ _ = error "TODO: rec > 0"
-    -- example: pmap (\s -> Rec P z s x) (f : P = P) : P x = P x
-    -- example: pmap (\z -> Rec P z s 0) p = p
-    -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
+    go _ = error "rec.0"
+-- rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (suc x)) -> (x : Nat) -> P x
+-- pmap (idp rec) : (P : P1 = P2) -> (z : Idp (P2 0) (coe (pmap P (idp 0)) z1) z2)
+--      -> (s : Idp ((x : Nat) -> P2 x -> P2 (suc x)) (trans (\P -> (x : Nat) -> P x -> P (suc x)) P s1) s2) -> ...
+-- pmap (pmap (pmap (pmap (idp rec) P) z) s) x : coe (pmap p x) (rec P1 z1 s1 x1) = rec P2 z2 s2 x2
+rec 1 (p,pfv) (z,zfv) (s,sfv) = go
+  where
+    go Szero = z
+    go (Ssuc x) = app 1 (app 1 s x) (go x)
+    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (App Idp e)
+    go x@(Ne [(el,er)] e) =
+        let r = Pmap `App` (Pmap `App` (Pmap `App` (Pmap `App` (Idp `App` Rec)
+                `App` reifyFV (p,pfv) (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p)))
+                `App` reifyFV (z,zfv)
+                    (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
+                `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
+                      in reifyFV (s,sfv) $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)])
+                        $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
+                `App` e
+        in liftTerm r $ Sid (app 0 (action [Rd] p) $ action [Rd] x)
+            (app 0 (coe 0 $ pmap 0 p x) $ rec 0 (action [Ld] p,pfv) (action [Ld] z,zfv) (action [Ld] s,sfv) (Ne [] el))
+            (rec 0 (action [Rd] p,pfv) (action [Rd] z,zfv) (action [Rd] s,sfv) (Ne [] er))
+    go _ = error "rec.1"
+rec n _ _ _ = error $ "TODO: rec: " ++ show n
 
 comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
