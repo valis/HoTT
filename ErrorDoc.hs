@@ -92,3 +92,6 @@ edocToDoc (EBeside d1 False d2) = edocToDoc d1 P.<> edocToDoc d2
 edocToDoc (EBeside d1 True d2) = edocToDoc d1 P.<+> edocToDoc d2
 edocToDoc (EAbove d1 d2) = edocToDoc d1 P.$+$ edocToDoc d2
 edocToDoc (ETerm l e) = ppTerm l e
+
+instance Show EDoc where
+    show = P.render . edocToDoc

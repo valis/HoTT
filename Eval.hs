@@ -8,15 +8,17 @@ import Data.List
 
 import Syntax.Term
 import Value
-import ErrorDoc
 
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Coe = Slam "p" [] $ \k _ -> coe k
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
-eval n ctx (Ext _ g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p ->
-    comp k (app k (action m h) $ action [Ld] p) $ app (k + 1) (action [Ud] $ eval k (M.map (action $ n ++ m) ctx) g) p
+eval n ctx (Ext f g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p -> case (k,reduceD m) of
+    (0,m'@(Ld:_)) -> eval 0 (M.map (action $ n ++ m') ctx) f
+    (0,m'@(Rd:_)) -> eval 0 (M.map (action $ n ++ m') ctx) g
+    (0,_) -> error "eval.Ext"
+    _ -> comp (k - 1) (app k (action m h) $ action [Ld] p) $ app k (eval k (M.map (action $ n ++ m ++ [Ud]) ctx) g) p
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" [] $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" [] $ \_ _ -> proj2
@@ -92,11 +94,10 @@ rec _ _ _ _ = error "TODO: rec > 0"
     -- example: pmap (\x -> Rec P z s x) (p : x1 = x2) : Rec P z s x1 = Rec P z s x2
 
 comp :: Integer -> Value -> Value -> Value
--- comp 0 (Sidp _) x@(Sidp _) = x
+comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
-comp 1 (Sidp (Sidp _)) x@(Sidp (Sidp _)) = x
-comp 1 (Ne _ e1) (Sidp (Ne _ e2)) = error $ "comp.Ne" ++ erender (emsg "" $ epretty e1) ++ erender (emsg "" $ epretty e2)
+comp 1 (Sidp (Sidp _)) x = x
+comp 1 x (Sidp (Sidp _)) = x
 comp n _ _ = error $ "TODO: comp " ++ show n

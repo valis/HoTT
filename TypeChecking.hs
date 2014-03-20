@@ -140,7 +140,7 @@ typeOfH ctx (App e1 e) (T r@(Sid (Spi x fv a b) f g)) | Ext _ <- dropParens e1 =
     typeOfH ctx e $ T $ Spi x fv' a $ \k m v -> Sid (b k m v) (app k (action m f) v) (app k (action m g) v)
     return r
 typeOfH ctx (App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
-    $$ etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
+    $$ etext "But term ext _ has type of the form Id ((x : A) -> B x) _ _"]
 typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
     typeOfH ctx e2 $ T $ b 0 [] $ evalRaw ctx e1 (Just a)
