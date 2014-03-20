@@ -121,7 +121,7 @@ rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Spi x fv a b) f g)) | E.Ext _ <- dr
             r3 = app k (action m g) v
         in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm ctx (E.App e1 e) (Just (Sid t@(Ssigma x fv a b) p q)) | E.Ext _ <- dropParens e1 =
-    App (Ext (reify p t) (reify q t)) $ rawExprToTerm ctx e $ Just $
+    App (ExtSigma (reify p t) (reify q t)) $ rawExprToTerm ctx e $ Just $
     Ssigma x (fv `union` valueFreeVars p `union` valueFreeVars q) (Sid a (proj1 p) (proj1 q)) $ \k m v ->
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x fv b) v (action m $ proj2 p)

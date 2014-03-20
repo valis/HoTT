@@ -12,15 +12,15 @@ import Value
 
 eval :: Integer -> CtxV -> Term -> Value
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
-eval _ _ Coe = Slam "p" [] $ \k _ -> coe k
+eval _ _ Coe = Slam "p" [] $ \_ _ -> coe
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
-eval n ctx (Ext f g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p -> case (k,reduceD m) of
-    (0,m'@(Ld:_)) -> eval 0 (M.map (action $ n ++ m') ctx) f
-    (0,m'@(Rd:_)) -> eval 0 (M.map (action $ n ++ m') ctx) g
+eval n ctx (Ext f g) = Slam "h" [] $ \_ n h -> Slam "p" (valueFreeVars h) $ \k m p -> case (k,lastD m) of
+    (0,Just Ld) -> eval 0 (M.map (action $ n ++ m) ctx) f
+    (0,Just Rd) -> eval 0 (M.map (action $ n ++ m) ctx) g
     (0,_) -> error "eval.Ext"
     _ -> comp (k - 1) (app k (action m h) $ action [Ld] p) $ app k (eval k (M.map (action $ n ++ m ++ [Ud]) ctx) g) p
-eval n ctx (ExtSigma _ _) = Slam "t" [] $ \_ _ -> id
+eval n ctx (ExtSigma _ _) = idf
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" [] $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" [] $ \_ _ -> proj2
@@ -54,10 +54,8 @@ eval n ctx (Sigma ((vars,t):ts) e) = go n ctx vars
     go 0 ctx s@(v:vs) = Ssigma v (pefv \\ s)    (eval n ctx t) $
         \k m a -> go   k (M.insert v a $ M.map (action m) ctx) vs
     go n _ _ = error $ "TODO: eval.Sigma: " ++ show n
-eval 0 ctx (Id t e1 e2) = Sid (eval 0 ctx t) (eval 0 ctx e1) (eval 0 ctx e2)
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n ctx (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
-eval 0 ctx Nat = Snat
 eval _ ctx Suc = Slam "n" [] $ \_ _ -> Ssuc
 eval _ ctx Rec =                                            Slam "P" []    $ \pk pm pv ->
     let pfv = valueFreeVars pv                           in Slam "z" pfv   $ \zk zm zv ->
@@ -70,12 +68,24 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
   where
     genConst 0 = Szero
     genConst k = Ssuc $ genConst (k - 1)
-eval 0 ctx (Universe u) = Stype u
 eval n ctx (Typed e _) = eval n ctx e
-
-eval _ _ Nat = error "TODO: eval.Nat > 0"
-eval _ _ (Universe _) = error "TODO: eval.U > 0"
-eval _ _ (Id _ _ _) = error "TODO: eval.Id > 0"
+eval 0 _ Nat = Snat
+eval n _ Nat = Siso n Snat Snat idf idf
+eval 0 _ (Universe u) = Stype u
+eval n _ (Universe u) = Siso n (Stype u) (Stype u) idf idf
+eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
+eval 1 ctx e@(Id t a b) = Siso 1 (eval 0 (M.map (action [Ld]) ctx) e) (eval 0 (M.map (action [Rd]) ctx) e)
+    (Slam "p" (freeVars e) lr) (error "eval.Id.rev")
+  where
+    lr k _ v = comp k (rev k $ action (genericReplicate k Ud) $ eval 1 ctx a) $
+               comp k (pmap k (action (genericReplicate (k + 1) Ud) $ coe $ eval 1 ctx t) v)
+               (action (genericReplicate k Ud) $ eval 1 ctx b)
+-- v : Id t1 a1 b1
+-- r : Id t2 a2 b2
+-- eval 1 ctx t : t1 = t2
+-- eval 1 ctx a : coe (eval 1 ctx t) a1 = a2
+-- eval 1 ctx b : coe (eval 1 ctx t) b1 = b2
+eval n _ (Id _ _ _) = error $ "TODO: eval.Id: " ++ show n
 
 rec :: Integer -> ValueFV -> ValueFV -> ValueFV -> Value -> Value
 rec 0 p z s = go
@@ -109,10 +119,14 @@ rec 1 (p,pfv) (z,zfv) (s,sfv) = go
                         $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
                 `App` e
         in liftTerm r $ Sid (app 0 (action [Rd] p) $ action [Rd] x)
-            (app 0 (coe 0 $ pmap 0 p x) $ rec 0 (action [Ld] p,pfv) (action [Ld] z,zfv) (action [Ld] s,sfv) (Ne [] el))
+            (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p,pfv) (action [Ld] z,zfv) (action [Ld] s,sfv) (Ne [] el))
             (rec 0 (action [Rd] p,pfv) (action [Rd] z,zfv) (action [Rd] s,sfv) (Ne [] er))
     go _ = error "rec.1"
 rec n _ _ _ = error $ "TODO: rec: " ++ show n
+
+rev :: Integer -> Value -> Value
+rev 0 r@(Sidp _) = r
+rev n _ = error $ "TODO: rev: " ++ show n
 
 comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
@@ -121,4 +135,4 @@ comp 0 x (Sidp _) = x
 comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
-comp n _ _ = error $ "TODO: comp " ++ show n
+comp n _ _ = error $ "TODO: comp: " ++ show n
