@@ -75,9 +75,9 @@ eval 0 _ (Universe u) = Stype u
 eval n _ (Universe u) = Siso n (Stype u) (Stype u) idf idf
 eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
 eval 1 ctx e@(Id t a b) = Siso 1 (eval 0 (M.map (action [Ld]) ctx) e) (eval 0 (M.map (action [Rd]) ctx) e)
-    (Slam "p" (freeVars e) lr) (error "eval.Id.rev")
+    (Slam "p" (freeVars e) lr) (error "eval.Id.inv")
   where
-    lr k _ v = comp k (rev k $ action (genericReplicate k Ud) $ eval 1 ctx a) $
+    lr k _ v = comp k (inv k $ action (genericReplicate k Ud) $ eval 1 ctx a) $
                comp k (pmap k (action (genericReplicate (k + 1) Ud) $ coe $ eval 1 ctx t) v)
                (action (genericReplicate k Ud) $ eval 1 ctx b)
 -- v : Id t1 a1 b1
@@ -124,9 +124,9 @@ rec 1 (p,pfv) (z,zfv) (s,sfv) = go
     go _ = error "rec.1"
 rec n _ _ _ = error $ "TODO: rec: " ++ show n
 
-rev :: Integer -> Value -> Value
-rev 0 r@(Sidp _) = r
-rev n _ = error $ "TODO: rev: " ++ show n
+inv :: Integer -> Value -> Value
+inv 0 r@(Sidp _) = r
+inv n _ = error $ "TODO: inv: " ++ show n
 
 comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)

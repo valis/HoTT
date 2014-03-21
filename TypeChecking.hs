@@ -192,7 +192,7 @@ typeOfH ctx (App e1 e) N | Idp _ <- dropParens e1 = do
     t <- typeOf ctx e
     let v = evalRaw ctx e (Just t)
     Right (Sid t v v)
-typeOfH _ (Pmap (Ppmap (lc,_))) N = inferErrorMsg lc "ext"
+typeOfH _ (Pmap (Ppmap (lc,_))) N = inferErrorMsg lc "pmap"
 typeOfH ctx (Ext (PExt (lc,_))) N = inferErrorMsg lc "ext"
 typeOfH _ (Proj1 (PProjl (lc,_))) N = inferErrorMsg lc "proj1"
 typeOfH _ (Proj2 (PProjr (lc,_))) N = inferErrorMsg lc "proj2"
