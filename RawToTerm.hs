@@ -184,14 +184,16 @@ typeOfTerm ctx (Id t _ _) = typeOfTerm ctx t
 typeOfTerm ctx (App Idp e) =
     let v = eval 0 (ctxToCtxV ctx) e
     in Sid (typeOfTerm ctx e) v v
+-- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
 typeOfTerm ctx (App (App Pmap (App Idp e1)) e2) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case typeOfTerm ctx e2 of
-        Sid t a b -> Sid (typeOfLam ctx e1 t) (app 0 e' a) (app 0 e' b)
+        Sid t a b -> typeOfLam ctx e1 t (app 0 e' a) (app 0 e' b) (eval 0 (ctxToCtxV ctx) e2)
         _ -> error "typeOfTerm.App.App.Pmap.Idp"
 typeOfTerm ctx (App (App Pmap e1) e2) =
     case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
-        (Sid (Spi _ _ _ b) f g, Sid _ x y) -> Sid (b 0 [] $ error "typeOfTerm.App.App.Pmap.Var") (app 0 f x) (app 0 g y)
+        (Sid (Spi v fv _ b) f g, Sid _ x y) ->
+            Sid (b 0 [] y) (trans 0 (Slam v fv b) (eval 0 (ctxToCtxV ctx) e2) (app 0 f x)) (app 0 g y)
         _ -> error "typeOfTerm.App.App.Pmap"
 typeOfTerm ctx (App Coe e) = case typeOfTerm ctx e of
     Sid _ x y -> x `sarr` y
@@ -218,10 +220,10 @@ typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
 typeOfTerm _ Coe = error "typeOfTerm.Coe"
 
-typeOfLam :: Ctx -> Term -> Value -> Value
-typeOfLam ctx (Let defs e) a = typeOfLam (updateCtx ctx defs) e a
-typeOfLam ctx (Lam [] e) t = typeOfLam ctx e t
-typeOfLam ctx (Lam (a:as) e) t = typeOfTerm (M.insert a (svar a t, t) ctx) (Lam as e)
-typeOfLam ctx e _ = case typeOfTerm ctx e of
-    Spi _ _ _ r -> r 0 [] $ error "typeOfLam.Var"
+typeOfLam :: Ctx -> Term -> Value -> Value -> Value -> Value -> Value
+typeOfLam ctx (Let defs e) t a b p = typeOfLam (updateCtx ctx defs) e t a b p
+typeOfLam ctx (Lam [] e) t a b p = typeOfLam ctx e t a b p
+typeOfLam ctx (Lam (x:xs) e) t a b _ = Sid (typeOfTerm (M.insert x (error "typeOfLam.Var", t) ctx) (Lam xs e)) a b
+typeOfLam ctx e t a b p = case typeOfTerm ctx e of
+    Spi v fv _ r -> Sid (r 0 [] b) (trans 0 (Slam v fv r) p a) b
     _ -> error "typeOfLam.Pi"

@@ -17,10 +17,13 @@ J : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) 
 J A B d a a' p =
     transport ((x : A) * a = x) (\e -> B a (proj1 e) (proj2 e)) (a, idp a) (a', p) (contrPathSpace A a a' p) (d a)
 
-J' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) -> (a a' : A) (p : a = a') -> B a a' p
-J' A B d a a' p = coe (pmap (pmap (idp (B a)) p) (idp p)) (d a)
+J' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (idp a) = B a a' p
+J' A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
 
--- pmap (idp B a) p : Id (a = a' -> Type) (\x -> B a a (x; inv p)) (B a a')
+-- J'' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) -> (a a' : A) (p : a = a') -> B a a' p
+-- J'' A B d a a' p = coe (pmap (pmap (idp (B a)) p) (idp p)) (d a)
+
+-- pmap (idp (B a)) p : Id (a = a' -> Type) (\x -> B a a (x; inv p)) (B a a')
 -- pmap (pmap (idp B a) p) (idp p) : Id Type (B a a (p; inv p)) (B a a' p)
 -- coe (pmap (pmap (idp B a) p) (idp p)) : B a a (p; inv p) -> B a a' p
 

@@ -167,9 +167,7 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
         in Sid t' (liftTerm (App r $ reify p t) t') (liftTerm (App r $ reify q t) t')
     goRev _ _ = error "liftTerm.goRev"
 liftTerm e t | (n, Spi x _ a b) <- getBase t = Slam x (freeVars e) $ \k m v ->
-    let e' = actionTerm m $ iterate (App Pmap) e `genericIndex` n
-        v' = action (genericReplicate k Rd) v
-    in go a (b 0 [] v') e' k v
+    go a (b 0 [] $ action (genericReplicate k Rd) v) (actionTerm m $ iterate (App Pmap) e `genericIndex` n) k v
   where
     actionTerm :: [D] -> Term -> Term
     actionTerm [] e = e
@@ -177,17 +175,17 @@ liftTerm e t | (n, Spi x _ a b) <- getBase t = Slam x (freeVars e) $ \k m v ->
     actionTerm (_:a) (App Pmap (App Idp e)) = actionTerm a e
     actionTerm _ _ = error "Value.actionTerm"
     
-    liftTypeValue 0 _ a = a
-    liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
-    
-    go a b e' k v = liftTerm (appTerm e' $ reify v $ liftTypeValue k v a) (goType k [])
+    go a b e' k v = liftTerm (appTerm e' $ reify v $ liftTypeValue k v a) (goType k v)
       where
+        liftTypeValue 0 _ a = a
+        liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
+        
         appTerm (App Pmap (App Idp e1)) (App Idp e2) = App Idp (appTerm e1 e2)
         appTerm e1 e2 = App e1 e2
         
         goType 0 _ = b
-        goType k m = Sid (goType (k - 1) (Ld:m)) (go a b e' (k - 1) $ action (m ++ [Ld]) v)
-                                                 (go a b e' (k - 1) $ action (m ++ [Rd]) v)
+        goType k v = Sid (goType (k - 1) (action [Ld] v)) (go a b e' (k - 1) $ action [Ld] v)
+                                                          (go a b e' (k - 1) $ action [Rd] v)
 liftTerm e t | (n,Ssigma _ _ a b) <- getBase t = case n of
     0 -> let a' = liftTerm (App Proj1 e) a
          in Spair a' $ liftTerm (App Proj2 e) (b 0 [] a')
