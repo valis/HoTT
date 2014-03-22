@@ -1,5 +1,5 @@
 module RawToTerm
-    ( evalRaw
+    ( evalRaw, eval
     , typeOfTerm
     , rawDefsToTerm, rawExprToTerm
     ) where
@@ -132,6 +132,12 @@ rawExprToTerm _ (E.Ext _) (Just (Spi _ _ a b)) = case b 0 [] (error "rawExprToTe
     Sid t@(Ssigma _ _ _ _) p q -> ExtSigma (reify p t) (reify q t)
     _ -> error "rawExprToTerm.Ext.Pi"
 rawExprToTerm _ (E.Ext _) _ = error "rawExprToTerm.Ext"
+rawExprToTerm ctx (E.App e1 e) (Just (Sid t x y)) | E.Inv _ <- dropParens e1 =
+    App Inv $ rawExprToTerm ctx e $ Just (Sid t y x)
+rawExprToTerm ctx (E.App e1 e) (Just _) | E.Inv _ <- dropParens e1 = error "rawExprToTerm.App.Inv"
+rawExprToTerm ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = App Inv (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Comp _ <- dropParens e3 =
+    Comp `App` rawExprToTerm ctx e1 Nothing `App` rawExprToTerm ctx e2 Nothing
 rawExprToTerm ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm ctx e1 Nothing
     in case typeOfTerm ctx e1' of
@@ -144,6 +150,9 @@ rawExprToTerm _ (E.Suc _) _ = Suc
 rawExprToTerm _ (E.Rec _) _ = Rec
 rawExprToTerm _ (E.Idp _) _ = Idp
 rawExprToTerm _ (E.Coe _) _ = Coe
+rawExprToTerm _ (E.Iso _) _ = Iso
+rawExprToTerm _ (E.Comp _) _ = Comp
+rawExprToTerm _ (E.Inv _) _ = Inv
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
@@ -198,6 +207,12 @@ typeOfTerm ctx (App (App Pmap e1) e2) =
 typeOfTerm ctx (App Coe e) = case typeOfTerm ctx e of
     Sid _ x y -> x `sarr` y
     _ -> error "typeOfTerm.App.Coe"
+typeOfTerm ctx (App Inv e) = case typeOfTerm ctx e of
+    Sid t x y -> Sid t y x
+    _ -> error "typeOfTerm.App.Inv"
+typeOfTerm ctx (App (App Comp e1) e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
+    (Sid t x _, Sid _ _ z) -> Sid t x z
+    _ -> error "typeOfTerm.App.Comp"
 typeOfTerm ctx (App e1 e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Spi _ _ _ b, _) -> b 0 [] $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ _ t) f g, Sid _ a b) -> Sid (t 0 [] $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
@@ -219,6 +234,17 @@ typeOfTerm _ (Universe l) = Stype (succ l)
 typeOfTerm _ Pmap = error "typeOfTerm.Pmap"
 typeOfTerm _ Idp = error "typeOfTerm.Idp"
 typeOfTerm _ Coe = error "typeOfTerm.Coe"
+typeOfTerm _ Comp = error "typeOfTerm.Comp"
+typeOfTerm _ Inv = error "typeOfTerm.Inv"
+typeOfTerm _ Iso = 
+    let term = Pi [(["A"],Universe $ pred $ pred maxBound)] $
+               Pi [(["B"],Universe $ pred $ pred maxBound)] $
+               Pi [(["f"],Pi [([],Var "A")] $ Var "B")] $
+               Pi [(["g"],Pi [([],Var "B")] $ Var "A")] $
+               Pi [([],Pi [(["a"],Var "A")] $ Id (Var "A") (Var "g" `App` (Var "f" `App` Var "a")) (Var "a"))] $
+               Pi [([],Pi [(["b"],Var "B")] $ Id (Var "B") (Var "f" `App` (Var "g" `App` Var "b")) (Var "b"))] $
+               Id (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
+    in eval 0 M.empty term
 
 typeOfLam :: Ctx -> Term -> Value -> Value -> Value -> Value -> Value
 typeOfLam ctx (Let defs e) t a b p = typeOfLam (updateCtx ctx defs) e t a b p

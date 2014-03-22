@@ -14,7 +14,6 @@ import Syntax.Common
 import Syntax.Raw
 import qualified Syntax.Term as T
 import RawToTerm
-import Eval
 
 maxType :: Expr -> Expr -> Value -> Value -> EDocM Value
 maxType _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
@@ -161,8 +160,13 @@ typeOfH ctx (App e1 e) (T r@(Sid (Ssigma x fv a b) p q)) | Ext _ <- dropParens e
             r3 = action m (proj2 q)
         in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ T.Id (T.Var "r1") (T.Var "r2") (T.Var "r3")
     return r
-typeOfH ctx (App e1 e) (T exp) | Ext (PExt (lc,_)) <- dropParens e1 = Left [emsgLC lc "" $ expType (-1) exp
-    $$ etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
+typeOfH ctx (App e1 e) (T exp) | Ext (PExt (lc,_)) <- dropParens e1 = Left [emsgLC lc "" $ expType (-1) exp $$
+    etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
+typeOfH ctx (App e1 e) (T exp@(Sid t x y)) | Inv _ <- dropParens e1 = do
+    typeOfH ctx e $ T (Sid t y x)
+    return exp
+typeOfH ctx (App e1 e) (T exp) | Inv (PInv (lc,_)) <- dropParens e1 =
+    Left [emsgLC lc "" $ expType (-1) exp $$ etext "But term inv _ has Id type"]
 typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
     typeOfH ctx e2 $ T $ b 0 [] $ evalRaw ctx e1 (Just a)
@@ -290,6 +294,10 @@ typeOfH ctx (Iso _) N =
                T.Pi [(["B"],T.Universe $ pred $ pred maxBound)] $
                T.Pi [([],T.Pi [([],T.Var "A")] $ T.Var "B")] $
                T.Pi [([],T.Pi [([],T.Var "B")] $ T.Var "A")] $
+               T.Pi [([],T.Pi [(["a"],T.Var "A")] $
+                    T.Id (T.Var "A") (T.Var "g" `T.App` (T.Var "f" `T.App` T.Var "a")) (T.Var "a"))] $
+               T.Pi [([],T.Pi [(["b"],T.Var "B")] $
+                    T.Id (T.Var "B") (T.Var "f" `T.App` (T.Var "g" `T.App` T.Var "b")) (T.Var "b"))] $
                T.Id (T.Universe $ pred $ pred maxBound) (T.Var "A") (T.Var "B")
     in Right (eval 0 M.empty term)
 typeOfH ctx (Comp (PComp (lc,_))) N = inferErrorMsg lc "comp"

@@ -9,13 +9,22 @@ import Data.List
 import Syntax.Common
 import Syntax.Term
 import Value
+import ErrorDoc
 
 eval :: Integer -> CtxV -> Term -> Value
-eval _ _ Iso =                                              Slam "A" []    $ \_  _  va ->
-    let fva = valueFreeVars va                           in Slam "B" fva   $ \_  mb vb ->
-    let fvb = valueFreeVars vb; fvab  = fva  `union` fvb in Slam "f" fvab  $ \_  mf vf ->
-    let fvf = valueFreeVars vf; fvabf = fvab `union` fvf in Slam "g" fvabf $ \kg mg    ->
-    Siso kg (error "TODO: eval.Iso.1") (error "TODO: Eval.Iso.2") (action mg vf)
+-- iso A B f g
+-- pmap (\A -> idp (iso A B f g)) (p : A1 = A2)
+--   : iso A1 B (\a -> f (coe (inv p) a)) (\b -> coe (inv p) (g b)) = iso A2 B (f : A2 -> B) (g : B -> A2)
+-- pmap (\A -> idp (iso A A (\x -> x) (\x -> x))) (p : A1 = A2)
+--   : iso A2 A2 (\x -> coe p (coe (inv p) x)) (\x -> coe p (coe (inv p) x)) = iso A2 A2 (\x -> x) (\x -> x)
+eval _ _ Iso =                                                  Slam "A" []      $ \_  _  va ->
+    let fva = valueFreeVars va                               in Slam "B" fva     $ \_  mb vb ->
+    let fvb = valueFreeVars vb; fvab    = fva    `union` fvb in Slam "f" fvab    $ \_  mf vf ->
+    let fvf = valueFreeVars vf; fvabf   = fvab   `union` fvf in Slam "g" fvabf   $ \_  mg vg ->
+    let fvg = valueFreeVars vg; fvabfg  = fvabf  `union` fvg in Slam "p" fvabfg  $ \_  mp vp ->
+    let fvp = valueFreeVars vp; fvabfgp = fvabfg `union` fvp in Slam "q" fvabfgp $ \kq mq vq ->
+    Siso kq (error "TODO: eval.Iso.1") (error "TODO: eval.Iso.2") (error "TODO: eval.Iso.3")
+            (error "TODO: eval.Iso.4") (error "TODO: eval.Iso.5") (error "TODO: eval.Iso.6")
 eval _ _ Comp = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" [] $ \k _ -> inv k
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
@@ -44,11 +53,20 @@ eval n ctx (Pi ((vars,t):ts) e) = go n ctx vars
   where
     efv  = freeVars (Pi ts e)
     pefv = freeVars t `union` efv
-    go 0 ctx []       = eval n ctx t `sarrFV` (eval n ctx (Pi ts e),efv)
-    go 0 ctx [v]      = Spi v (delete v efv) (eval n ctx t) $
+    go 0 ctx []       = eval 0 ctx t `sarrFV` (eval 0 ctx (Pi ts e),efv)
+    go 0 ctx [v]      = Spi v (delete v efv)  (eval 0 ctx t) $
         \k m a -> eval k (M.insert v a $ M.map (action m) ctx) (Pi ts e)
-    go 0 ctx s@(v:vs) = Spi v (pefv \\ s)    (eval n ctx t) $
+    go 0 ctx s@(v:vs) = Spi v (pefv \\ s)     (eval 0 ctx t) $
         \k m a -> go   k (M.insert v a $ M.map (action m) ctx) vs
+    go 1 ctx [] = Siso 1 (go 0 (M.map (action [Ld]) ctx) []) (go 0 (M.map (action [Rd]) ctx) [])
+        (Slam "f" pefv $ \kf mf vf -> Slam "x" (pefv `union` valueFreeVars vf) $
+        \kx mx vx -> app kx (action (mx ++ mf) $ coe $ eval 1 ctx $ Pi ts e) $
+                            app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 ctx t) vx)
+        (Slam "f" pefv $ \kf mf vf -> Slam "x" (pefv `union` valueFreeVars vf) $
+        \kx mx vx -> app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 ctx $ Pi ts e) $
+                            app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ eval 1 ctx t) vx)
+        (error "TODO: eval.Pi.Siso.1") (error "TODO: eval.Pi.Siso.2")
+    go 1 ctx (v:vs) = error $ "TODO: eval.Pi: " ++ show n
     go n _ _ = error $ "TODO: eval.Pi: " ++ show n
 eval n ctx (Sigma [] e) = eval n ctx e
 eval n ctx (Sigma ((vars,t):ts) e) = go n ctx vars
@@ -77,21 +95,45 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
     genConst k = Ssuc $ genConst (k - 1)
 eval n ctx (Typed e _) = eval n ctx e
 eval 0 _ Nat = Snat
-eval n _ Nat = Siso n Snat Snat idf idf
+eval n _ Nat = Siso n Snat Snat idf idf idf idf
 eval 0 _ (Universe u) = Stype u
-eval n _ (Universe u) = Siso n (Stype u) (Stype u) idf idf
+eval n _ (Universe u) = Siso n (Stype u) (Stype u) idf idf idf idf
 eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
 eval 1 ctx e@(Id t a b) = Siso 1 (eval 0 (M.map (action [Ld]) ctx) e) (eval 0 (M.map (action [Rd]) ctx) e)
-    (Slam "p" (freeVars e) lr) (error "eval.Id.inv")
+    (Slam "p" (freeVars e) lr) (Slam "p" (freeVars e) rl) (error "TODO: eval.Id.Iso.1") (error "TODO: eval.Id.Iso.2")
   where
-    lr k _ v = comp k (inv k $ action (genericReplicate k Ud) $ eval 1 ctx a) $
-               comp k (pmap k (action (genericReplicate (k + 1) Ud) $ coe $ eval 1 ctx t) v)
-               (action (genericReplicate k Ud) $ eval 1 ctx b)
--- v : Id t1 a1 b1
--- r : Id t2 a2 b2
--- eval 1 ctx t : t1 = t2
--- eval 1 ctx a : coe (eval 1 ctx t) a1 = a2
--- eval 1 ctx b : coe (eval 1 ctx t) b1 = b2
+    lr k m v = comp k (inv k $ action m ap) $
+               comp k (pmap k (action (Ud:m) $ coe tp) v)
+                      (action (genericReplicate k Ud) bp)
+    rl 0 _ v = comp 0 (pmap 0 (idp $ Slam "p" (freeVars a) $ \kp mp vp -> app kp (coe vp) $ action mp a1) $ inv 0 iitp) $
+               comp 0 (pmap 0 (coe $ inv 0 tp) $ comp 0 ap $ comp 0 v $ inv 0 bp)
+                      (pmap 0 (idp $ Slam "p" (freeVars b) $ \kp mp vp -> app kp (coe vp) $ action mp b1) iitp)
+    rl k _ _ = error $ "TODO: eval.Id.inv: " ++ show k
+    
+    a1 = eval 0 (M.map (action [Ld]) ctx) a
+    b1 = eval 0 (M.map (action [Ld]) ctx) b
+    ap = eval 1 ctx a
+    bp = eval 1 ctx b
+    tp = eval 1 ctx t
+    iitp = invIdp 0 tp
+    -- v : Id t2 a2 b2
+    -- rl 0 _ v : Id t1 a1 b1
+    -- eval 1 ctx t : t1 = t2
+    -- eval 1 ctx a : coe (eval 1 ctx t) a1 = a2
+    -- eval 1 ctx b : coe (eval 1 ctx t) b1 = b2
+    --   a1
+    -- < pmap 0 (idp $ \p -> coe p a1) (inv 0 $ invIdp 0 $ eval 1 ctx t) >
+    -- = coe (inv (eval 1 ctx t); eval 1 ctx t) a1
+    -- = coe (inv (eval 1 ctx t)) (coe (eval 1 ctx t) a1)
+    -- < pmap 0 (coe $ inv 0 $ eval 1 ctx t) (eval 1 ctx a) >
+    -- = coe (inv (eval 1 ctx t)) a2
+    -- < pmap 0 (...) v >
+    -- = coe (inv (eval 1 ctx t)) b2
+    -- < pmap 0 (...) (inv 0 $ eval 1 ctx b) >
+    -- = coe (inv (eval 1 ctx t)) (coe (eval 1 ctx t) b1)
+    -- = coe (inv (eval 1 ctx t); eval 1 ctx t) b1
+    -- < pmap 0 (idp $ \p -> coe p b1) (invIdp 0 $ eval 1 ctx t) >
+    -- = b1
 eval n _ (Id _ _ _) = error $ "TODO: eval.Id: " ++ show n
 
 rec :: Integer -> ValueFV -> ValueFV -> ValueFV -> Value -> Value
@@ -133,13 +175,37 @@ rec n _ _ _ = error $ "TODO: rec: " ++ show n
 
 inv :: Integer -> Value -> Value
 inv 0 r@(Sidp _) = r
+inv 0 (Siso 1 a b f g p q) = Siso 1 b a g f q p
+inv 0 (Siso k a b (Slam xf fvf ef) (Slam xg fvg eg) p q) = Siso k a b
+    (Slam xf fvf $ \k m v -> inv 0 $ ef k m v) -- TODO: ???
+    (Slam xg fvg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
+    (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
+inv 0 (Slam x fv f) = Slam x fv $ \k m v -> inv k $ f k m (inv k v)
+inv 0 (Ne [(l,r)] e) = Ne [(r,l)] (App Inv e)
+inv 0 (Ne _ _) = error "inv.Ne"
+inv 0 (Spair _ _) = error "TODO: inv.Spair"
+inv _ Szero = Szero
+inv _ s@(Ssuc _) = s
+inv 1 r@(Sidp (Sidp _)) = r
+inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
+inv 1 (Ne _ e) = error $ "foo: " ++ show (epretty e)
+inv 1 (Sidp (Ne _ e)) = error $ "bar: " ++ show (epretty e)
 inv n _ = error $ "TODO: inv: " ++ show n
+
+invIdp :: Integer -> Value -> Value
+invIdp 0 x@(Sidp _) = Sidp x
+invIdp n (Slam x fv f) = Slam x fv $ \k m v -> error $ "TODO: invIdp.Slam: " ++ show n
+    {- ? : comp k (inv k $ f k m $ inv k v) (f k m v) = idp (f k m v)
+    invIdp k (f k m v) : comp k (inv k $ f k m v) (f k m v) = idp (f k m v) -}
+invIdp 0 (Siso 1 a b f g p q) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
+invIdp 0 (Ne [(l,r)] e) = Ne [(Comp `App` (App Inv e) `App` e, App Idp r), (r,r)] $ App (Var "invIdp") e
+invIdp n _ = error $ "TODO: invIdp: " ++ show n
 
 comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Comp `App` e1 `App` e2
+comp 0 (Ne [(l,_)] e1) (Ne [(_,r)] e2) = Ne [(l,r)] $ Comp `App` e1 `App` e2
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
 comp n _ _ = error $ "TODO: comp: " ++ show n

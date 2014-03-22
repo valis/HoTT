@@ -29,7 +29,7 @@ data Value
     | Sidp Value -- Constructor for Id
     | Ne [(Term,Term)] Term
     | Swtype Term -- Wrapper for types
-    | Siso Integer Value Value Value Value -- Higher constructor for Type_k
+    | Siso Integer Value Value Value Value Value Value -- Higher constructor for Type_k
     -- | Scomp Value Value | Ssym Value
 type Ctx  = M.Map String (Value,Value)
 type CtxV = M.Map String Value
@@ -76,8 +76,9 @@ cmpTypes (Ssigma x v1 a b) (Ssigma _ v2 a' b') = cmpTypes a a' && cmpTypes (b 0 
 cmpTypes (Sid t a b) (Sid t' a' b') = cmpTypes t t' && cmpValues a a' t && cmpValues b b' t
 cmpTypes Snat Snat = True
 cmpTypes (Stype k) (Stype k') = k <= k'
-cmpTypes (Siso n a b c d) (Siso n' a' b' c' d') =
+cmpTypes i@(Siso n a b c d e f) i'@(Siso n' a' b' c' d' e' f') =
     n == n' && cmpTypes a a' && cmpTypes b b' && cmpValues c c' (a `sarr` b) && cmpValues d d' (b `sarr` a)
+    && reifySiso5 i == reifySiso5 i' && reifySiso6 i == reifySiso6 i'
 cmpTypes (Swtype t) (Swtype t') = t == t'
 cmpTypes _ _ = False
 
@@ -96,7 +97,8 @@ valueFreeVars (Sid t a b) = valueFreeVars t `union` valueFreeVars a `union` valu
 valueFreeVars (Stype _) = []
 valueFreeVars (Sidp e) = valueFreeVars e
 valueFreeVars (Swtype e) = freeVars e
-valueFreeVars (Siso _ a b c d) = valueFreeVars a `union` valueFreeVars b `union` valueFreeVars c `union` valueFreeVars d
+valueFreeVars (Siso _ a b c d e f) = valueFreeVars a `union` valueFreeVars b `union`
+    valueFreeVars c `union` valueFreeVars d `union` valueFreeVars e `union` valueFreeVars f
 valueFreeVars (Ne l e) = freeVars e `union` concatMap (\(x,y) -> freeVars x `union` freeVars y) l
 
 idSvar :: Integer -> String -> Value -> Value
@@ -121,7 +123,7 @@ app n (Slam _ _ f) a = f n [] a
 app _ _ _ = error "Value.app"
 
 coe :: Value -> Value
-coe (Siso _ _ _ f _) = f
+coe (Siso _ _ _ f _ _ _) = f
 coe _ = error "coe"
 
 pmap :: Integer -> Value -> Value -> Value
@@ -144,6 +146,8 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
                 then App Inv (App Coe e)
                 else App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) e
             ) $ goRev t n)
+        (error "TODO: liftTerm.Siso.1")
+        (error "TODO: liftTerm.Siso.2")
     _ -> error "liftTerm.Stype"
   where
     term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (Var "x")
@@ -210,16 +214,18 @@ action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
-action (Ud:m) t@(Spi _ _ _ _) = action m (Siso 1 t t idf idf)
-action (Ud:m) t@(Ssigma _ _ _ _) = action m (Siso 1 t t idf idf)
-action (Ud:m) Snat = action m (Siso 1 Snat Snat idf idf)
-action (Ud:m) t@(Sid _ _ _) = action m (Siso 1 t t idf idf)
-action (Ud:m) t@(Stype _) = action m (Siso 1 t t idf idf)
-action (Ud:m) t@(Swtype _) = action m (Siso 1 t t idf idf)
-action (Ld:m) (Siso 1 a _ _ _) = action m a
-action (Rd:m) (Siso 1 _ b _ _) = action m b
-action (Ud:m) (Siso n a b f g) = action m $ Siso (n + 1) a b (action [Ud] f) (action [Ud] g)
-action ( d:m) (Siso n a b f g) = action m $ Siso (n - 1) a b (action [ d] f) (action [ d] g)
+action (Ud:m) t@(Spi _ _ _ _) = action m (Siso 1 t t idf idf idf idf)
+action (Ud:m) t@(Ssigma _ _ _ _) = action m (Siso 1 t t idf idf idf idf)
+action (Ud:m) Snat = action m (Siso 1 Snat Snat idf idf idf idf)
+action (Ud:m) t@(Sid _ _ _) = action m (Siso 1 t t idf idf idf idf)
+action (Ud:m) t@(Stype _) = action m (Siso 1 t t idf idf idf idf)
+action (Ud:m) t@(Swtype _) = action m (Siso 1 t t idf idf idf idf)
+action (Ld:m) (Siso 1 a _ _ _ _ _) = action m a
+action (Rd:m) (Siso 1 _ b _ _ _ _) = action m b
+action (Ud:m) (Siso n a b f g p q) = action m $ Siso (n + 1) a b (action [Ud] f) (action [Ud] g)
+    (error "TODO: action.Siso.1") (error "TODO: action.Siso.2")
+action ( d:m) (Siso n a b f g p q) = action m $ Siso (n - 1) a b (action [ d] f) (action [ d] g)
+    (error "TODO: action.Siso.3") (error "TODO: action.Siso.4")
 action (Ld:m) (Sidp x) = action m x
 action (Rd:m) (Sidp x) = action m x
 action (Ld:m) (Ne ((l,_):t) _) = action m (Ne t l)
@@ -261,9 +267,9 @@ reifyFV (Spair _ _, _) t | (n, Ssigma _ _ _ _) <- getBase t = error $ "TODO: rei
 reifyFV (Spair _ _, _) _ = error "reify.Spair"
 reifyFV (Swtype e,_) (Stype _) = e
 reifyFV (Swtype _,_) _ = error "reify.Swtype"
-reifyFV (Siso 1 a b c d, _) (Sid (Stype _) _ _) = Iso `App` reifyType a `App` reifyType b
-    `App` reify c (a `sarr` b) `App` reify d (b `sarr` a)
-reifyFV (Siso n a b c d, _) _ = error $ "TODO: reify.Siso: " ++ show n
+reifyFV (i@(Siso 1 a b c d _ _), _) (Sid (Stype _) _ _) = Iso `App` reifyType a `App` reifyType b
+    `App` reify c (a `sarr` b) `App` reify d (b `sarr` a) `App` reifySiso5 i `App` reifySiso6 i
+reifyFV (Siso n a b c d e f, _) _ = error $ "TODO: reify.Siso: " ++ show n
 reifyFV (Szero,_) t | (n, Snat) <- getBase t = iterate (App Idp) (NatConst 0) `genericIndex` n
 reifyFV (Szero,_) _ = error "reify.Szero"
 reifyFV (Ssuc e,fv) t | (n, Snat) <- getBase t = iidp n $ case reifyFV (e,fv) Snat of
@@ -295,3 +301,15 @@ reify v = reifyFV (v, valueFreeVars v)
 
 reifyType :: Value -> Term
 reifyType t = reify t (Stype maxBound)
+
+reifySiso5 :: Value -> Term
+reifySiso5 (Siso _ a b c d e f) =
+    let fv = valueFreeVars b `union` valueFreeVars c `union` valueFreeVars d
+    in reify e $ Spi "x" fv a $ \_ _ v -> Sid b (app 0 d $ app 0 c v) v
+reifySiso5 _ = error "reifySiso5"
+
+reifySiso6 :: Value -> Term
+reifySiso6 (Siso _ a b c d e f) =
+    let fv = valueFreeVars a `union` valueFreeVars c `union` valueFreeVars d
+    in reify f $ Spi "x" fv b $ \_ _ v -> Sid a (app 0 c $ app 0 d v) v
+reifySiso6 _ = error "reifySiso6"
