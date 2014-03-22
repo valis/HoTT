@@ -17,6 +17,9 @@ newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PCoe = PCoe ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjl = PProjl ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PIso = PIso ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PComp = PComp ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PInv = PInv ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
 data Defs =
    Defs [Def]
@@ -48,6 +51,9 @@ data Expr =
  | Coe PCoe
  | Proj1 PProjl
  | Proj2 PProjr
+ | Iso PIso
+ | Comp PComp
+ | Inv PInv
  | NatConst PInt
  | Universe U
  | Paren PPar Expr

@@ -42,6 +42,9 @@ p m a p { tok (\p s -> PT p (eitherResIdent (T_Ppmap . share) s)) }
 c o e { tok (\p s -> PT p (eitherResIdent (T_PCoe . share) s)) }
 p r o j 1 { tok (\p s -> PT p (eitherResIdent (T_PProjl . share) s)) }
 p r o j 2 { tok (\p s -> PT p (eitherResIdent (T_PProjr . share) s)) }
+i s o { tok (\p s -> PT p (eitherResIdent (T_PIso . share) s)) }
+c o m p { tok (\p s -> PT p (eitherResIdent (T_PComp . share) s)) }
+i n v { tok (\p s -> PT p (eitherResIdent (T_PInv . share) s)) }
 $l ($l | $d | \' | \_)* { tok (\p s -> PT p (eitherResIdent (T_PIdent . share) s)) }
 
 $l $i*   { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
@@ -78,6 +81,9 @@ data Tok =
  | T_PCoe !String
  | T_PProjl !String
  | T_PProjr !String
+ | T_PIso !String
+ | T_PComp !String
+ | T_PInv !String
  | T_PIdent !String
 
  deriving (Eq,Show,Ord)
@@ -118,6 +124,9 @@ prToken t = case t of
   PT _ (T_PCoe s) -> s
   PT _ (T_PProjl s) -> s
   PT _ (T_PProjr s) -> s
+  PT _ (T_PIso s) -> s
+  PT _ (T_PComp s) -> s
+  PT _ (T_PInv s) -> s
   PT _ (T_PIdent s) -> s
 
 

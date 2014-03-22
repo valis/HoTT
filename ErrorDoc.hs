@@ -70,8 +70,8 @@ emsg = EMsg Nothing Nothing
 emsgL :: Int -> String -> EDoc -> EMsg
 emsgL l = EMsg (Just l) Nothing
 
-emsgLC :: Int -> Int -> String -> EDoc -> EMsg
-emsgLC l c = EMsg (Just l) (Just c)
+emsgLC :: (Int,Int) -> String -> EDoc -> EMsg
+emsgLC (l,c) = EMsg (Just l) (Just c)
 
 erender :: EMsg -> String
 erender (EMsg l c s d) = P.render (msgToDoc Nothing l c s d)

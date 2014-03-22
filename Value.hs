@@ -4,7 +4,7 @@ module Value
     , svar, sarr, sarrFV, sprod, sprodFV
     , Ctx, CtxV
     , ctxToCtxV
-    , cmpTypes
+    , cmpTypes, cmpValues
     , reify, reifyType, reifyFV
     , valueFreeVars
     , proj1, proj2, app, coe, pmap, trans
@@ -141,12 +141,12 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
         (liftTerm (App (iterate (App Pmap . App Idp) Coe `genericIndex` (n - 1)) e) $ go t n)
         (liftTerm
             (if n == 1
-                then App (Var "inv") (App Coe e)
+                then App Inv (App Coe e)
                 else App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) e
             ) $ goRev t n)
     _ -> error "liftTerm.Stype"
   where
-    term = App Pmap $ Lam ["x"] $ App Idp $ App (Var "inv") $ App Coe (Var "x")
+    term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (Var "x")
     
     go (Sid _ a b) 1 = a `sarr` b
     go (Sid t p q) n =
@@ -158,8 +158,8 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
     goRev (Sid _ a b) 1 = b `sarr` a
     goRev (Sid t p q) 2 =
         let t' = goRev t 1
-            a' = App (Var "inv") $ App Coe (reify p t)
-            b' = App (Var "inv") $ App Coe (reify q t)
+            a' = App Inv $ App Coe (reify p t)
+            b' = App Inv $ App Coe (reify q t)
         in Sid t' (liftTerm a' t') (liftTerm b' t')
     goRev (Sid t p q) n = 
         let r = iterate (App Pmap . App Idp) term `genericIndex` (n - 3)
@@ -210,11 +210,11 @@ action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
-action (Ud:m) t@(Spi _ _ _ _) = Siso 1 t t idf idf
-action (Ud:m) t@(Ssigma _ _ _ _) = Siso 1 t t idf idf
-action (Ud:m) Snat = Siso 1 Snat Snat idf idf
-action (Ud:m) t@(Sid _ _ _) = Siso 1 t t idf idf
-action (Ud:m) t@(Stype _) = Siso 1 t t idf idf
+action (Ud:m) t@(Spi _ _ _ _) = action m (Siso 1 t t idf idf)
+action (Ud:m) t@(Ssigma _ _ _ _) = action m (Siso 1 t t idf idf)
+action (Ud:m) Snat = action m (Siso 1 Snat Snat idf idf)
+action (Ud:m) t@(Sid _ _ _) = action m (Siso 1 t t idf idf)
+action (Ud:m) t@(Stype _) = action m (Siso 1 t t idf idf)
 action (Ud:m) t@(Swtype _) = action m (Siso 1 t t idf idf)
 action (Ld:m) (Siso 1 a _ _ _) = action m a
 action (Rd:m) (Siso 1 _ b _ _) = action m b
@@ -261,9 +261,9 @@ reifyFV (Spair _ _, _) t | (n, Ssigma _ _ _ _) <- getBase t = error $ "TODO: rei
 reifyFV (Spair _ _, _) _ = error "reify.Spair"
 reifyFV (Swtype e,_) (Stype _) = e
 reifyFV (Swtype _,_) _ = error "reify.Swtype"
-reifyFV (Siso _ _ _ _ _, _) (Sid _ _ _) = error "TODO: reify.Siso"
-reifyFV (Siso 0 a b c d, _) _ = Var "iso" `App` reifyType a `App` reifyType b `App` reify c (a `sarr` b) `App` reify d (b `sarr` a)
-reifyFV (Siso n a b c d, _) _ = error "reify.Siso"
+reifyFV (Siso 1 a b c d, _) (Sid (Stype _) _ _) = Iso `App` reifyType a `App` reifyType b
+    `App` reify c (a `sarr` b) `App` reify d (b `sarr` a)
+reifyFV (Siso n a b c d, _) _ = error $ "TODO: reify.Siso: " ++ show n
 reifyFV (Szero,_) t | (n, Snat) <- getBase t = iterate (App Idp) (NatConst 0) `genericIndex` n
 reifyFV (Szero,_) _ = error "reify.Szero"
 reifyFV (Ssuc e,fv) t | (n, Snat) <- getBase t = iidp n $ case reifyFV (e,fv) Snat of

@@ -41,6 +41,9 @@ getPos (Typed e _) = getPos e
 getPos (Pair e _) = getPos e
 getPos (Proj1 (PProjl (lc,_))) = lc
 getPos (Proj2 (PProjr (lc,_))) = lc
+getPos (Iso (PIso (lc,_))) = lc
+getPos (Comp (PComp (lc,_))) = lc
+getPos (Inv (PInv (lc,_))) = lc
 
 unArg :: Arg -> String
 unArg (NoArg _) = "_"
@@ -84,6 +87,9 @@ freeVars (Pmap _) = []
 freeVars (Coe _) = []
 freeVars (Proj1 _) = []
 freeVars (Proj2 _) = []
+freeVars (Iso _) = []
+freeVars (Comp _) = []
+freeVars (Inv _) = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Paren _ e) = freeVars e
@@ -157,6 +163,9 @@ rename e@(Pmap _) _ _ = e
 rename e@(Coe _) _ _ = e
 rename e@(Proj1 _) _ _ = e
 rename e@(Proj2 _) _ _ = e
+rename e@(Iso _) _ _ = e
+rename e@(Comp _) _ _ = e
+rename e@(Inv _) _ _ = e
 rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
@@ -203,6 +212,9 @@ ppExpr = go False
     go _ _ (Coe _) = text "coe"
     go _ _ (Proj1 _) = text "proj1"
     go _ _ (Proj2 _) = text "proj2"
+    go _ _ (Iso _) = text "iso"
+    go _ _ (Comp _) = text "comp"
+    go _ _ (Inv _) = text "inv"
     go _ _ (Universe (U (_,u))) = text u
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -243,12 +255,12 @@ preprocessDefs defs =
         typeSigsDup = duplicates (map fst typeSigs)
         funDeclsDup = duplicates (map fst funDecls)
     in if not (null typeSigsDup) || not (null funDeclsDup)
-        then Left $ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Duplicate type signatures for " ++ s) enull) typeSigsDup
-                 ++ map (\(PIdent ((l,c),s)) -> emsgLC l c ("Multiple declarations of " ++ s) enull) funDeclsDup
-        else fmap concat $ forE funDecls $ \(i@(PIdent ((l,c),name)),(args,expr)) -> case lookup name typeSigs' of
+        then Left $ map (\(PIdent (lc,s)) -> emsgLC lc ("Duplicate type signatures for " ++ s) enull) typeSigsDup
+                 ++ map (\(PIdent (lc,s)) -> emsgLC lc ("Multiple declarations of " ++ s) enull) funDeclsDup
+        else fmap concat $ forE funDecls $ \(i@(PIdent (lc,name)),(args,expr)) -> case lookup name typeSigs' of
             Nothing -> if null args
                 then Right [Def i [] expr]
-                else Left [emsgLC l c "Cannot infer type of the argument" enull]
+                else Left [emsgLC lc "Cannot infer type of the argument" enull]
             Just ty -> Right [DefType i ty, Def i args expr]
   where
     filterTypeSigs :: [Def] -> [(PIdent,Expr)]

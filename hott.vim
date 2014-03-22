@@ -4,7 +4,7 @@ elseif exists("b:current_syntax")
   finish
 endif
 
-syn keyword hottKeyword         pmap ext iso coe inv comp idp R
+syn keyword hottKeyword         pmap ext iso coe inv comp idp R let in suc proj1 proj2
 syn match   hottLineComment     "---*\([^-!#$%&\*\+./<=>\?@\\^|~].*\)\?$"
 syn region  hottBlockComment    start="{-"  end="-}" contains=hottBlockComment
 syn match   hottNumber          "\<[0-9]\+\>"

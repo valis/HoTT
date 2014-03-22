@@ -135,6 +135,18 @@ instance Print PProjr where
   prt _ (PProjr (_,i)) = doc (showString ( i))
 
 
+instance Print PIso where
+  prt _ (PIso (_,i)) = doc (showString ( i))
+
+
+instance Print PComp where
+  prt _ (PComp (_,i)) = doc (showString ( i))
+
+
+instance Print PInv where
+  prt _ (PInv (_,i)) = doc (showString ( i))
+
+
 instance Print PIdent where
   prt _ (PIdent (_,i)) = doc (showString ( i))
 
@@ -177,6 +189,9 @@ instance Print Expr where
    Coe pcoe -> prPrec i 6 (concatD [prt 0 pcoe])
    Proj1 pprojl -> prPrec i 6 (concatD [prt 0 pprojl])
    Proj2 pprojr -> prPrec i 6 (concatD [prt 0 pprojr])
+   Iso piso -> prPrec i 6 (concatD [prt 0 piso])
+   Comp pcomp -> prPrec i 6 (concatD [prt 0 pcomp])
+   Inv pinv -> prPrec i 6 (concatD [prt 0 pinv])
    NatConst pint -> prPrec i 6 (concatD [prt 0 pint])
    Universe u -> prPrec i 6 (concatD [prt 0 u])
    Paren ppar expr -> prPrec i 6 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])

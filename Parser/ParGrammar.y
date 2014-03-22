@@ -42,6 +42,9 @@ L_Ppmap { PT _ (T_Ppmap _) }
 L_PCoe { PT _ (T_PCoe _) }
 L_PProjl { PT _ (T_PProjl _) }
 L_PProjr { PT _ (T_PProjr _) }
+L_PIso { PT _ (T_PIso _) }
+L_PComp { PT _ (T_PComp _) }
+L_PInv { PT _ (T_PInv _) }
 L_PIdent { PT _ (T_PIdent _) }
 L_err    { _ }
 
@@ -62,6 +65,9 @@ Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
 PCoe    :: { PCoe} : L_PCoe { PCoe (mkPosToken $1)}
 PProjl    :: { PProjl} : L_PProjl { PProjl (mkPosToken $1)}
 PProjr    :: { PProjr} : L_PProjr { PProjr (mkPosToken $1)}
+PIso    :: { PIso} : L_PIso { PIso (mkPosToken $1)}
+PComp    :: { PComp} : L_PComp { PComp (mkPosToken $1)}
+PInv    :: { PInv} : L_PInv { PInv (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
 
 Defs :: { Defs }
@@ -124,6 +130,9 @@ Expr6 : Arg { Var $1 }
   | PCoe { Coe $1 }
   | PProjl { Proj1 $1 }
   | PProjr { Proj2 $1 }
+  | PIso { Iso $1 }
+  | PComp { Comp $1 }
+  | PInv { Inv $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }

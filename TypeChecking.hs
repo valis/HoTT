@@ -42,7 +42,7 @@ typeOf'depType ctx (TypedVar _ vars t : list) e = do
     updateCtx ctx tv (Var (Arg (PIdent (_,x)))) = Right (M.insert x (svar x tv,tv) ctx)
     updateCtx ctx tv (App a (Var (NoArg _))) = updateCtx ctx tv a
     updateCtx ctx tv (App a (Var (Arg (PIdent (_,x))))) = fmap (M.insert x (svar x tv,tv)) (updateCtx ctx tv a)
-    updateCtx _ _ e = let (l,c) = getPos e in Left [emsgLC l c "Expected identifier" enull]
+    updateCtx _ _ e = Left [emsgLC (getPos e) "Expected identifier" enull]
 
 dropParens :: Expr -> Expr
 dropParens (Paren _ e) = dropParens e
@@ -84,16 +84,16 @@ typeOfH ctx (Lam _ (x:xs) e) (T r@(Spi z fv a b)) =
         v = svar x' a
     in typeOfH (M.insert x' (v,a) ctx) e' (T (b 0 [] v)) >> return r
 typeOfH _ (Lam _ (Binder arg : _) _) (T ty) =
-    let (l,c) = case arg of
+    let lc = case arg of
             Arg (PIdent (p,_)) -> p
             NoArg (Pus (p,_)) -> p
-    in Left [emsgLC l c "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
+    in Left [emsgLC lc "" $ expType 1 ty $$ etext "But lambda expression has pi type"]
 typeOfH _ i@(Idp _) (T exp@(Spi x _ a _)) = do
     let ctx = M.singleton (freshName "a" [x]) a
     cmpTypesErr exp (eval 0 ctx $ T.Pi [([x],T.Var "a")] $ T.Id (T.Var "a") (T.Var x) (T.Var x)) i
     return exp
-typeOfH _ (Idp (PIdp ((l,c),_))) (T ty) =
-    Left [emsgLC l c "" $ expType 1 ty $$ etext "But idp has pi type"]
+typeOfH _ (Idp (PIdp (lc,_))) (T ty) =
+    Left [emsgLC lc "" $ expType 1 ty $$ etext "But idp has pi type"]
 typeOfH ctx e@(Coe (PCoe (lc,_))) (T ty@(Spi v fv a@(Sid (Stype _) x y) b)) = case b 0 [] $ svar (freshName v fv) a of
     Spi v' fv' x' y' -> if cmpTypes x x' && cmpTypes y (y' 0 [] $ svar (freshName v' fv') x')
         then return ty
@@ -105,8 +105,8 @@ typeOfH ctx ea@(App e1 e) (T exp@(Sid t a b)) | Idp _ <- dropParens e1 = do
     let e' = evalRaw ctx e (Just t)
     cmpTypesErr exp (Sid t e' e') ea
     return exp
-typeOfH ctx (App e1 _) (T exp) | Idp (PIdp ((l,c),_)) <- dropParens e1 =
-    Left [emsgLC l c "" $ expType 1 exp $$ etext "But idp _ has Id type"]
+typeOfH ctx (App e1 _) (T exp) | Idp (PIdp (lc,_)) <- dropParens e1 =
+    Left [emsgLC lc "" $ expType 1 exp $$ etext "But idp _ has Id type"]
 -- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
 typeOfH ctx e@(Pmap (Ppmap (lc,_))) (T exp@(Spi v fv a@(Sid (Spi v' fv' a' b') f g) b)) =
     case isArr v fv a b of
@@ -128,8 +128,7 @@ typeOfH ctx ea@(App e1 e) (T ty@(Spi v fv a'@(Sid a x y) b')) | Pmap _ <- dropPa
                     (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.Var "p") `T.App` T.Var "f'")
                     (T.Var "g'")
             in cmpTypesErr ty (eval 0 (M.fromList ctx') term) ea >> return ty
-        _ -> let (l,c) = getPos e
-             in Left [emsgLC l c "" $ etext "Expected type: Id(" <+> epretty (T.Pi [([],reifyType a)] $ T.Var "_")
+        _ -> Left [emsgLC (getPos e) "" $ etext "Expected type: Id(" <+> epretty (T.Pi [([],reifyType a)] $ T.Var "_")
                 <+> etext ") _ _" $$ etext "But term" <+> epretty e <+> etext "has type" <+> epretty (reifyType t)]
 typeOfH ctx (App e1 e) (T ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = pmap1ErrorMsg lc ty
 typeOfH ctx (Ext (PExt (lc,_))) (T ty@(Spi x' fv' s@(Spi _ _ a' b') t)) = case isArr x' fv' s t of
@@ -162,15 +161,14 @@ typeOfH ctx (App e1 e) (T r@(Sid (Ssigma x fv a b) p q)) | Ext _ <- dropParens e
             r3 = action m (proj2 q)
         in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)]) $ T.Id (T.Var "r1") (T.Var "r2") (T.Var "r3")
     return r
-typeOfH ctx (App e1 e) (T exp) | Ext (PExt ((l,c),_)) <- dropParens e1 = Left [emsgLC l c "" $ expType (-1) exp
+typeOfH ctx (App e1 e) (T exp) | Ext (PExt (lc,_)) <- dropParens e1 = Left [emsgLC lc "" $ expType (-1) exp
     $$ etext "But term ext _ has type either of the form Id ((x : A) -> B x) _ _ or of the form Id ((x : A) * B x) _ _"]
 typeOfH ctx (Pair e1 e2) (T r@(Ssigma _ _ a b)) = do
     typeOfH ctx e1 (T a)
     typeOfH ctx e2 $ T $ b 0 [] $ evalRaw ctx e1 (Just a)
     return r
 typeOfH ctx e@(Pair _ _) (T exp) =
-    let (l,c) = getPos e
-    in Left [emsgLC l c "" $ expType (-1) exp $$ etext "But term" <+> epretty e <+> etext "has Sigma type"]
+    Left [emsgLC (getPos e) "" $ expType (-1) exp $$ etext "But term" <+> epretty e <+> etext "has Sigma type"]
 typeOfH ctx (Proj1 (PProjl (lc,_))) (T r@(Spi x fv a'@(Ssigma _ _ a _) b)) = case isArr x fv a' b of
     Just b' | cmpTypes a b' -> Right r
     _ -> proj1ErrorMsg lc r
@@ -182,6 +180,15 @@ typeOfH ctx (Proj2 (PProjr (lc,_))) (T r@(Spi x fv a'@(Ssigma _ _ a b) b')) =
         then Right r
         else proj2ErrorMsg lc r
 typeOfH ctx (Proj2 (PProjr (lc,_))) (T exp) = proj2ErrorMsg lc exp
+typeOfH ctx (Comp _) (T exp@(Spi v1 fv1 a1@(Sid t1 x1 y1) b1))
+    | Just (Spi v2 fv2 a2@(Sid t2 x2 y2) b2) <- isArr v1 fv1 a1 b1, Just (Sid t3 x3 y3) <- isArr v2 fv2 a2 b2
+    , cmpTypes t1 t2 && cmpTypes t2 t3 && cmpValues y1 x2 t1 && cmpValues x1 x3 t1 && cmpValues y2 y3 t2 = Right exp
+typeOfH ctx (Comp (PComp (lc,_))) (T exp) = Left [emsgLC lc "" $ expType (-1) exp $$
+    etext "But comp has type of the form Id A x y -> Id A y z -> Id A x z"]
+typeOfH ctx (Inv _) (T exp@(Spi v fv a@(Sid t x y) b))
+    | Just (Sid t' x' y') <- isArr v fv a b, cmpTypes t t' && cmpValues x y' t && cmpValues x' y t = Right exp
+typeOfH ctx (Inv (PInv (lc,_))) (T exp) = Left [emsgLC lc "" $ expType (-1) exp $$
+    etext "But inv has type of the form Id A x y -> Id A y x"]
 typeOfH ctx e (T exp) = do
     act <- typeOf ctx e
     cmpTypesErr exp act e
@@ -231,8 +238,24 @@ typeOfH ctx (App e1 e) N | Coe _ <- dropParens e1 = do
     case t of
         Sid (Stype _) x y -> Right (x `sarr` y)
         _ -> expTypeBut "Id Type _ _" e t
-typeOfH ctx (Arr e1 e2) N =
-    liftErr2 (maxType e1 e2) (typeOf ctx e1) (typeOf ctx e2)
+typeOfH ctx (App e1 e) N | Inv _ <- dropParens e1 = do
+    t <- typeOf ctx e
+    case t of
+        Sid t' x y -> Right (Sid t' y x)
+        _ -> expTypeBut "Id" e t
+typeOfH ctx (App e1' e2) N | App e3 e1 <- dropParens e1', Comp (PComp (lc,_)) <- dropParens e3 = do
+    r <- liftErr2' (,) (typeOf ctx e1) (typeOf ctx e2)
+    case r of
+        (Sid t1 x1 y1, Sid t2 x2 y2) | cmpTypes t1 t2 -> if cmpValues y1 x2 t1
+            then Right (Sid t1 x1 y2)
+            else Left [emsgLC lc "" $ etext "Terms" <+> epretty (reify y1 t1)
+                <+> etext "and" <+> epretty (reify x2 t2) <+> etext "must be equal"]
+        (Sid t1 _ _, Sid t2 _ _) -> Left [emsgLC lc "" $ etext "Types" <+> epretty (reifyType t1)
+                <+> etext "and" <+> epretty (reifyType t2) <+> etext "must be equal"]
+        (Sid _ _ _, t2) -> expTypeBut "Id" e2 t2
+        (t1, Sid _ _ _) -> expTypeBut "Id" e1 t1
+        (t1, t2) -> liftErr2' const (expTypeBut "Id" e1 t1) (expTypeBut "Id" e2 t2)
+typeOfH ctx (Arr e1 e2) N = liftErr2 (maxType e1 e2) (typeOf ctx e1) (typeOf ctx e2)
 typeOfH ctx (Prod e1 e2) N = typeOf ctx (Arr e1 e2)
 typeOfH ctx (Pi tv e) N = typeOf'depType ctx tv e
 typeOfH ctx (Sigma tv e) N = typeOf'depType ctx tv e
@@ -249,9 +272,9 @@ typeOfH ctx (App e1 e2) N = do
             typeOfH ctx e2 (T a)
             return $ b 0 [] $ evalRaw ctx e2 (Just a)
         _ -> expTypeBut "pi" e1 t1
-typeOfH _ (Var (NoArg (Pus ((l,c),_)))) N = Left [emsgLC l c "Expected identifier" enull]
-typeOfH ctx (Var (Arg (PIdent ((l,c),x)))) N = case M.lookup x ctx of
-    Nothing -> Left [emsgLC l c ("Unknown identifier " ++ x) enull]
+typeOfH _ (Var (NoArg (Pus (lc,_)))) N = Left [emsgLC lc "Expected identifier" enull]
+typeOfH ctx (Var (Arg (PIdent (lc,x)))) N = case M.lookup x ctx of
+    Nothing -> Left [emsgLC lc ("Unknown identifier " ++ x) enull]
     Just (_,t) -> Right t
 typeOfH _ (Suc _) N = Right (sarr Snat Snat)
 typeOfH _ (NatConst _) N = Right Snat
@@ -262,6 +285,15 @@ typeOfH _ (Rec _) N = Right $ eval 0 M.empty $ T.Pi [(["P"], T.Pi [([],T.Nat)] $
 typeOfH ctx (Typed e t) N = do
     typeOfH ctx t $ T (Stype maxBound)
     typeOfH ctx e $ T $ evalRaw ctx t $ Just (Stype maxBound)
+typeOfH ctx (Iso _) N =
+    let term = T.Pi [(["A"],T.Universe $ pred $ pred maxBound)] $
+               T.Pi [(["B"],T.Universe $ pred $ pred maxBound)] $
+               T.Pi [([],T.Pi [([],T.Var "A")] $ T.Var "B")] $
+               T.Pi [([],T.Pi [([],T.Var "B")] $ T.Var "A")] $
+               T.Id (T.Universe $ pred $ pred maxBound) (T.Var "A") (T.Var "B")
+    in Right (eval 0 M.empty term)
+typeOfH ctx (Comp (PComp (lc,_))) N = inferErrorMsg lc "comp"
+typeOfH ctx (Inv (PInv (lc,_))) N = inferErrorMsg lc "inv"
 
 typeOfPmap :: Ctx -> Value -> Value -> Value -> Value -> Expr -> Expr -> EDocM Value
 typeOfPmap ctx (Spi v fv a b) f g (Sid a' x y) _ e2
@@ -272,9 +304,8 @@ typeOfPmap _ _ _ _ t2 _ e2 = expTypeBut "Id" e2 t2
 
 pmapErrMsg :: Expr -> Value -> EDoc -> EDocM a
 pmapErrMsg expr ty i =
-    let (l,c) = getPos expr
-    in Left [emsgLC l c "" $ etext "Expected type of the form Id(" <> i <> etext ") _ _" $$
-             etext "But term" <+> epretty expr <+> etext "has type Id(" <> eprettyType ty <> etext ") _ _"]
+    Left [emsgLC (getPos expr) "" $ etext "Expected type of the form Id(" <> i <> etext ") _ _" $$
+        etext "But term" <+> epretty expr <+> etext "has type Id(" <> eprettyType ty <> etext ") _ _"]
 
 isArr :: String -> [String] -> Value -> (Integer -> [D] -> Value -> Value) -> Maybe Value
 isArr x fv t f =
@@ -300,30 +331,29 @@ eprettyType :: Value -> EDoc
 eprettyType t = epretty $ T.simplify (reifyType t)
 
 inferErrorMsg :: (Int,Int) -> String -> EDocM a
-inferErrorMsg (l,c) s = Left [emsgLC l c ("Cannot infer type of " ++ s) enull]
+inferErrorMsg lc s = Left [emsgLC lc ("Cannot infer type of " ++ s) enull]
 
 coeErrorMsg :: (Int,Int) -> Value -> EDocM a
-coeErrorMsg (l,c) ty =
-    Left [emsgLC l c "" $ expType 1 ty $$ etext "But coe has type of the form Id Type A B -> A -> B"]
+coeErrorMsg lc ty = Left [emsgLC lc "" $ expType 1 ty $$ etext "But coe has type of the form Id Type A B -> A -> B"]
 
 pmapErrorMsg :: (Int,Int) -> Value -> EDocM a
-pmapErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$ etext ("But pmap has type of the form "
+pmapErrorMsg lc ty = Left [emsgLC lc "" $ expType (-1) ty $$ etext ("But pmap has type of the form "
     ++ "Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (coe (pmap (idp B) p) (f x)) (g y)")]
 
 pmap1ErrorMsg :: (Int,Int) -> Value -> EDocM a
-pmap1ErrorMsg (l,c) ty = Left [emsgLC l c "" $ expType (-1) ty $$
+pmap1ErrorMsg lc ty = Left [emsgLC lc "" $ expType (-1) ty $$
     etext "But pmap _ has type of the form (p : Id A x y) -> Id (B y) (coe (pmap (idp B) p) (f x)) (g y)"]
 
 proj1ErrorMsg :: (Int,Int) -> Value -> EDocM a
-proj1ErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
+proj1ErrorMsg lc exp = Left [emsgLC lc "" $ expType (-1) exp $$
     etext "But proj1 has type of the form ((a : A) -> B a) -> A"]
 
 proj2ErrorMsg :: (Int,Int) -> Value -> EDocM a
-proj2ErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp $$
+proj2ErrorMsg lc exp = Left [emsgLC lc "" $ expType (-1) exp $$
     etext "But proj2 has type of the form (p : (a : A) -> B a) -> B (proj1 p)"]
 
 extErrorMsg :: (Int,Int) -> Value -> EDocM a
-extErrorMsg (l,c) exp = Left [emsgLC l c "" $ expType (-1) exp
+extErrorMsg lc exp = Left [emsgLC lc "" $ expType (-1) exp
     $$ etext ("But ext has type either of the form ((x : A) -> f x = g x) -> f = g or "
     ++ "of the form (s : Id A a a') * Id (B a') (trans B s b) b' -> Id ((a : A) * B a) (a,b) (a',b')")]
 
@@ -333,11 +363,9 @@ expType l ty = etext "Expected type:" <+> eprettyLevel l (T.simplify $ reifyType
 cmpTypesErr :: Value -> Value -> Expr -> EDocM ()
 cmpTypesErr t1 t2 e = if cmpTypes t2 t1
     then Right ()
-    else let (l,c) = getPos e in Left [emsgLC l c "" $ expType (-1) t1 $$
+    else Left [emsgLC (getPos e) "" $ expType (-1) t1 $$
         etext "But term" <+> epretty e <+> etext "has type" <+> eprettyType t2]
 
 expTypeBut :: String -> Expr -> Value -> EDocM a
-expTypeBut exp e act =
-    let (l,c) = getPos e
-    in Left [emsgLC l c "" $ etext ("Expected " ++ exp ++ " type") $$
-            etext "But term" <+> epretty e <+> etext "has type" <+> eprettyHead (T.simplify $ reifyType act)]
+expTypeBut exp e act = Left [emsgLC (getPos e) "" $ etext ("Expected " ++ exp ++ " type") $$
+    etext "But term" <+> epretty e <+> etext "has type" <+> eprettyHead (T.simplify $ reifyType act)]

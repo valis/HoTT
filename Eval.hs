@@ -11,6 +11,13 @@ import Syntax.Term
 import Value
 
 eval :: Integer -> CtxV -> Term -> Value
+eval _ _ Iso =                                              Slam "A" []    $ \_  _  va ->
+    let fva = valueFreeVars va                           in Slam "B" fva   $ \_  mb vb ->
+    let fvb = valueFreeVars vb; fvab  = fva  `union` fvb in Slam "f" fvab  $ \_  mf vf ->
+    let fvf = valueFreeVars vf; fvabf = fvab `union` fvf in Slam "g" fvabf $ \kg mg    ->
+    Siso kg (error "TODO: eval.Iso.1") (error "TODO: Eval.Iso.2") (action mg vf)
+eval _ _ Comp = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k m -> comp k (action m p)
+eval _ _ Inv = Slam "p" [] $ \k _ -> inv k
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Coe = Slam "p" [] $ \_ _ -> coe
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
@@ -132,7 +139,7 @@ comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Var "comp" `App` e1 `App` e2
+comp 0 (Ne _ e1) (Ne _ e2) = Ne [] $ Comp `App` e1 `App` e2
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
 comp n _ _ = error $ "TODO: comp: " ++ show n

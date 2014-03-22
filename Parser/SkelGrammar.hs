@@ -79,6 +79,21 @@ transPProjr x = case x of
   PProjr str  -> failure x
 
 
+transPIso :: PIso -> Result
+transPIso x = case x of
+  PIso str  -> failure x
+
+
+transPComp :: PComp -> Result
+transPComp x = case x of
+  PComp str  -> failure x
+
+
+transPInv :: PInv -> Result
+transPInv x = case x of
+  PInv str  -> failure x
+
+
 transPIdent :: PIdent -> Result
 transPIdent x = case x of
   PIdent str  -> failure x
@@ -117,6 +132,9 @@ transExpr x = case x of
   Coe pcoe  -> failure x
   Proj1 pprojl  -> failure x
   Proj2 pprojr  -> failure x
+  Iso piso  -> failure x
+  Comp pcomp  -> failure x
+  Inv pinv  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x
