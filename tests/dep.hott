@@ -10,6 +10,8 @@ coeTest2 A = idp (\a -> a)
 transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' -> B a -> B a'
 transport A B a a' p = coe (pmap (idp B) p)
 
+-- pmap (idp (\e -> B a (proj1 e) (proj2 e))) (ext (p, idp p))
+
 contrPathSpace : (A : Type) (a a' : A) (p : a = a') -> ((a, idp a) :: (a' : A) * a = a') = (a', p)
 contrPathSpace A a a' p = ext (p, idp p)
 
@@ -17,8 +19,16 @@ J : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) 
 J A B d a a' p =
     transport ((x : A) * a = x) (\e -> B a (proj1 e) (proj2 e)) (a, idp a) (a', p) (contrPathSpace A a a' p) (d a)
 
-J' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (idp a) = B a a' p
-J' A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
+J'fail : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (idp a) = B a a' p
+J'fail A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
+                    -- B a <$> p <*> idp p
+                    -- [B (idp a) p (idp p)]
+
+-- J' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (comp p (inv p)) = B a a' p
+-- J' A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
+
+-- J1 : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (idp a) = B a a' p
+-- J1 A B a a' p = inv (pmap (pmap (idp (B a)) (inv p)) (idp p))
 
 -- J'' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) -> (a a' : A) (p : a = a') -> B a a' p
 -- J'' A B d a a' p = coe (pmap (pmap (idp (B a)) p) (idp p)) (d a)
@@ -42,5 +52,5 @@ invIdpTest3 A = J A (\a a' p -> idp a' = comp (inv p) p) (\a -> idp (idp a))
 invIdpTest4 : (A : Type) (a a' : A) (p : a = a') -> idp a = comp p (inv p)
 invIdpTest4 A = J A (\a a' p -> idp a = comp p (inv p)) (\a -> idp (idp a))
 
-depmap'fail : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
-depmap'fail A B f a a' = pmap (idp f)
+depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
+depmap A B f a a' = pmap (idp f)

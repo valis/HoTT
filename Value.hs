@@ -211,7 +211,7 @@ idf = Slam "x" [] $ \_ _ -> id
 action :: GlobMap -> Value -> Value
 action [] v = v
 action m (Slam x fv f) = Slam x fv (\k n -> f k (n ++ m))
-action m (Spair e1 e2) = Spair (action m e1) (action m e2)
+action m (Spair e1 e2) = Spair (action m e1) (action m e2) -- TODO: This is incorrect.
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
 action (Ud:m) t@(Spi _ _ _ _) = action m (Siso 1 t t idf idf idf idf)
