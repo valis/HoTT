@@ -31,6 +31,7 @@ data Term
     | Iso
     | Comp
     | Inv
+    | InvIdp
     | NatConst Integer
     | Universe Level
     | Typed Term Term
@@ -66,6 +67,7 @@ freeVars Proj2 = []
 freeVars Iso = []
 freeVars Comp = []
 freeVars Inv = []
+freeVars InvIdp = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Typed e1 e2) = freeVars e1 `union` freeVars e2
@@ -117,6 +119,7 @@ instance Eq Term where
         cmp _ _ _ Iso Iso = True
         cmp _ _ _ Comp Comp = True
         cmp _ _ _ Inv Inv = True
+        cmp _ _ _ InvIdp InvIdp = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
         cmp _ _ _ _ _ = False
@@ -182,6 +185,7 @@ ppTerm = go False
     go _ _ Iso = text "iso"
     go _ _ Comp = text "comp"
     go _ _ Inv = text "inv"
+    go _ _ InvIdp = text "invIdp"
     go _ _ (Universe u) = text (show u)
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -263,6 +267,7 @@ simplify Proj2 = Proj2
 simplify Iso = Iso
 simplify Comp = Comp
 simplify Inv = Inv
+simplify InvIdp = InvIdp
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
 

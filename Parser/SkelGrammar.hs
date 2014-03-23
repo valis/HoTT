@@ -94,6 +94,11 @@ transPInv x = case x of
   PInv str  -> failure x
 
 
+transPInvIdp :: PInvIdp -> Result
+transPInvIdp x = case x of
+  PInvIdp str  -> failure x
+
+
 transPIdent :: PIdent -> Result
 transPIdent x = case x of
   PIdent str  -> failure x
@@ -135,6 +140,7 @@ transExpr x = case x of
   Iso piso  -> failure x
   Comp pcomp  -> failure x
   Inv pinv  -> failure x
+  InvIdp pinvidp  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x

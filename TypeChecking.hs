@@ -14,6 +14,7 @@ import Syntax.Common
 import Syntax.Raw
 import qualified Syntax.Term as T
 import RawToTerm
+import Eval
 
 maxType :: Expr -> Expr -> Value -> Value -> EDocM Value
 maxType _ _ (Stype k1) (Stype k2) = Right $ Stype (max k1 k2)
@@ -193,6 +194,17 @@ typeOfH ctx (Inv _) (T exp@(Spi v fv a@(Sid t x y) b))
     | Just (Sid t' x' y') <- isArr v fv a b, cmpTypes t t' && cmpValues x y' t && cmpValues x' y t = Right exp
 typeOfH ctx (Inv (PInv (lc,_))) (T exp) = Left [emsgLC lc "" $ expType (-1) exp $$
     etext "But inv has type of the form Id A x y -> Id A y x"]
+-- invIdp : (p : Id t x y) -> Id (Id (Id t x y) p p) (comp (inv p) p) (idp p)
+typeOfH ctx e@(InvIdp _) (T exp@(Spi v fv a@(Sid t x y) b)) =
+    let ctx' = M.fromList [("a",a)]
+        term = T.Pi [(["p"],T.Var "a")] $ T.Id
+            (T.Id (T.Var "a") (T.Var "p") (T.Var "p"))
+            (T.Comp `T.App` (T.Inv `T.App` T.Var "p") `T.App` T.Var "p")
+            (T.Idp `T.App` T.Var "p")
+    in do cmpTypesErr exp (eval 0 ctx' term) e
+          return exp
+typeOfH ctx (InvIdp (PInvIdp (lc,_))) (T exp) = Left [emsgLC lc "" $ expType (-1) exp $$
+    etext "But invIdp has type of the form Id A x y -> _"]
 typeOfH ctx e (T exp) = do
     act <- typeOf ctx e
     cmpTypesErr exp act e
@@ -246,6 +258,14 @@ typeOfH ctx (App e1 e) N | Inv _ <- dropParens e1 = do
     t <- typeOf ctx e
     case t of
         Sid t' x y -> Right (Sid t' y x)
+        _ -> expTypeBut "Id" e t
+-- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
+typeOfH ctx (App e1 e) N | InvIdp _ <- dropParens e1 = do
+    t <- typeOf ctx e
+    case t of
+        Sid _ _ _ ->
+            let e' = evalRaw ctx e Nothing
+            in Right $ Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp e')
         _ -> expTypeBut "Id" e t
 typeOfH ctx (App e1' e2) N | App e3 e1 <- dropParens e1', Comp (PComp (lc,_)) <- dropParens e3 = do
     r <- liftErr2' (,) (typeOf ctx e1) (typeOf ctx e2)
@@ -302,6 +322,7 @@ typeOfH ctx (Iso _) N =
     in Right (eval 0 M.empty term)
 typeOfH ctx (Comp (PComp (lc,_))) N = inferErrorMsg lc "comp"
 typeOfH ctx (Inv (PInv (lc,_))) N = inferErrorMsg lc "inv"
+typeOfH ctx (InvIdp (PInvIdp (lc,_))) N = inferErrorMsg lc "invIdp"
 
 typeOfPmap :: Ctx -> Value -> Value -> Value -> Value -> Expr -> Expr -> EDocM Value
 typeOfPmap ctx (Spi v fv a b) f g (Sid a' x y) _ e2

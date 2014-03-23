@@ -1,5 +1,5 @@
 module RawToTerm
-    ( evalRaw, eval
+    ( evalRaw
     , typeOfTerm
     , rawDefsToTerm, rawExprToTerm
     ) where
@@ -136,6 +136,7 @@ rawExprToTerm ctx (E.App e1 e) (Just (Sid t x y)) | E.Inv _ <- dropParens e1 =
     App Inv $ rawExprToTerm ctx e $ Just (Sid t y x)
 rawExprToTerm ctx (E.App e1 e) (Just _) | E.Inv _ <- dropParens e1 = error "rawExprToTerm.App.Inv"
 rawExprToTerm ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = App Inv (rawExprToTerm ctx e Nothing)
+rawExprToTerm ctx (E.App e1 e) _ | E.InvIdp _ <- dropParens e1 = App InvIdp (rawExprToTerm ctx e Nothing)
 rawExprToTerm ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Comp _ <- dropParens e3 =
     Comp `App` rawExprToTerm ctx e1 Nothing `App` rawExprToTerm ctx e2 Nothing
 rawExprToTerm ctx (E.App e1 e2) _ =
@@ -153,6 +154,7 @@ rawExprToTerm _ (E.Coe _) _ = Coe
 rawExprToTerm _ (E.Iso _) _ = Iso
 rawExprToTerm _ (E.Comp _) _ = Comp
 rawExprToTerm _ (E.Inv _) _ = Inv
+rawExprToTerm _ (E.InvIdp _) _ = InvIdp
 rawExprToTerm _ (E.NatConst (E.PInt (_,x))) _ = NatConst (read x)
 rawExprToTerm _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm ctx (E.Paren _ e) ty = rawExprToTerm ctx e ty
@@ -210,6 +212,12 @@ typeOfTerm ctx (App Coe e) = case typeOfTerm ctx e of
 typeOfTerm ctx (App Inv e) = case typeOfTerm ctx e of
     Sid t x y -> Sid t y x
     _ -> error "typeOfTerm.App.Inv"
+-- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
+typeOfTerm ctx (App InvIdp e) = case typeOfTerm ctx e of
+    t@(Sid _ _ _) ->
+        let e' = eval 0 (ctxToCtxV ctx) e
+        in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp e')
+    _ -> error "typeOfTerm.App.InvIdp"
 typeOfTerm ctx (App (App Comp e1) e2) = case (typeOfTerm ctx e1, typeOfTerm ctx e2) of
     (Sid t x _, Sid _ _ z) -> Sid t x z
     _ -> error "typeOfTerm.App.Comp"
@@ -236,6 +244,7 @@ typeOfTerm _ Idp = error "typeOfTerm.Idp"
 typeOfTerm _ Coe = error "typeOfTerm.Coe"
 typeOfTerm _ Comp = error "typeOfTerm.Comp"
 typeOfTerm _ Inv = error "typeOfTerm.Inv"
+typeOfTerm _ InvIdp = error "typeOfTerm.InvIdp"
 typeOfTerm _ Iso = 
     let term = Pi [(["A"],Universe $ pred $ pred maxBound)] $
                Pi [(["B"],Universe $ pred $ pred maxBound)] $

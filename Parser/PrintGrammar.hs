@@ -147,6 +147,10 @@ instance Print PInv where
   prt _ (PInv (_,i)) = doc (showString ( i))
 
 
+instance Print PInvIdp where
+  prt _ (PInvIdp (_,i)) = doc (showString ( i))
+
+
 instance Print PIdent where
   prt _ (PIdent (_,i)) = doc (showString ( i))
 
@@ -192,6 +196,7 @@ instance Print Expr where
    Iso piso -> prPrec i 6 (concatD [prt 0 piso])
    Comp pcomp -> prPrec i 6 (concatD [prt 0 pcomp])
    Inv pinv -> prPrec i 6 (concatD [prt 0 pinv])
+   InvIdp pinvidp -> prPrec i 6 (concatD [prt 0 pinvidp])
    NatConst pint -> prPrec i 6 (concatD [prt 0 pint])
    Universe u -> prPrec i 6 (concatD [prt 0 u])
    Paren ppar expr -> prPrec i 6 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])

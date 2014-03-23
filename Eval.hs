@@ -1,5 +1,6 @@
 module Eval
     ( eval
+    , comp, inv
     ) where
 
 import qualified Data.Map as M
@@ -9,7 +10,6 @@ import Data.List
 import Syntax.Common
 import Syntax.Term
 import Value
-import ErrorDoc
 
 eval :: Integer -> CtxV -> Term -> Value
 -- iso A B f g
@@ -27,6 +27,7 @@ eval _ _ Iso =                                                  Slam "A" []     
             (error "TODO: eval.Iso.4") (error "TODO: eval.Iso.5") (error "TODO: eval.Iso.6")
 eval _ _ Comp = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" [] $ \k _ -> inv k
+eval _ _ InvIdp = Slam "p" [] $ \k _ -> invIdp k
 eval _ _ Idp = Slam "x" [] $ \_ _ -> idp
 eval _ _ Coe = Slam "p" [] $ \_ _ -> coe
 eval _ _ Pmap = Slam "p" [] $ \_ _ p -> Slam "q" (valueFreeVars p) $ \k _ -> pmap k p
@@ -102,9 +103,9 @@ eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
 eval 1 ctx e@(Id t a b) = Siso 1 (eval 0 (M.map (action [Ld]) ctx) e) (eval 0 (M.map (action [Rd]) ctx) e)
     (Slam "p" (freeVars e) lr) (Slam "p" (freeVars e) rl) (error "TODO: eval.Id.Iso.1") (error "TODO: eval.Id.Iso.2")
   where
-    lr k m v = comp k (inv k $ action m ap) $
+    lr k m v = comp k (action m $ inv 0 ap) $
                comp k (pmap k (action (Ud:m) $ coe tp) v)
-                      (action (genericReplicate k Ud) bp)
+                      (action m bp)
     rl 0 _ v = comp 0 (pmap 0 (idp $ Slam "p" (freeVars a) $ \kp mp vp -> app kp (coe vp) $ action mp a1) $ inv 0 iitp) $
                comp 0 (pmap 0 (coe $ inv 0 tp) $ comp 0 ap $ comp 0 v $ inv 0 bp)
                       (pmap 0 (idp $ Slam "p" (freeVars b) $ \kp mp vp -> app kp (coe vp) $ action mp b1) iitp)
@@ -181,15 +182,14 @@ inv 0 (Siso k a b (Slam xf fvf ef) (Slam xg fvg eg) p q) = Siso k a b
     (Slam xg fvg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
     (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
 inv 0 (Slam x fv f) = Slam x fv $ \k m v -> inv k $ f k m (inv k v)
-inv 0 (Ne [(l,r)] e) = Ne [(r,l)] (App Inv e)
-inv 0 (Ne _ _) = error "inv.Ne"
+inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv e)
 inv 0 (Spair _ _) = error "TODO: inv.Spair"
 inv _ Szero = Szero
 inv _ s@(Ssuc _) = s
 inv 1 r@(Sidp (Sidp _)) = r
 inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
-inv 1 (Ne _ e) = error $ "foo: " ++ show (epretty e)
-inv 1 (Sidp (Ne _ e)) = error $ "bar: " ++ show (epretty e)
+inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (Inv `App` e)
+inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv l, App Inv r), (b,a)] (Pmap `App` App Idp Inv `App` e)
 inv n _ = error $ "TODO: inv: " ++ show n
 
 invIdp :: Integer -> Value -> Value
@@ -205,7 +205,16 @@ comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x fv f) (Slam _ fv' g) = Slam x (fv `union` fv') $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-comp 0 (Ne [(l,_)] e1) (Ne [(_,r)] e2) = Ne [(l,r)] $ Comp `App` e1 `App` e2
+comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ Comp `App` e1 `App` e2
+  where maxList t [] = t
+        maxList [] t = t
+        maxList (x:xs) (_:ys) = x : maxList xs ys
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
+comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ Comp `App` e1 `App` e2
+comp 1 (Sidp (Ne [(a,_)] e1)) (Ne [(l2,r2),(_,b)] e2) =
+    Ne [(Comp `App` e1 `App` l2, Comp `App` e1 `App` r2),(a,b)] $ Pmap `App` (App Idp $ Comp `App` e1) `App` e2
+comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp e1)
+comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
+    Ne [(Comp `App` l1 `App` l2, Comp `App` r1 `App` r2),(a,b)] $ Pmap `App` (Pmap `App` App Idp Comp `App` e1) `App` e2
 comp n _ _ = error $ "TODO: comp: " ++ show n

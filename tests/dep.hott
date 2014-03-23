@@ -30,5 +30,17 @@ J' A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
 -- depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
 -- depmap A B f a a' p = 
 
+invIdpTest1 : (A : Type) (a a' : A) (p : a = a') -> comp (inv p) p = idp a'
+invIdpTest1 A = J A (\a a' p -> comp (inv p) p = idp a') (\a -> idp (idp a))
+
+invIdpTest2 : (A : Type) (a a' : A) (p : a = a') -> comp p (inv p) = idp a
+invIdpTest2 A = J A (\a a' p -> comp p (inv p) = idp a) (\a -> idp (idp a))
+
+invIdpTest3 : (A : Type) (a a' : A) (p : a = a') -> idp a' = comp (inv p) p
+invIdpTest3 A = J A (\a a' p -> idp a' = comp (inv p) p) (\a -> idp (idp a))
+
+invIdpTest4 : (A : Type) (a a' : A) (p : a = a') -> idp a = comp p (inv p)
+invIdpTest4 A = J A (\a a' p -> idp a = comp p (inv p)) (\a -> idp (idp a))
+
 depmap'fail : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a') -> transport A B a a' p (f a) = f a'
 depmap'fail A B f a a' = pmap (idp f)

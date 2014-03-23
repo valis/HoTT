@@ -20,6 +20,7 @@ newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIso = PIso ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PComp = PComp ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PInv = PInv ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype PInvIdp = PInvIdp ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
 data Defs =
    Defs [Def]
@@ -54,6 +55,7 @@ data Expr =
  | Iso PIso
  | Comp PComp
  | Inv PInv
+ | InvIdp PInvIdp
  | NatConst PInt
  | Universe U
  | Paren PPar Expr
