@@ -9,7 +9,8 @@ hott:
 	ghc $(FLAGS) -o hott Main.hs
 
 runTests:
-	ghc $(FLAGS) -o runTests Tests/Main.hs
+	ghc $(FLAGS) -fhpc -o runTests Tests/Main.hs
+	-@rm runTests.tix
 
 bnfc:
 	bnfc -p Parser -haskell Grammar.cf
@@ -20,4 +21,11 @@ build/%.o: %.hs
 	ghc -ibuild/ -c $(FLAGS) -o $@ $<
 
 clean:
-	-@rm -f hott runTests build/*.o build/*.hi build/Parser/*.o build/Parser/*.hi build/Syntax/*.o build/Syntax/*.hi Parser/*.bak
+	-@rm -rf \
+		.hpc *.html *.tix \
+		hott runTests \
+		Parser/*.bak \
+		build/*.o build/*.hi \
+		build/Parser/*.o build/Parser/*.hi \
+		build/Syntax/*.o build/Syntax/*.hi \
+		

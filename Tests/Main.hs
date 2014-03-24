@@ -42,12 +42,14 @@ parser :: String -> Err R.Defs
 parser = pDefs . resolveLayout True . myLexer
 
 testFile :: Bool -> String -> String -> Test
-testFile onlyTC file cnt = case parser cnt of
+testFile onlyTC file cnt = TestLabel (takeWhile (/= '.') file) $ case parser cnt of
     Bad s -> TestCase (assertFailure s)
     Ok (R.Defs defs) -> case fmap (processDecls M.empty . processDefs) (preprocessDefs defs) of
         Left errs -> TestCase $ assertFailure (errsToStr errs)
-        Right res -> TestList $ flip map res $ \(name,edef) -> TestCase $ case edef of
-            Left errs -> assertBool (errsToStr errs) (isSuffixOf "fail" name)
+        Right res -> TestList $ flip map res $ \(name,edef) -> TestLabel name $ TestCase $ case edef of
+            Left errs -> do
+                assertBool (errsToStr errs) (isSuffixOf "fail" name)
+                errsToStr errs `deepseq` return ()
             Right def -> do
                 assertBool "" $ not (isSuffixOf "fail" name)
                 when (not onlyTC) $ render (ppDef def) `deepseq` return ()
@@ -61,4 +63,4 @@ main = do
         files' = filter (not . isInfixOf "_output") files
     files' <- filterM (doesFileExist . ("tests/" ++)) files'
     cnts <- mapM (\file -> fmap (\cnt -> (file,cnt)) $ readFile $ "tests/" ++ file) files'
-    runTestTT $ TestList $ map (\(file,cnt) -> TestLabel (takeWhile (/= '.') file) $ testFile onlyTC file cnt) cnts
+    runTestTT $ TestList $ map (\(file,cnt) -> testFile onlyTC file cnt) cnts

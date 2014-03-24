@@ -41,5 +41,5 @@ pmap2 _ _ f _ _ = pmap (idp f)
 
 typeTest2 = (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g -> (a : A) -> f a = g a
 
-depmap'fail : typeTest2
-depmap'fail _ _ _ _ p a = pmap p (idp a)
+depmap' : typeTest2
+depmap' _ _ _ _ p a = pmap p (idp a)

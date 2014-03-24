@@ -137,6 +137,8 @@ getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
 liftTerm :: Term -> Value -> Value
+liftTerm (App Idp e) (Sid t _ _) = action [Ud] (liftTerm e t)
+liftTerm (App Idp _) _ = error "liftTerm.Idp"
 liftTerm e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
     Sid _ a b -> Siso n a b
@@ -194,8 +196,6 @@ liftTerm e t | (n,Ssigma _ _ a b) <- getBase t = case n of
     0 -> let a' = liftTerm (App Proj1 e) a
          in Spair a' $ liftTerm (App Proj2 e) (b 0 [] a')
     n -> error $ "TODO: liftTerm.Ssigma: " ++ show n
-liftTerm (App Idp e) (Sid t _ _) = Sidp (liftTerm e t)
-liftTerm (App Idp e) t = error "liftTerm.Idp"
 liftTerm e t = Ne (sidToList t) e
   where
     sidToList :: Value -> [(Term,Term)]
