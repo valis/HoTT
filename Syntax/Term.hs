@@ -1,7 +1,7 @@
 module Syntax.Term
-    ( Term(..), Def(..)
+    ( Term(..), Def(..), DBIndex
     , ppTerm, ppDef
-    , freeVars
+    , freeVars, liftTermDB
     , simplify, simplifyDef
     ) where
 
@@ -12,6 +12,8 @@ import Syntax.Common
 
 data Def = Def String (Maybe (Term,[String])) Term
 
+type DBIndex = Integer
+
 data Term
     = Let [Def] Term
     | Lam [String] Term
@@ -19,7 +21,9 @@ data Term
     | Sigma [([String],Term)] Term
     | Id Term Term Term
     | App Term Term
+    | NoVar
     | Var String
+    | LVar DBIndex
     | Nat
     | Suc
     | Rec
@@ -54,8 +58,9 @@ freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Ext e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (ExtSigma e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
-freeVars (Var "_") = []
+freeVars NoVar = []
 freeVars (Var v) = [v]
+freeVars (LVar _) = []
 freeVars Nat = []
 freeVars Suc = []
 freeVars Rec = []
@@ -71,6 +76,50 @@ freeVars InvIdp = []
 freeVars (NatConst _) = []
 freeVars (Universe _) = []
 freeVars (Typed e1 e2) = freeVars e1 `union` freeVars e2
+
+liftTermDB :: DBIndex -> Term -> Term
+liftTermDB = go 0
+  where
+    go n k (Let defs e) = Let (map (goDef n k) defs) e
+    go n k (Lam vars e) = Lam vars $ go (genericLength vars + n) k e
+    go n k (Pi vars e) =
+        let (v,l) = goVars n k vars
+        in Pi v (go l k e)
+    go n k (Sigma vars e) =
+        let (v,l) = goVars n k vars
+        in Sigma v (go l k e)
+    go n k (Id t e1 e2) = Id (go n k t) (go n k e1) (go n k e2)
+    go n k (App e1 e2) = App (go n k e1) (go n k e2)
+    go n k (Ext e1 e2) = Ext (go n k e1) (go n k e2)
+    go n k (ExtSigma e1 e2) = ExtSigma (go n k e1) (go n k e2)
+    go n k (Pair e1 e2) = Pair (go n k e1) (go n k e2)
+    go _ _ NoVar = NoVar
+    go _ _ e@(Var _) = e
+    go n k (LVar i) | i < n = LVar i
+                    | otherwise = LVar (i + k)
+    go _ _ Nat = Nat
+    go _ _ Suc = Suc
+    go _ _ Rec = Rec
+    go _ _ Idp = Idp
+    go _ _ Pmap = Pmap
+    go _ _ Coe = Coe
+    go _ _ Proj1 = Proj1
+    go _ _ Proj2 = Proj2
+    go _ _ Iso = Iso
+    go _ _ Comp = Comp
+    go _ _ Inv = Inv
+    go _ _ InvIdp = InvIdp
+    go _ _ e@(NatConst _) = e
+    go _ _ e@(Universe _) = e
+    go n k (Typed e1 e2) = Typed (go n k e1) (go n k e2)
+    
+    goVars n k [] = ([], n)
+    goVars n k ((vars,t):vs) =
+        let (r, n') = goVars (n + genericLength vars) k vs
+        in ((vars, go n k t) : r, n')
+    
+    goDef n k (Def name Nothing expr) = Def name Nothing (go n k expr)
+    goDef n k (Def name (Just (ty, args)) expr) = Def name (Just (go n k ty, args)) $ go (n + genericLength args) k expr
 
 instance Eq Term where
     (==) = cmp 0 M.empty M.empty
@@ -88,26 +137,23 @@ instance Eq Term where
         cmp c m1 m2 e1 (Sigma (([],_):ts) e2) = cmp c m1 m2 e1 (Sigma ts e2)
         cmp c m1 m2 (Let (Def v1 Nothing r1 : ds1) e1) (Let (Def v2 Nothing r2 : ds2) e2) =
             cmp c m1 m2 r1 r2 && cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Let ds1 e1) (Let ds2 e2)
-        cmp c m1 m2 (Let (Def v1 (Just (t1,as1)) r1 : ds1) e1) (Let (Def v2 (Just (t2,as2)) r2 : ds2) e2) =
-            cmp c m1 m2 t1 t2 &&
-            cmpVars c m1 m2 as1 as2 r1 r2 &&
+        cmp c m1 m2 (Let (Def v1 (Just (t1,_)) r1 : ds1) e1) (Let (Def v2 (Just (t2,_)) r2 : ds2) e2) =
+            cmp c m1 m2 t1 t2 && cmp c m1 m2 r1 r2 &&
             cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Let ds1 e1) (Let ds2 e2)
-        cmp c m1 m2 (Lam (v1:vs1) e1) (Lam (v2:vs2) e2) =
-            cmp (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) (Lam vs1 e1) (Lam vs2 e2)
-        cmp c m1 m2 (Pi ((vs1,t1):ts1) e1) (Pi ((vs2,t2):ts2) e2) =
-            cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Pi ts1 e1) (Pi ts2 e2)
-        cmp c m1 m2 (Sigma ((vs1,t1):ts1) e1) (Sigma ((vs2,t2):ts2) e2) =
-            cmp c m1 m2 t1 t2 && cmpVars c m1 m2 vs1 vs2 (Sigma ts1 e1) (Sigma ts2 e2)
+        cmp c m1 m2 (Lam (_:vs1) e1) (Lam (_:vs2) e2) = cmp c m1 m2 (Lam vs1 e1) (Lam vs2 e2)
+        cmp c m1 m2 (Pi ((_,t1):ts1) e1) (Pi ((_,t2):ts2) e2) =
+            cmp c m1 m2 t1 t2 && cmp c m1 m2 (Pi ts1 e1) (Pi ts2 e2)
+        cmp c m1 m2 (Sigma ((_,t1):ts1) e1) (Sigma ((_,t2):ts2) e2) =
+            cmp c m1 m2 t1 t2 && cmp c m1 m2 (Sigma ts1 e1) (Sigma ts2 e2)
         cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Typed a1 b1) (Typed a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (ExtSigma a1 b1) (ExtSigma a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
-        cmp c m1 m2 (Var v1) (Var v2) = case (M.lookup v1 m1, M.lookup v2 m2) of
-            (Nothing, Nothing) -> v1 == v2
-            (Just c1, Just c2) -> c1 == c2
-            _ -> False
+        cmp c m1 m2 (LVar v1) (LVar v2) = v1 == v2
+        cmp c m1 m2 (Var v1) (Var v2) = M.lookup v1 m1 == M.lookup v2 m2
+        cmp _ _ _ NoVar NoVar = True
         cmp _ _ _ Nat Nat = True
         cmp _ _ _ Suc Suc = True
         cmp _ _ _ Rec Rec = True
@@ -123,22 +169,18 @@ instance Eq Term where
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
         cmp _ _ _ _ _ = False
-        
-        cmpVars c m1 m2 [] [] e1 e2 = cmp c m1 m2 e1 e2
-        cmpVars c m1 m2 (v1:vs1) (v2:vs2) e1 e2 = cmpVars (c + 1) (M.insert v1 c m1) (M.insert v2 c m2) vs1 vs2 e1 e2
-        cmpVars _ _ _ _ _ _ _ = False
 
-ppDef :: Def -> Doc
-ppDef (Def name Nothing          expr) = text name <+> equals <+> ppTerm Nothing expr
-ppDef (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm Nothing ty
-                                     $+$ text name <+> hsep (map text args) <+> equals <+> ppTerm Nothing expr
+ppDef :: [String] -> Def -> Doc
+ppDef ctx (Def name Nothing          expr) = text name <+> equals <+> ppTerm ctx Nothing expr
+ppDef ctx (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm ctx Nothing ty
+    $+$ text name <+> hsep (map text args) <+> equals <+> ppTerm (reverse args ++ ctx) Nothing expr
 
-ppTerm :: Maybe Int -> Term -> Doc
-ppTerm = go False
+ppTerm :: [String] -> Maybe Int -> Term -> Doc
+ppTerm ctx = go ctx False
   where
-    ppArrow l e@(Lam _ _) = go True l e
-    ppArrow l e@(Pi _ _) = go True l e
-    ppArrow l e = go False l e
+    ppArrow ctx l e@(Lam _ _) = go ctx True l e
+    ppArrow ctx l e@(Pi _ _) = go ctx True l e
+    ppArrow ctx l e = go ctx False l e
     
     isComp (Let _ _) = True
     isComp (Lam _ _) = True
@@ -147,67 +189,71 @@ ppTerm = go False
     isComp (Id _ _ _) = True
     isComp _ = False
     
-    ppId l e@(Lam _ _) = go True l e
-    ppId l e@(Pi _ _) = go True l e
-    ppId l e@(Id _ _ _) = go True l e
-    ppId l e = go False l e
+    ppId ctx l e@(Lam _ _) = go ctx True l e
+    ppId ctx l e@(Pi _ _) = go ctx True l e
+    ppId ctx l e@(Id _ _ _) = go ctx True l e
+    ppId ctx l e = go ctx False l e
     
-    ppVars :: Bool -> Char -> Maybe Int -> [([String],Term)] -> Doc
-    ppVars _ c l [] = char c
-    ppVars True c l ts = char c <+> ppVars False c l ts
-    ppVars False c l (([],t):ts) =
+    ppVars :: [String] -> Bool -> Char -> Maybe Int -> [([String],Term)] -> Doc
+    ppVars _ _ c l [] = char c
+    ppVars ctx True c l ts = char c <+> ppVars ctx False c l ts
+    ppVars ctx False c l (([],t):ts) =
         let l' = fmap pred l
-        in ppArrow l' t <+> ppVars True c l' ts
-    ppVars False c l ((vars,t):ts) =
+        in ppArrow ctx l' t <+> ppVars ctx True c l' ts
+    ppVars ctx False c l ((vars,t):ts) =
         let l' = fmap pred l
             b = not (null ts) && null (fst $ head ts)
-        in parens (hsep (map text vars) <+> colon <+> go False l' t) <+> ppVars b c l' ts
+        in parens (hsep (map text vars) <+> colon <+> go ctx False l' t) <+> ppVars ctx b c l' ts
     
-    go _ (Just 0) _ = char '_'
-    go _ _ (NatConst n) = integer n
-    go _ _ x | Just n <- getNat x = integer n
+    go :: [String] -> Bool -> Maybe Int -> Term -> Doc
+    go _ _ (Just 0) _ = char '_'
+    go _ _ _ (NatConst n) = integer n
+    go _ _ _ x | Just n <- getNat x = integer n
       where
         getNat :: Term -> Maybe Integer
         getNat (NatConst n) = Just n
         getNat (App Suc x) = fmap succ (getNat x)
         getNat _ = Nothing
-    go _ _ (Var v) = text v
-    go _ _ Nat = text "Nat"
-    go _ _ Suc = text "suc"
-    go _ _ Rec = text "R"
-    go _ _ Idp = text "idp"
-    go _ _ (Ext _ _) = text "ext"
-    go _ _ (ExtSigma _ _) = text "ext"
-    go _ _ Pmap = text "pmap"
-    go _ _ Coe = text "coe"
-    go _ _ Proj1 = text "proj1"
-    go _ _ Proj2 = text "proj2"
-    go _ _ Iso = text "iso"
-    go _ _ Comp = text "comp"
-    go _ _ Inv = text "inv"
-    go _ _ InvIdp = text "invIdp"
-    go _ _ (Universe u) = text (show u)
-    go True l e = parens (go False l e)
-    go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
-    go False l (Lam vars e) = char 'λ' <> hsep (map text vars) <+> char '→' <+> go False (fmap pred l) e
-    go False l (Pi ts e) =
+    go _ _ _ NoVar = text "_"
+    go _ _ _ (Var v) = text v
+    go ctx _ _ (LVar v) = text (ctx `genericIndex` v)
+    go _ _ _ Nat = text "Nat"
+    go _ _ _ Suc = text "suc"
+    go _ _ _ Rec = text "R"
+    go _ _ _ Idp = text "idp"
+    go _ _ _ (Ext _ _) = text "ext"
+    go _ _ _ (ExtSigma _ _) = text "ext"
+    go _ _ _ Pmap = text "pmap"
+    go _ _ _ Coe = text "coe"
+    go _ _ _ Proj1 = text "proj1"
+    go _ _ _ Proj2 = text "proj2"
+    go _ _ _ Iso = text "iso"
+    go _ _ _ Comp = text "comp"
+    go _ _ _ Inv = text "inv"
+    go _ _ _ InvIdp = text "invIdp"
+    go _ _ _ (Universe u) = text (show u)
+    go ctx True l e = parens (go ctx False l e)
+    go ctx False l (Let defs e) = text "let" <+> vcat (map (ppDef ctx) defs) $+$ text "in" <+> go ctx False l e
+    go ctx False l (Lam vars e) = char 'λ' <> hsep (map text vars) <+>
+        char '→' <+> go (reverse vars ++ ctx) False (fmap pred l) e
+    go ctx False l (Pi ts e) =
         let l' = fmap pred l
-        in ppVars False '→' l' ts <+> go False l' e
-    go False l (Sigma ts e) =
+        in ppVars ctx False '→' l' ts <+> go ctx False l' e
+    go ctx False l (Sigma ts e) =
         let l' = fmap pred l
-        in ppVars False '×' l' ts <+> ppArrow l' e
-    go False l (Id _ e1 e2) =
+        in ppVars ctx False '×' l' ts <+> ppArrow ctx l' e
+    go ctx False l (Id _ e1 e2) =
         let l' = fmap pred l
-        in ppId l' e1 <+> equals <+> ppId l' e2
-    go False l (App e1 e2) =
+        in ppId ctx l' e1 <+> equals <+> ppId ctx l' e2
+    go ctx False l (App e1 e2) =
         let l' = fmap pred l
-        in go False l' e1 <+> go True l' e2
-    go False l (Typed e1 e2) =
+        in go ctx False l' e1 <+> go ctx True l' e2
+    go ctx False l (Typed e1 e2) =
         let l' = fmap pred l
-        in go (isComp e1) l' e1 <+> text "::" <+> go False l' e2
-    go False l (Pair e1 e2) =
+        in go ctx (isComp e1) l' e1 <+> text "::" <+> go ctx False l' e2
+    go ctx False l (Pair e1 e2) =
         let l' = fmap pred l
-        in go False l' e1 <+> comma <+> go False l' e2
+        in go ctx False l' e1 <+> comma <+> go ctx False l' e2
 
 simplify :: Term -> Term
 simplify (Let [] e) = simplify e
@@ -256,6 +302,8 @@ simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify e@(Ext _ _) = e
 simplify e@(ExtSigma _ _) = e
 simplify e@(Var _) = e
+simplify e@(LVar _) = e
+simplify NoVar = NoVar
 simplify Nat = Nat
 simplify Suc = Suc
 simplify Rec = Rec
