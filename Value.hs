@@ -1,10 +1,11 @@
 module Value
     ( Value(..)
     , D(..), GlobMap
-    , svar, sarr, sprod
+    , svar, gvar, sarr, sprod
     , Ctx, CtxV
     , ctxToCtxV
     , cmpTypes, cmpValues
+    , valueFreeLVars
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, trans
     , idf, idp, action, liftTerm, reduceD, lastD
@@ -22,12 +23,12 @@ data Value
     = Slam String (Integer -> GlobMap -> Value -> Value) -- Constructor for Pi-types
     | Szero | Ssuc Value -- Constructors for Nat
     | Spair Value Value -- Constructor for Sigma-types
-    | Spi String Value (Integer -> GlobMap -> Value -> Value)
+    | Spi String Value (Integer -> GlobMap -> Value -> Value) -- Constructor for Type_k
     | Ssigma String Value (Integer -> GlobMap -> Value -> Value) -- Constructor for Type_k
     | Snat | Sid Value Value Value | Stype Level -- Constructors for Type_k
     | Sidp Value -- Constructor for Id
-    | Ne (DBIndex -> ([(Term,Term)],Term))
-    | Swtype (DBIndex -> Term) -- Wrapper for types
+    | Ne [(ITerm,ITerm)] ITerm
+    | Swtype ITerm -- Wrapper for types
     | Siso Integer Value Value Value Value Value Value -- Higher constructor for Type_k
     -- | Scomp Value Value | Ssym Value
 type Ctx  = (M.Map String (Value,Value), [(Value,Value)])
@@ -59,6 +60,24 @@ sprod a b = Ssigma "_" a $ \k _ _ -> action (genericReplicate k Ud) b
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
+valueFreeLVars :: DBIndex -> Value -> [DBIndex]
+valueFreeLVars = undefined
+{-
+valueFreeLVars i (Slam _ f) = valueFreeLVars (i + 1) $ f 0 [] $ Ne [] $ \l -> LVar (l - i - 1)
+valueFreeLVars _ Szero = []
+valueFreeLVars i (Ssuc v) = valueFreeLVars i v
+valueFreeLVars i (Spair a b) = valueFreeLVars i a `union` valueFreeLVars i b
+valueFreeLVars i (Spi _ a b) = valueFreeLVars i a `union` valueFreeLVars (i + 1) (b 0 [] $ Ne [] $ \l -> LVar $ l - i - 1)
+valueFreeLVars i (Ssigma _ a b) = valueFreeLVars i a `union` valueFreeLVars (i + 1) (b 0 [] $ Ne [] $ \l -> LVar $ l - i - 1)
+valueFreeLVars _ Snat = []
+valueFreeLVars i (Sid t a b) = valueFreeLVars i t `union` valueFreeLVars i a `union` valueFreeLVars i b
+valueFreeLVars i (Sidp v) = valueFreeLVars i v
+valueFreeLVars i (Ne ts t) = concat (map (\(l,r) -> freeLVars (l i) `union` freeLVars (r i)) ts) `union` freeLVars i t
+valueFreeLVars i (Swtype t) = freeLVars (t i)
+valueFreeLVars i (Siso _ a b c d e f) = valueFreeLVars i a `union` valueFreeLVars i b `union` valueFreeLVars i c
+                                `union` valueFreeLVars i d `union` valueFreeLVars i e `union` valueFreeLVars i f
+-}
+
 cmpTypes :: DBIndex -> Value -> Value -> Bool
 cmpTypes i (Spi x a b)    (Spi _ a' b')    = cmpTypes i a' a && cmpTypes (i + 1) (b 0 [] $ svar i a) (b' 0 [] $ svar i a')
 cmpTypes i (Ssigma x a b) (Ssigma _ a' b') = cmpTypes i a a' && cmpTypes (i + 1) (b 0 [] $ svar i a) (b' 0 [] $ svar i a')
@@ -76,6 +95,9 @@ cmpValues i e1 e2 t = reify i e1 t == reify i e2 t
 
 svar :: DBIndex -> Value -> Value
 svar i = liftTerm $ \l -> LVar (l - i - 1)
+
+gvar :: String -> Value -> Value
+gvar v = liftTerm $ \_ -> Var v
 
 proj1 :: Value -> Value
 proj1 (Spair a _) = a
@@ -103,7 +125,7 @@ getBase :: Value -> (Integer,Value)
 getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
-liftTerm :: (DBIndex -> Term) -> Value -> Value
+liftTerm :: ITerm -> Value -> Value
 liftTerm e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
     Sid _ a b -> Siso n a b
@@ -166,11 +188,11 @@ liftTerm e t | (n,Ssigma _ a b) <- getBase t = case n of
     0 -> let a' = liftTerm (App Proj1 . e) a
          in Spair a' $ liftTerm (App Proj2 . e) (b 0 [] a')
     n -> error $ "TODO: liftTerm.Ssigma: " ++ show n
-liftTerm e t = Ne $ \l -> (sidToList l t, e l)
+liftTerm e t = Ne (sidToList t) e
   where
-    sidToList :: DBIndex -> Value -> [(Term,Term)]
-    sidToList l (Sid t a b) = (liftTermDB l (reify 0 a t), liftTermDB l (reify 0 b t)) : sidToList l t
-    sidToList _ _ = []
+    sidToList :: Value -> [(ITerm,ITerm)]
+    sidToList (Sid t a b) = (\l -> liftTermDB l (reify 0 a t), \l -> liftTermDB l (reify 0 b t)) : sidToList t
+    sidToList _ = []
 
 idp :: Value -> Value
 idp = action [Ud]
@@ -199,12 +221,10 @@ action ( d:m) (Siso n a b f g p q) = action m $ Siso (n - 1) a b (action [ d] f)
 action (Ld:m) (Sidp x) = action m x
 action (Rd:m) (Sidp x) = action m x
 action (Ud:m) v = action m (Sidp v)
-action (a:m) (Ne e) = action m $ Ne $ \l -> case (a, e l) of
-    (Ld,((l,_):t,_)) -> (t,l)
-    (Ld,([],_)) -> error "action.Ld.Ne"
-    (Rd,((_,r):t,_)) -> (t,r)
-    (Rd,([],_)) -> error "action.Ld.Ne"
-    _ -> error "action.Ud.Ne"
+action (Ld:m) (Ne ((l,_):t) e) = action m (Ne t l)
+action (Ld:m) (Ne [] e) = error "action.Ld.Ne"
+action (Rd:m) (Ne ((_,r):t) e) = action m (Ne t r)
+action (Rd:m) (Ne [] e) = error "action.Rd.Ne"
 action _ (Spi _ _ _) = error "action.Spi"
 action _ (Ssigma _ _ _) = error "action.Ssigma"
 action _ Snat = error "action.Snat"
@@ -259,7 +279,7 @@ reify _ (Snat) (Stype _) = Nat
 reify _ (Snat) _ = error "reify.Snat"
 reify i (Sidp x) (Sid t _ _) = App Idp (reify i x t)
 reify _ (Sidp _) _ = error "reify.Sidp"
-reify i (Ne e) _ = snd (e i)
+reify i (Ne _ e) _ = e i
 
 reifyType :: DBIndex -> Value -> Term
 reifyType i t = reify i t (Stype maxBound)

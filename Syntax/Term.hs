@@ -1,5 +1,6 @@
 module Syntax.Term
-    ( Term(..), Def(..), DBIndex
+    ( Term(..), Def(..)
+    , DBIndex, ITerm
     , ppTerm, ppDef
     , freeVars, liftTermDB
     , simplify, simplifyDef
@@ -13,6 +14,7 @@ import Syntax.Common
 data Def = Def String (Maybe (Term,[String])) Term
 
 type DBIndex = Integer
+type ITerm = DBIndex -> Term
 
 data Term
     = Let [Def] Term

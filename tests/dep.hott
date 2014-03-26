@@ -10,6 +10,16 @@ coeTest2 A = idp (\a -> a)
 transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' -> B a -> B a'
 transport A B a a' p = coe (pmap (idp B) p)
 
+-- pmap : {A : Type} {B : A -> Type} (f : (a : A) -> B a) {a a' : A} (p : a = a') -> Id (B a') (trans B p (f a)) (f a')
+-- pmap : {A : Type} {B : A -> Type} (f : (a : A) -> B a) {a a' : A} (p : a = a') -> f a = f a' | B, p
+-- A : Type, a : A, a' : A, p : a = a', B : A -> Type, b : B a, b' : B a' |- b = b' | B, p : Type
+-- (f = f' | (\a -> B -> C), p) => Id (B[a'] -> C[a']) (\x -> trans (\a -> C) p (f (trans (\a -> B) (inv p) x))) f'
+-- (f = f' | (\a -> B -> C), p) => Id (B[a] -> C[a']) (\x -> trans (\a -> C) p (f x)) (\x -> f' (trans (\a -> B) p x))
+-- (f = f' | (\a -> (b : B) -> C b), p) =>
+--   Id ((b : B[a]) -> C[a'] (trans (\a -> B) p b))
+--      (\(b : B[a]) -> trans (\a -> C b) p (f b)) -- ?
+--      (\(b : B[a]) -> f' (trans (\a -> B) p b))
+
 -- B : (a a' : A) -> a = a' -> Type
 -- B' : A -> (a : A) * (A -> (a' : A) * (a = a' -> Type))
 -- proj2 (B' a) : A -> (a' : A) * (a = a' -> Type)
@@ -55,7 +65,7 @@ J A B d a a' p =
 J'fail : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (idp a) = B a a' p
 J'fail A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
                     -- B a <$> p <*> idp p
-                    -- [B (idp a) p (idp p)]
+                    -- [ B [a] p [p] ]
 
 -- J' : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (comp p (inv p)) = B a a' p
 -- J' A B a a' p = pmap (pmap (idp (B a)) p) (idp p)

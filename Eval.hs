@@ -140,11 +140,11 @@ rec 0 p z s = go
   where
     go Szero = z
     go (Ssuc x) = app 0 (app 0 s x) (go x)
-    go t@(Ne e) =
+    go t@(Ne [] e) =
         let r l = Rec `App` reify l p (Snat `sarr` Stype maxBound)
                       `App` reify l z (app 0 p Szero)
                       `App` reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
-                      `App` snd (e l)
+                      `App` e l
         in liftTerm r (app 0 p t)
     go _ = error "rec.0"
 -- rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (suc x)) -> (x : Nat) -> P x
@@ -155,8 +155,8 @@ rec 1 p z s = go
   where
     go Szero = z
     go (Ssuc x) = app 1 (app 1 s x) (go x)
-    go (Sidp (Ne e)) = go $ Ne $ \l -> ([(snd (e l), snd (e l))], App Idp $ snd $ e l)
-    go x@(Ne e) =
+    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (App Idp . e)
+    go x@(Ne [(el,er)] e) =
         let r l = Pmap `App` (Pmap `App` (Pmap `App` (Pmap `App` (Idp `App` Rec)
                 `App` reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p)))
                 `App` reify l z
@@ -164,10 +164,10 @@ rec 1 p z s = go
                 `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
                        in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
                         $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
-                `App` snd (e l)
-        in liftTerm r $ Sid (app 0 (action [Rd] p) $ action [Rd] x)
-            (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (action [Ld] x))
-            (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (action [Rd] x))
+                `App` e l
+        in liftTerm r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
+            (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
+            (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))
     go _ = error "rec.1"
 rec n _ _ _ = error $ "TODO: rec: " ++ show n
 
