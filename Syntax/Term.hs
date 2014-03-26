@@ -2,13 +2,15 @@ module Syntax.Term
     ( Term(..), Def(..)
     , DBIndex, ITerm
     , ppTerm, ppDef
-    , freeVars, liftTermDB
+    , freeLVars, liftTermDB
     , simplify, simplifyDef
     ) where
 
 import qualified Data.Map as M
 import Text.PrettyPrint
 import Data.List
+import Control.Arrow(second)
+
 import Syntax.Common
 
 data Def = Def String (Maybe (Term,[String])) Term
@@ -47,37 +49,41 @@ data Term
 
 infixl 5 `App`
 
-freeVars :: Term -> [String]
-freeVars (Let defs e) = freeVars e \\ map (\(Def name _ _) -> name) defs
-freeVars (Lam [] e) = freeVars e
-freeVars (Lam (v:vs) e) = delete v $ freeVars (Lam vs e)
-freeVars (Pi [] e) = freeVars e
-freeVars (Pi ((vars,t):vs) e) = freeVars t `union` (freeVars (Pi vs e) \\ vars)
-freeVars (Sigma [] e) = freeVars e
-freeVars (Sigma ((vars,t):vs) e) = freeVars t `union` (freeVars (Sigma vs e) \\ vars)
-freeVars (Id t e1 e2) = freeVars t `union` freeVars e1 `union` freeVars e2
-freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
-freeVars (Ext e1 e2) = freeVars e1 `union` freeVars e2
-freeVars (ExtSigma e1 e2) = freeVars e1 `union` freeVars e2
-freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
-freeVars NoVar = []
-freeVars (Var v) = [v]
-freeVars (LVar _) = []
-freeVars Nat = []
-freeVars Suc = []
-freeVars Rec = []
-freeVars Idp = []
-freeVars Pmap = []
-freeVars Coe = []
-freeVars Proj1 = []
-freeVars Proj2 = []
-freeVars Iso = []
-freeVars Comp = []
-freeVars Inv = []
-freeVars InvIdp = []
-freeVars (NatConst _) = []
-freeVars (Universe _) = []
-freeVars (Typed e1 e2) = freeVars e1 `union` freeVars e2
+freeLVarsDef :: Def -> [DBIndex]
+freeLVarsDef (Def _ Nothing e) = freeLVars e
+freeLVarsDef (Def _ (Just (t,args)) e) = freeLVars t `union` map (\l -> l - genericLength args) (freeLVars e)
+
+freeLVars :: Term -> [DBIndex]
+freeLVars (Let defs e) = freeLVars e `union` concat (map freeLVarsDef defs)
+freeLVars (Lam [] e) = freeLVars e
+freeLVars (Lam (v:vs) e) = map pred $ freeLVars (Lam vs e)
+freeLVars (Pi [] e) = freeLVars e
+freeLVars (Pi ((vars,t):vs) e) = freeLVars t `union` map (\l -> l - genericLength vars) (freeLVars $ Pi vs e)
+freeLVars (Sigma [] e) = freeLVars e
+freeLVars (Sigma ((vars,t):vs) e) = freeLVars t `union` map (\l -> l - genericLength vars) (freeLVars $ Sigma vs e)
+freeLVars (Id t e1 e2) = freeLVars t `union` freeLVars e1 `union` freeLVars e2
+freeLVars (App e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (Ext e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (ExtSigma e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (Pair e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars NoVar = []
+freeLVars (Var _) = []
+freeLVars (LVar i) = [i]
+freeLVars Nat = []
+freeLVars Suc = []
+freeLVars Rec = []
+freeLVars Idp = []
+freeLVars Pmap = []
+freeLVars Coe = []
+freeLVars Proj1 = []
+freeLVars Proj2 = []
+freeLVars Iso = []
+freeLVars Comp = []
+freeLVars Inv = []
+freeLVars InvIdp = []
+freeLVars (NatConst _) = []
+freeLVars (Universe _) = []
+freeLVars (Typed e1 e2) = freeLVars e1 `union` freeLVars e2
 
 liftTermDB :: DBIndex -> Term -> Term
 liftTermDB = go 0
@@ -177,6 +183,11 @@ ppDef ctx (Def name Nothing          expr) = text name <+> equals <+> ppTerm ctx
 ppDef ctx (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm ctx Nothing ty
     $+$ text name <+> hsep (map text args) <+> equals <+> ppTerm (reverse args ++ ctx) Nothing expr
 
+safeIndex :: [a] -> DBIndex -> Maybe a
+safeIndex [] _ = Nothing
+safeIndex (x:_) 0 = Just x
+safeIndex (_:xs) n = safeIndex xs (n - 1)
+
 ppTerm :: [String] -> Maybe Int -> Term -> Doc
 ppTerm ctx = go ctx False
   where
@@ -196,16 +207,17 @@ ppTerm ctx = go ctx False
     ppId ctx l e@(Id _ _ _) = go ctx True l e
     ppId ctx l e = go ctx False l e
     
-    ppVars :: [String] -> Bool -> Char -> Maybe Int -> [([String],Term)] -> Doc
-    ppVars _ _ c l [] = char c
-    ppVars ctx True c l ts = char c <+> ppVars ctx False c l ts
+    ppVars :: [String] -> Bool -> Char -> Maybe Int -> [([String],Term)] -> ([String],Doc)
+    ppVars ctx _ c l [] = (ctx, char c)
+    ppVars ctx True c l ts = second (char c <+>) (ppVars ctx False c l ts)
     ppVars ctx False c l (([],t):ts) =
         let l' = fmap pred l
-        in ppArrow ctx l' t <+> ppVars ctx True c l' ts
+        in second (ppArrow ctx l' t <+>) (ppVars ctx True c l' ts)
     ppVars ctx False c l ((vars,t):ts) =
         let l' = fmap pred l
             b = not (null ts) && null (fst $ head ts)
-        in parens (hsep (map text vars) <+> colon <+> go ctx False l' t) <+> ppVars ctx b c l' ts
+        in second (parens (hsep (map text vars) <+> colon <+> go ctx False l' t) <+>)
+                  (ppVars (reverse vars ++ ctx) b c l' ts)
     
     go :: [String] -> Bool -> Maybe Int -> Term -> Doc
     go _ _ (Just 0) _ = char '_'
@@ -218,7 +230,7 @@ ppTerm ctx = go ctx False
         getNat _ = Nothing
     go _ _ _ NoVar = text "_"
     go _ _ _ (Var v) = text v
-    go ctx _ _ (LVar v) = text (ctx `genericIndex` v)
+    go ctx _ _ (LVar v) = text $ maybe ("<" ++ show v ++ ">") id (ctx `safeIndex` v)
     go _ _ _ Nat = text "Nat"
     go _ _ _ Suc = text "suc"
     go _ _ _ Rec = text "R"
@@ -240,10 +252,12 @@ ppTerm ctx = go ctx False
         char '→' <+> go (reverse vars ++ ctx) False (fmap pred l) e
     go ctx False l (Pi ts e) =
         let l' = fmap pred l
-        in ppVars ctx False '→' l' ts <+> go ctx False l' e
+            (ctx',r) = ppVars ctx False '→' l' ts
+        in r <+> go ctx' False l' e
     go ctx False l (Sigma ts e) =
         let l' = fmap pred l
-        in ppVars ctx False '×' l' ts <+> ppArrow ctx l' e
+            (ctx',r) = ppVars ctx False '×' l' ts
+        in r <+> ppArrow ctx' l' e
     go ctx False l (Id _ e1 e2) =
         let l' = fmap pred l
         in ppId ctx l' e1 <+> equals <+> ppId ctx l' e2
@@ -263,37 +277,36 @@ simplify (Let defs (Let defs' e)) = simplify $ Let (defs ++ defs') e
 simplify (Let defs e) = Let (map simplifyDef defs) (simplify e)
 simplify (Lam [] e) = simplify e
 simplify (Lam args (Lam args' e)) = simplify $ Lam (args ++ args') e
-simplify (Lam args e) = Lam (simplifyArgs args $ args \\ freeVars e) (simplify e)
+simplify (Lam args e) = Lam (simplifyArgs (genericLength args - 1) args $ freeLVars e) (simplify e)
   where
-    simplifyArgs args [] = args
-    simplifyArgs [] _ = []
-    simplifyArgs (a:as) (r:rs) | a == r = "_" : simplifyArgs as rs
-                               | otherwise = a : simplifyArgs as (r:rs)
+    simplifyArgs _ [] _ = []
+    simplifyArgs n (a:as) l | elem n l = simplifyArgs (n - 1) as l
+                            | otherwise = a : simplifyArgs (n - 1) as l
 simplify (Pi [] e) = simplify e
 simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
 simplify (Pi (([v],t):ts) e)
-    | elem v (freeVars $ Pi ts e) = case simplify (Pi ts e) of
+    | elem 0 (freeLVars $ Pi ts e) = case simplify (Pi ts e) of
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
     | otherwise = case simplify (Pi ts e) of
         Pi ts' e' -> Pi (([], simplify t):ts') e'
         r -> Pi [([], simplify t)] r
 simplify (Pi ((v:vs,t):ts) e)
-    | elem v (freeVars $ Pi ((vs,t):ts) e) = case simplify $ Pi ((vs,t):ts) e of
+    | elem 0 (freeLVars $ Pi ((vs,t):ts) e) = case simplify $ Pi ((vs,t):ts) e of
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
     | otherwise = Pi [([], simplify t)] $ simplify (Pi ((vs,t):ts) e)
 simplify (Sigma [] e) = simplify e
 simplify (Sigma (([],t):ts) e) = Sigma [([], simplify t)] $ simplify (Sigma ts e)
 simplify (Sigma (([v],t):ts) e)
-    | elem v (freeVars $ Sigma ts e) = case simplify (Sigma ts e) of
+    | elem 0 (freeLVars $ Sigma ts e) = case simplify (Sigma ts e) of
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
     | otherwise = case simplify (Sigma ts e) of
         Sigma ts' e' -> Sigma (([], simplify t):ts') e'
         r -> Sigma [([], simplify t)] r
 simplify (Sigma ((v:vs,t):ts) e)
-    | elem v (freeVars $ Sigma ((vs,t):ts) e) = case simplify $ Sigma ((vs,t):ts) e of
+    | elem 0 (freeLVars $ Sigma ((vs,t):ts) e) = case simplify $ Sigma ((vs,t):ts) e of
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
     | otherwise = Sigma [([], simplify t)] $ simplify (Sigma ((vs,t):ts) e)

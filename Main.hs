@@ -44,8 +44,8 @@ parser = pDefs . resolveLayout True . myLexer
 processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT Ctx EDocM ([String],Term,Term)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
-    (ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
-    let Def _ mty e' = simplifyDef $ Def name (Just (reifyType tv, [])) (reify ev tv)
+    (ev,tv) <- evalDecl 0 M.empty name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
+    let Def _ mty e' = simplifyDef $ Def name (Just (reifyType 0 tv, [])) (reify 0 ev tv)
         (ty,args) = fromMaybe (error "processDecl") mty
     return (args,e',ty)
 
@@ -58,9 +58,9 @@ processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl nam
 run :: String -> Err R.Defs -> (String,String)
 run _ (Bad s) = (s,"")
 run fn (Ok (R.Defs defs)) =
-    let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls M.empty)
+    let (errs,res) = either (\e -> ([e],[])) (partitionEithers . processDecls (M.empty,[]))
             $ fmap processDefs (preprocessDefs defs)
-    in (intercalate "\n\n" $ map (erenderWithFilename fn) (concat errs), intercalate "\n\n" $ map (P.render . ppDef) res)
+    in (intercalate "\n\n" $ map (erenderWithFilename fn) (concat errs), intercalate "\n\n" $ map (P.render . ppDef []) res)
 
 runFile :: Bool -> String -> IO ()
 runFile b input = do

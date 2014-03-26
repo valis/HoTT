@@ -1,3 +1,6 @@
+test0 : Nat -> Nat
+test0 x = x
+
 test1 : (0 = 0 -> Nat) -> Nat
 test1 = let x = 0 in \f -> f (idp x)
 

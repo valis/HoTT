@@ -5,7 +5,7 @@ module Value
     , Ctx, CtxV
     , ctxToCtxV
     , cmpTypes, cmpValues
-    , valueFreeLVars
+    , isFreeVar
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, trans
     , idf, idp, action, liftTerm, reduceD, lastD
@@ -60,8 +60,8 @@ sprod a b = Ssigma "_" a $ \k _ _ -> action (genericReplicate k Ud) b
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
-valueFreeLVars :: DBIndex -> Value -> [DBIndex]
-valueFreeLVars = undefined
+isFreeVar :: DBIndex -> Value -> Bool
+isFreeVar = undefined
 {-
 valueFreeLVars i (Slam _ f) = valueFreeLVars (i + 1) $ f 0 [] $ Ne [] $ \l -> LVar (l - i - 1)
 valueFreeLVars _ Szero = []
