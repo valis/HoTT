@@ -9,7 +9,7 @@ module Syntax.Term
 import qualified Data.Map as M
 import Text.PrettyPrint
 import Data.List
-import Control.Arrow(second)
+import Control.Arrow(first,second)
 
 import Syntax.Common
 
@@ -86,48 +86,52 @@ freeLVars (Universe _) = []
 freeLVars (Typed e1 e2) = freeLVars e1 `union` freeLVars e2
 
 liftTermDB :: DBIndex -> Term -> Term
-liftTermDB = go 0
-  where
-    go n k (Let defs e) = Let (map (goDef n k) defs) e
-    go n k (Lam vars e) = Lam vars $ go (genericLength vars + n) k e
-    go n k (Pi vars e) =
-        let (v,l) = goVars n k vars
-        in Pi v (go l k e)
-    go n k (Sigma vars e) =
-        let (v,l) = goVars n k vars
-        in Sigma v (go l k e)
-    go n k (Id t e1 e2) = Id (go n k t) (go n k e1) (go n k e2)
-    go n k (App e1 e2) = App (go n k e1) (go n k e2)
-    go n k (Ext e1 e2) = Ext (go n k e1) (go n k e2)
-    go n k (ExtSigma e1 e2) = ExtSigma (go n k e1) (go n k e2)
-    go n k (Pair e1 e2) = Pair (go n k e1) (go n k e2)
-    go _ _ NoVar = NoVar
-    go _ _ e@(Var _) = e
-    go n k (LVar i) | i < n = LVar i
-                    | otherwise = LVar (i + k)
-    go _ _ Nat = Nat
-    go _ _ Suc = Suc
-    go _ _ Rec = Rec
-    go _ _ Idp = Idp
-    go _ _ Pmap = Pmap
-    go _ _ Coe = Coe
-    go _ _ Proj1 = Proj1
-    go _ _ Proj2 = Proj2
-    go _ _ Iso = Iso
-    go _ _ Comp = Comp
-    go _ _ Inv = Inv
-    go _ _ InvIdp = InvIdp
-    go _ _ e@(NatConst _) = e
-    go _ _ e@(Universe _) = e
-    go n k (Typed e1 e2) = Typed (go n k e1) (go n k e2)
-    
-    goVars n k [] = ([], n)
-    goVars n k ((vars,t):vs) =
-        let (r, n') = goVars (n + genericLength vars) k vs
-        in ((vars, go n k t) : r, n')
-    
-    goDef n k (Def name Nothing expr) = Def name Nothing (go n k expr)
-    goDef n k (Def name (Just (ty, args)) expr) = Def name (Just (go n k ty, args)) $ go (n + genericLength args) k expr
+liftTermDB = liftTermDB' 0
+
+liftTermDB' :: DBIndex -> DBIndex -> Term -> Term
+liftTermDB' n k (Let defs e) = Let (map (liftTermDBDef n k) defs) e
+liftTermDB' n k (Lam vars e) = Lam vars $ liftTermDB' (genericLength vars + n) k e
+liftTermDB' n k (Pi vars e) =
+    let (v,l) = liftTermDBVars n k vars
+    in Pi v (liftTermDB' l k e)
+liftTermDB' n k (Sigma vars e) =
+    let (v,l) = liftTermDBVars n k vars
+    in Sigma v (liftTermDB' l k e)
+liftTermDB' n k (Id t e1 e2) = Id (liftTermDB' n k t) (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (App e1 e2) = App (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (Ext e1 e2) = Ext (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (ExtSigma e1 e2) = ExtSigma (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (Pair e1 e2) = Pair (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' _ _ NoVar = NoVar
+liftTermDB' _ _ e@(Var _) = e
+liftTermDB' n k (LVar i) | i < n = LVar i
+                | otherwise = LVar (i + k)
+liftTermDB' _ _ Nat = Nat
+liftTermDB' _ _ Suc = Suc
+liftTermDB' _ _ Rec = Rec
+liftTermDB' _ _ Idp = Idp
+liftTermDB' _ _ Pmap = Pmap
+liftTermDB' _ _ Coe = Coe
+liftTermDB' _ _ Proj1 = Proj1
+liftTermDB' _ _ Proj2 = Proj2
+liftTermDB' _ _ Iso = Iso
+liftTermDB' _ _ Comp = Comp
+liftTermDB' _ _ Inv = Inv
+liftTermDB' _ _ InvIdp = InvIdp
+liftTermDB' _ _ e@(NatConst _) = e
+liftTermDB' _ _ e@(Universe _) = e
+liftTermDB' n k (Typed e1 e2) = Typed (liftTermDB' n k e1) (liftTermDB' n k e2)
+
+liftTermDBVars :: DBIndex -> DBIndex -> [([String],Term)] -> ([([String],Term)],DBIndex)
+liftTermDBVars n k [] = ([], n)
+liftTermDBVars n k ((vars,t):vs) =
+    let (r, n') = liftTermDBVars (n + genericLength vars) k vs
+    in ((vars, liftTermDB' n k t) : r, n')
+
+liftTermDBDef :: DBIndex -> DBIndex -> Def -> Def
+liftTermDBDef n k (Def name Nothing expr) = Def name Nothing (liftTermDB' n k expr)
+liftTermDBDef n k (Def name (Just (ty, args)) expr) =
+    Def name (Just (liftTermDB' n k ty, args)) $ liftTermDB' (n + genericLength args) k expr
 
 instance Eq Term where
     (==) = cmp 0 M.empty M.empty
@@ -180,8 +184,10 @@ instance Eq Term where
 
 ppDef :: [String] -> Def -> Doc
 ppDef ctx (Def name Nothing          expr) = text name <+> equals <+> ppTerm ctx Nothing expr
-ppDef ctx (Def name (Just (ty,args)) expr) = text name <+> colon  <+> ppTerm ctx Nothing ty
-    $+$ text name <+> hsep (map text args) <+> equals <+> ppTerm (reverse args ++ ctx) Nothing expr
+ppDef ctx (Def name (Just (ty,args)) expr) =
+    let (args',ctx') = addVars args ctx
+    in  text name <+> colon  <+> ppTerm ctx Nothing ty
+    $+$ text name <+> hsep (map text args') <+> equals <+> ppTerm ctx' Nothing expr
 
 safeIndex :: [a] -> DBIndex -> Maybe a
 safeIndex [] _ = Nothing
@@ -216,8 +222,9 @@ ppTerm ctx = go ctx False
     ppVars ctx False c l ((vars,t):ts) =
         let l' = fmap pred l
             b = not (null ts) && null (fst $ head ts)
-        in second (parens (hsep (map text vars) <+> colon <+> go ctx False l' t) <+>)
-                  (ppVars (reverse vars ++ ctx) b c l' ts)
+            (vars',ctx') = addVars vars ctx
+        in second (parens (hsep (map text vars') <+> colon <+> go ctx False l' t) <+>)
+                  (ppVars ctx' b c l' ts)
     
     go :: [String] -> Bool -> Maybe Int -> Term -> Doc
     go _ _ (Just 0) _ = char '_'
@@ -248,8 +255,9 @@ ppTerm ctx = go ctx False
     go _ _ _ (Universe u) = text (show u)
     go ctx True l e = parens (go ctx False l e)
     go ctx False l (Let defs e) = text "let" <+> vcat (map (ppDef ctx) defs) $+$ text "in" <+> go ctx False l e
-    go ctx False l (Lam vars e) = char 'λ' <> hsep (map text vars) <+>
-        char '→' <+> go (reverse vars ++ ctx) False (fmap pred l) e
+    go ctx False l (Lam vars e) =
+        let (vars',ctx') = addVars vars ctx
+        in char 'λ' <> hsep (map text vars') <+> char '→' <+> go ctx' False (fmap pred l) e
     go ctx False l (Pi ts e) =
         let l' = fmap pred l
             (ctx',r) = ppVars ctx False '→' l' ts
@@ -271,6 +279,11 @@ ppTerm ctx = go ctx False
         let l' = fmap pred l
         in go ctx False l' e1 <+> comma <+> go ctx False l' e2
 
+addVars :: [String] -> [String] -> ([String],[String])
+addVars [] ctx = ([],ctx)
+addVars (v:vs) ctx | v /= "_" && elem v ctx = addVars ((v ++ "'") : vs) ctx
+                   | otherwise = first (v :) $ addVars vs (v : ctx)
+
 simplify :: Term -> Term
 simplify (Let [] e) = simplify e
 simplify (Let defs (Let defs' e)) = simplify $ Let (defs ++ defs') e
@@ -280,8 +293,8 @@ simplify (Lam args (Lam args' e)) = simplify $ Lam (args ++ args') e
 simplify (Lam args e) = Lam (simplifyArgs (genericLength args - 1) args $ freeLVars e) (simplify e)
   where
     simplifyArgs _ [] _ = []
-    simplifyArgs n (a:as) l | elem n l = simplifyArgs (n - 1) as l
-                            | otherwise = a : simplifyArgs (n - 1) as l
+    simplifyArgs n (a:as) l | elem n l = a : simplifyArgs (n - 1) as l
+                            | otherwise = "_" : simplifyArgs (n - 1) as l
 simplify (Pi [] e) = simplify e
 simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
 simplify (Pi (([v],t):ts) e)
@@ -289,13 +302,14 @@ simplify (Pi (([v],t):ts) e)
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
     | otherwise = case simplify (Pi ts e) of
-        Pi ts' e' -> Pi (([], simplify t):ts') e'
-        r -> Pi [([], simplify t)] r
+        Pi ts' e' -> Pi (([], simplify t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts') (liftTermDB (-1) e')
+        r -> Pi [([], simplify t)] (liftTermDB (-1) r)
 simplify (Pi ((v:vs,t):ts) e)
     | elem 0 (freeLVars $ Pi ((vs,t):ts) e) = case simplify $ Pi ((vs,t):ts) e of
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
-    | otherwise = Pi [([], simplify t)] $ simplify (Pi ((vs,t):ts) e)
+    | otherwise = Pi [([], simplify t)] $ simplify $
+        Pi ((vs,t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts) (liftTermDB (-1) e)
 simplify (Sigma [] e) = simplify e
 simplify (Sigma (([],t):ts) e) = Sigma [([], simplify t)] $ simplify (Sigma ts e)
 simplify (Sigma (([v],t):ts) e)
@@ -303,13 +317,14 @@ simplify (Sigma (([v],t):ts) e)
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
     | otherwise = case simplify (Sigma ts e) of
-        Sigma ts' e' -> Sigma (([], simplify t):ts') e'
-        r -> Sigma [([], simplify t)] r
+        Sigma ts' e' -> Sigma (([], simplify t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts') (liftTermDB (-1) e')
+        r -> Sigma [([], simplify t)] (liftTermDB (-1) r)
 simplify (Sigma ((v:vs,t):ts) e)
     | elem 0 (freeLVars $ Sigma ((vs,t):ts) e) = case simplify $ Sigma ((vs,t):ts) e of
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
-    | otherwise = Sigma [([], simplify t)] $ simplify (Sigma ((vs,t):ts) e)
+    | otherwise = Sigma [([], simplify t)] $ simplify $
+        Sigma ((vs,t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts) (liftTermDB (-1) e)
 simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)
 simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)

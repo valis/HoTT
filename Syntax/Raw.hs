@@ -3,6 +3,7 @@ module Syntax.Raw
     , getPos, argGetPos, binderGetPos
     , freeVars, renameExpr
     , preprocessDefs
+    , eprettyExpr
     ) where
 
 import Data.List
@@ -174,8 +175,8 @@ rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
 rename (Typed e1 e2) x y = Typed (rename e1 x y) (rename e2 x y)
 
-instance EPretty Expr where
-    epretty = edoc . ppExpr Nothing
+eprettyExpr :: Expr -> EDoc
+eprettyExpr = edoc . ppExpr Nothing
 
 ppDef :: Def -> Doc
 ppDef (Def (PIdent (_,name)) args expr) = text name <+> hsep (map (text . unArg) args) <+> equals <+> ppExpr Nothing expr 

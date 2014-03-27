@@ -13,6 +13,9 @@ test3 = idp 0
 test4 : (x : Type0) -> x -> x
 test4 x = \y -> y
 
+test4' : (x : Type0) -> x -> Type0
+test4' x = \y -> x
+
 test5 : (x : Type0) -> x -> x
 test5 x y = let x = 0 in y
 
@@ -21,3 +24,9 @@ test6 x y f = f (let x = 0 in \z -> y)
 
 test7'fail : (x : Type0) -> x -> ((x -> x) -> x) -> x
 test7'fail x y f = f (let x = 0 in \z -> x)
+
+test8'fail : (x : Type0) -> x -> ((x -> x) -> x) -> x
+test8'fail x y f = f (\z -> x)
+
+test9'fail : (x : Type0) -> x -> ((x -> x) -> x) -> x
+test9'fail x y f = f (let y = 0 in \z -> y)

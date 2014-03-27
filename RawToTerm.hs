@@ -37,14 +37,14 @@ exprToVars = reverse . go
     go (E.App a (E.Var (E.Arg (E.PIdent (_,x))))) = x : go a
     go _ = error "exprToVars"
 
-updateCtxVar :: DBIndex -> Ctx -> [Def] -> Ctx
-updateCtxVar _ ctx [] = ctx
-updateCtxVar i actx@(ctx,lctx) (Def name Nothing expr : ds) =
+updateCtxVar :: DBIndex -> M.Map String DBIndex -> Ctx -> [Def] -> (M.Map String DBIndex, Ctx)
+updateCtxVar _ mctx ctx [] = (mctx, ctx)
+updateCtxVar i mctx actx@(ctx,lctx) (Def name Nothing expr : ds) =
     let t = typeOfTerm i actx expr
-    in updateCtxVar i (M.insert name (gvar name t, t) ctx, lctx) ds
-updateCtxVar i actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
+    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
+updateCtxVar i mctx actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
     let t = eval 0 (ctxToCtxV actx) ty
-    in updateCtxVar i (M.insert name (gvar name t, t) ctx, lctx) ds
+    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
 
 updateCtx :: DBIndex -> Ctx -> [Def] -> Ctx
 updateCtx _ ctx [] = ctx
@@ -75,7 +75,8 @@ rawExprToTerm :: DBIndex -> M.Map String DBIndex -> Ctx -> E.Expr -> Maybe Value
 rawExprToTerm i mctx ctx e (Just (Ne _ t)) | NoVar <- t 0 = rawExprToTerm i mctx ctx e Nothing
 rawExprToTerm i mctx ctx (E.Let defs expr) ty =
     let defs' = rawDefsToTerm i mctx ctx defs
-    in Let defs' $ rawExprToTerm i mctx (updateCtxVar i ctx defs') expr ty
+        (mctx',ctx') = updateCtxVar i mctx ctx defs'
+    in Let defs' (rawExprToTerm i mctx' ctx' expr ty)
 rawExprToTerm i mctx ctx (E.Lam _ [] expr) ty = rawExprToTerm i mctx ctx expr ty
 rawExprToTerm i mctx (ctx,lctx) (E.Lam j (arg:args) expr) (Just (Spi _ t s)) =
     let v = R.unBinder arg
@@ -154,7 +155,7 @@ rawExprToTerm i mctx ctx (E.App e1 e2) _ =
     in case typeOfTerm i ctx e1' of
         Spi _ t2 _ -> App e1' $ rawExprToTerm i mctx ctx e2 (Just t2)
         Sid _ _ _ -> App e1' (rawExprToTerm i mctx ctx e2 Nothing)
-        _ -> error "rawExprToTerm.App"
+        _ -> error $ "rawExprToTerm.App"
 rawExprToTerm _ _ _ (E.Var (E.NoArg _)) _ = NoVar
 rawExprToTerm _ _ _ (E.Var (E.Arg (E.PIdent (_,"_")))) _ = NoVar
 rawExprToTerm i mctx _ (E.Var (E.Arg (E.PIdent (_,v)))) _ = maybe (Var v) (\l -> LVar $ i - l - 1) (M.lookup v mctx)
@@ -237,7 +238,7 @@ typeOfTerm i ctx (App e1 e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) o
     (Spi _ _ b, _) -> b 0 [] $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ t) f g, Sid _ a b) -> Sid (t 0 [] $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
-typeOfTerm i (_,ctx) (LVar v) = snd $ ctx `genericIndex` (i - v - 1)
+typeOfTerm _ (_,ctx) (LVar v) = snd $ ctx `genericIndex` v
 typeOfTerm i ctx NoVar = error "typeOfTerm.NoVar"
 typeOfTerm i (ctx,_) (Var v) = case M.lookup v ctx of
     Nothing -> error $ "typeOfTerm.Var: " ++ v
@@ -246,8 +247,8 @@ typeOfTerm i _ Nat = Stype (Finite 0)
 typeOfTerm i _ Suc = Snat `sarr` Snat
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfTerm i _ Rec = eval 0 (M.empty,[]) $ Pi [(["P"], Pi [([],Nat)] $ Universe Omega)] $
-    Pi [([], App (Var "P") $ NatConst 0)] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ App (Var "P") (Var "x")
-  where iht = Pi [(["x"],Nat)] $ Pi [([], App (Var "P") (Var "x"))] $ App (Var "P") $ App Suc (Var "x")
+    Pi [([], App (LVar 0) $ NatConst 0)] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ App (LVar 1) (LVar 0)
+  where iht = Pi [(["x"],Nat)] $ Pi [([], App (LVar 1) (LVar 0))] $ App (LVar 1) $ App Suc (LVar 0)
 typeOfTerm i ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm i ctx (Ext f g) = Sid (typeOfTerm i ctx f) (eval 0 (ctxToCtxV ctx) f) (eval 0 (ctxToCtxV ctx) g)
 typeOfTerm i ctx (ExtSigma p q) = Sid (typeOfTerm i ctx p) (eval 0 (ctxToCtxV ctx) p) (eval 0 (ctxToCtxV ctx) q)
@@ -262,10 +263,10 @@ typeOfTerm _ _ InvIdp = error "typeOfTerm.InvIdp"
 typeOfTerm _ _ Iso = 
     let term = Pi [(["A"],Universe $ pred $ pred maxBound)] $
                Pi [(["B"],Universe $ pred $ pred maxBound)] $
-               Pi [(["f"],Pi [([],Var "A")] $ Var "B")] $
-               Pi [(["g"],Pi [([],Var "B")] $ Var "A")] $
-               Pi [([],Pi [(["a"],Var "A")] $ Id (Var "A") (Var "g" `App` (Var "f" `App` Var "a")) (Var "a"))] $
-               Pi [([],Pi [(["b"],Var "B")] $ Id (Var "B") (Var "f" `App` (Var "g" `App` Var "b")) (Var "b"))] $
+               Pi [(["f"],Pi [([],LVar 1)] $ LVar 0)] $
+               Pi [(["g"],Pi [([],LVar 1)] $ LVar 2)] $
+               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (LVar 1 `App` (LVar 2 `App` LVar 0)) (LVar 0))] $
+               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (LVar 2 `App` (LVar 1 `App` LVar 0)) (LVar 0))] $
                Id (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
     in eval 0 (M.empty,[]) term
 

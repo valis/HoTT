@@ -54,7 +54,7 @@ eval n ctx (Pi [] e) = eval n ctx e
 eval 0 ctx (Pi (([],t):ts) e)   = eval 0 ctx t `sarr` eval 0 ctx (Pi ts e)
 eval 0 (ctx,lctx) (Pi (([v],t):ts) e)  = Spi v (eval 0 (ctx,lctx) t) $
     \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
-eval 1 (ctx,lctx) (Pi ((v:vs,t):ts) e) = Spi v (eval 0 (ctx,lctx) t) $
+eval 0 (ctx,lctx) (Pi ((v:vs,t):ts) e) = Spi v (eval 0 (ctx,lctx) t) $
     \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ((vs,t):ts) e)
 eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso 1
     (eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e')

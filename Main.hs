@@ -7,7 +7,6 @@ import Data.List
 import Data.Either
 import Data.Maybe
 import Control.Monad
-import Control.Monad.State
 import qualified Text.PrettyPrint as P
 
 import Parser.ErrM
@@ -41,19 +40,19 @@ outputFilename input = case break (== '/') input of
 parser :: String -> Err R.Defs
 parser = pDefs . resolveLayout True . myLexer
 
-processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> StateT Ctx EDocM ([String],Term,Term)
+processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> TCM ([String],Term,Term,Ctx)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
-    (ev,tv) <- evalDecl 0 M.empty name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
+    (_,ctx,ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
     let Def _ mty e' = simplifyDef $ Def name (Just (reifyType 0 tv, [])) (reify 0 ev tv)
         (ty,args) = fromMaybe (error "processDecl") mty
-    return (args,e',ty)
+    return (args,e',ty,ctx)
 
 processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [EDocM Def]
 processDecls _ [] = []
-processDecls ctx ((name,ty,args,expr) : decls) = case runStateT (processDecl name args expr ty) ctx of
+processDecls ctx ((name,ty,args,expr) : decls) = case runTCM (processDecl name args expr ty) 0 [] M.empty ctx of
     Left errs -> Left errs : processDecls ctx decls
-    Right ((args',expr',ty'),ctx') -> Right (Def name (Just (ty',args')) expr') : processDecls ctx' decls
+    Right (args',expr',ty',ctx') -> Right (Def name (Just (ty',args')) expr') : processDecls ctx' decls
 
 run :: String -> Err R.Defs -> (String,String)
 run _ (Bad s) = (s,"")
