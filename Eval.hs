@@ -51,11 +51,12 @@ eval n ctx (Lam args e) = go n ctx args
     go n ctx []     = eval n ctx e
     go n (ctx,lctx) s@(a:as) = Slam a $ \k m v -> go k (M.map (action m) ctx, v : map (action m) lctx) as
 eval n ctx (Pi [] e) = eval n ctx e
-eval 0 ctx (Pi (([],t):ts) e)   = eval 0 ctx t `sarr` eval 0 ctx (Pi ts e)
-eval 0 (ctx,lctx) (Pi (([v],t):ts) e)  = Spi v (eval 0 (ctx,lctx) t) $
-    \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
-eval 0 (ctx,lctx) (Pi ((v:vs,t):ts) e) = Spi v (eval 0 (ctx,lctx) t) $
-    \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ((vs,t):ts) e)
+eval 0 (ctx,lctx) (Pi ((vs,t):ts) e) = go ctx lctx vs
+  where
+    tv = eval 0 (ctx,lctx) t
+    go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Pi ts e)
+    go ctx lctx [v] = Spi v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
+    go ctx lctx (v:vs) = Spi v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
 eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso 1
     (eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e')
     (eval 0 (M.map (action [Rd]) ctx, map (action [Rd]) lctx) e')
@@ -66,11 +67,12 @@ eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso 1
     (error "TODO: eval.Pi.Siso.1") (error "TODO: eval.Pi.Siso.2")
 eval n _ (Pi _ _) = error $ "TODO: eval.Pi: " ++ show n
 eval n ctx (Sigma [] e) = eval n ctx e
-eval 0 ctx (Sigma (([],t):ts) e) = eval 0 ctx t `sprod` eval 0 ctx (Sigma ts e)
-eval 0 (ctx,lctx) (Sigma (([v],t):ts) e) = Ssigma v (eval 0 (ctx,lctx) t) $
-    \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
-eval 0 (ctx,lctx) (Sigma ((v:vs,t):ts) e) = Ssigma v (eval 0 (ctx,lctx) t) $
-    \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ((vs,t):ts) e)
+eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
+  where
+    tv = eval 0 (ctx,lctx) t
+    go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Sigma ts e)
+    go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
+    go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
 eval n _ (Sigma _ _) = error $ "TODO: eval.Sigma: " ++ show n
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
@@ -179,16 +181,14 @@ inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
     (Slam xg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
     (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
 inv 0 (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
--- inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv e)
+inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv . e)
 inv 0 (Spair _ _) = error "TODO: inv.Spair"
 inv _ Szero = Szero
 inv _ s@(Ssuc _) = s
 inv 1 r@(Sidp (Sidp _)) = r
 inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
-{-
-inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (Inv `App` e)
-inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv l, App Inv r), (b,a)] (Pmap `App` App Idp Inv `App` e)
--}
+inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (App Inv . e)
+inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv . l, App Inv . r), (b,a)] (App Pmap . App (Idp `App` Inv) . e)
 inv n _ = error $ "TODO: inv: " ++ show n
 
 invIdp :: Integer -> Value -> Value
@@ -204,20 +204,18 @@ comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x f) (Slam _ g) = Slam x $ \k m v -> comp k (f k m v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-{-
-comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ Comp `App` e1 `App` e2
+comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ \i -> Comp `App` e1 i `App` e2 i
   where maxList t [] = t
         maxList [] t = t
         maxList (x:xs) (_:ys) = x : maxList xs ys
--}
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
-{-
-comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ Comp `App` e1 `App` e2
+comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ \l -> Comp `App` e1 l `App` e2 l
 comp 1 (Sidp (Ne [(a,_)] e1)) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(Comp `App` e1 `App` l2, Comp `App` e1 `App` r2),(a,b)] $ Pmap `App` (App Idp $ Comp `App` e1) `App` e2
-comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp e1)
+    Ne [(\i -> Comp `App` e1 i `App` l2 i, \i -> Comp `App` e1 i `App` r2 i),(a,b)] $
+        \i -> Pmap `App` (App Idp $ Comp `App` e1 i) `App` e2 i
+comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp . e1)
 comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(Comp `App` l1 `App` l2, Comp `App` r1 `App` r2),(a,b)] $ Pmap `App` (Pmap `App` App Idp Comp `App` e1) `App` e2
--}
+    Ne [(\i -> Comp `App` l1 i `App` l2 i, \i -> Comp `App` r1 i `App` r2 i),(a,b)] $
+        \i -> Pmap `App` (Pmap `App` App Idp Comp `App` e1 i) `App` e2 i
 comp n _ _ = error $ "TODO: comp: " ++ show n

@@ -61,22 +61,21 @@ ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
 isFreeVar :: DBIndex -> Value -> Bool
-isFreeVar = undefined
-{-
-valueFreeLVars i (Slam _ f) = valueFreeLVars (i + 1) $ f 0 [] $ Ne [] $ \l -> LVar (l - i - 1)
-valueFreeLVars _ Szero = []
-valueFreeLVars i (Ssuc v) = valueFreeLVars i v
-valueFreeLVars i (Spair a b) = valueFreeLVars i a `union` valueFreeLVars i b
-valueFreeLVars i (Spi _ a b) = valueFreeLVars i a `union` valueFreeLVars (i + 1) (b 0 [] $ Ne [] $ \l -> LVar $ l - i - 1)
-valueFreeLVars i (Ssigma _ a b) = valueFreeLVars i a `union` valueFreeLVars (i + 1) (b 0 [] $ Ne [] $ \l -> LVar $ l - i - 1)
-valueFreeLVars _ Snat = []
-valueFreeLVars i (Sid t a b) = valueFreeLVars i t `union` valueFreeLVars i a `union` valueFreeLVars i b
-valueFreeLVars i (Sidp v) = valueFreeLVars i v
-valueFreeLVars i (Ne ts t) = concat (map (\(l,r) -> freeLVars (l i) `union` freeLVars (r i)) ts) `union` freeLVars i t
-valueFreeLVars i (Swtype t) = freeLVars (t i)
-valueFreeLVars i (Siso _ a b c d e f) = valueFreeLVars i a `union` valueFreeLVars i b `union` valueFreeLVars i c
-                                `union` valueFreeLVars i d `union` valueFreeLVars i e `union` valueFreeLVars i f
--}
+isFreeVar i (Slam _ f) = isFreeVar (i + 1) $ f 0 [] $ Ne [] (\_ -> NoVar)
+isFreeVar _ Szero = False
+isFreeVar i (Ssuc v) = isFreeVar i v
+isFreeVar i (Spair a b) = isFreeVar i a || isFreeVar i b
+isFreeVar i (Spi _ a b) = isFreeVar i a || isFreeVar (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
+isFreeVar i (Ssigma _ a b) = isFreeVar i a || undefined isFreeVar (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
+isFreeVar _ Snat = False
+isFreeVar _ (Stype _) = False
+isFreeVar i (Sid t a b) = isFreeVar i t || isFreeVar i a || isFreeVar i b
+isFreeVar i (Sidp v) = isFreeVar i v
+isFreeVar i (Ne ts t) =
+    any (\(l,r) -> elem 0 (freeLVars $ l $ i + 1) || elem 0 (freeLVars $ r $ i + 1)) ts || elem 0 (freeLVars $ t $ i + 1)
+isFreeVar i (Swtype t) = elem 0 $ freeLVars $ t (i + 1)
+isFreeVar i (Siso _ a b c d e f) = isFreeVar i a || isFreeVar i b || isFreeVar i c
+                                || isFreeVar i d || isFreeVar i e || isFreeVar i f
 
 cmpTypes :: DBIndex -> Value -> Value -> Bool
 cmpTypes i (Spi x a b)    (Spi _ a' b')    = cmpTypes i a' a && cmpTypes (i + 1) (b 0 [] $ svar i a) (b' 0 [] $ svar i a')
@@ -126,6 +125,11 @@ getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
 liftTerm :: ITerm -> Value -> Value
+liftTerm e t | App Idp _ <- e 0 = case t of
+    Sid t' _ _-> action [Ud] $ flip liftTerm t' $ \i -> case e i of
+        App Idp e -> e
+        _ -> error "liftTerm.Idp"
+    _ -> error "liftTerm.Idp.Id"
 liftTerm e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
     Sid _ a b -> Siso n a b
@@ -139,7 +143,7 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
         (error "TODO: liftTerm.Siso.2")
     _ -> error "liftTerm.Stype"
   where
-    term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (Var "x")
+    term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (LVar 0)
     
     go (Sid _ a b) 1 = a `sarr` b
     go (Sid t p q) n =
@@ -168,18 +172,13 @@ liftTerm e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
     actionTerm (_:a) (App Pmap (App Idp e)) = actionTerm a e
     actionTerm _ _ = error "Value.actionTerm"
     
-    go a b e' k v = liftTerm' (goType k v) (\l -> appTerm (e' l) $ reify l v $ liftTypeValue k v a)
+    go a b e' k v = liftTerm (\l -> appTerm (e' l) $ reify l v $ liftTypeValue k v a) (goType k v)
       where
         liftTypeValue 0 _ a = a
         liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
         
         appTerm (App Pmap (App Idp e1)) (App Idp e2) = App Idp (appTerm e1 e2)
         appTerm e1 e2 = App e1 e2
-        
-        liftTerm' (Sid t _ _) f | App Idp _ <- f 0 = liftTerm' t $ \l -> case f l of
-                                                                            App Idp r -> r
-                                                                            _ -> error "liftTerm.App"
-        liftTerm' s f = liftTerm f s
         
         goType 0 _ = b
         goType k v = Sid (goType (k - 1) (action [Ld] v)) (go a b e' (k - 1) $ action [Ld] v)

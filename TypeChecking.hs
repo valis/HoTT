@@ -66,20 +66,25 @@ typeOf'depType (TypedVar _ vars t : list) e = do
     tv <- typeOf t
     cmpTypesErr (Stype $ pred maxBound) tv t
     (i,_,mctx,ctx) <- ask
-    r <- updateCtx (evalRaw i mctx ctx t (Just tv)) vars
+    r <- case exprToVars vars of
+        Just l -> updateCtx (evalRaw i mctx ctx t Nothing) l
+        Nothing -> errorTCM $ emsgLC (getPos e) "Expected identifier" enull
     local (\_ _ _ _ -> r) $ do
-        let e' = Pi list e
-        ev <- typeOf e'
-        maxType t e' tv ev
+        ev <- typeOf (Pi list e)
+        maxType t (Pi list e) tv ev
   where
-    updateCtx _ (Var (NoArg _)) = ask
-    updateCtx tv (Var (Arg (PIdent (_,x)))) = do
-        (i,c,mctx,(ctx,lctx)) <- ask
-        return (i + 1, x : c, M.insert x i mctx, (ctx, (svar i tv,tv) : lctx))
-    updateCtx tv (App a (Var (NoArg _))) = updateCtx tv a
-    updateCtx tv (App a (Var (Arg (PIdent (_,x))))) =
-        local (\i c mctx (ctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (ctx, (svar i tv, tv) : lctx))) (updateCtx tv a)
-    updateCtx _ e = errorTCM $ emsgLC (getPos e) "Expected identifier" enull
+    updateCtx _ [] = ask
+    updateCtx tv (NoArg _ : as) =
+        local (\i c mctx (ctx,lctx) -> (i + 1, "_" : c, mctx, (ctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+    updateCtx tv (Arg (PIdent (_,x)) : as) =
+        local (\i c mctx (ctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (ctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+    
+    exprToVars :: Expr -> Maybe [Arg]
+    exprToVars = fmap reverse . go
+      where
+        go (Var a) = Just [a]
+        go (App as (Var a)) = fmap (a :) (go as)
+        go _ = Nothing
 
 dropParens :: Expr -> Expr
 dropParens (Paren _ e) = dropParens e

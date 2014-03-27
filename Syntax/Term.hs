@@ -105,7 +105,7 @@ liftTermDB' n k (Pair e1 e2) = Pair (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' _ _ NoVar = NoVar
 liftTermDB' _ _ e@(Var _) = e
 liftTermDB' n k (LVar i) | i < n = LVar i
-                | otherwise = LVar (i + k)
+                         | otherwise = LVar (i + k)
 liftTermDB' _ _ Nat = Nat
 liftTermDB' _ _ Suc = Suc
 liftTermDB' _ _ Rec = Rec
@@ -277,7 +277,7 @@ ppTerm ctx = go ctx False
         in go ctx (isComp e1) l' e1 <+> text "::" <+> go ctx False l' e2
     go ctx False l (Pair e1 e2) =
         let l' = fmap pred l
-        in go ctx False l' e1 <+> comma <+> go ctx False l' e2
+        in go ctx False l' e1 <> comma <+> go ctx False l' e2
 
 addVars :: [String] -> [String] -> ([String],[String])
 addVars [] ctx = ([],ctx)
@@ -293,7 +293,7 @@ simplify (Lam args (Lam args' e)) = simplify $ Lam (args ++ args') e
 simplify (Lam args e) = Lam (simplifyArgs (genericLength args - 1) args $ freeLVars e) (simplify e)
   where
     simplifyArgs _ [] _ = []
-    simplifyArgs n (a:as) l | elem n l = a : simplifyArgs (n - 1) as l
+    simplifyArgs n (a:as) l | elem n l = (if a == "_" then "x" else a) : simplifyArgs (n - 1) as l
                             | otherwise = "_" : simplifyArgs (n - 1) as l
 simplify (Pi [] e) = simplify e
 simplify (Pi (([],t):ts) e) = Pi [([], simplify t)] $ simplify (Pi ts e)
@@ -302,14 +302,17 @@ simplify (Pi (([v],t):ts) e)
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
     | otherwise = case simplify (Pi ts e) of
-        Pi ts' e' -> Pi (([], simplify t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts') (liftTermDB (-1) e')
+        Pi ts' e' ->
+            let (ts'',e'') = lowerTermDB 0 ts' e'
+            in Pi (([], simplify t) : ts'') e''
         r -> Pi [([], simplify t)] (liftTermDB (-1) r)
 simplify (Pi ((v:vs,t):ts) e)
     | elem 0 (freeLVars $ Pi ((vs,t):ts) e) = case simplify $ Pi ((vs,t):ts) e of
         Pi ts' e' -> Pi (([v], simplify t):ts') e'
         r -> Pi [([v], simplify t)] r
     | otherwise = Pi [([], simplify t)] $ simplify $
-        Pi ((vs,t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts) (liftTermDB (-1) e)
+        let (ts',e') = lowerTermDB (genericLength vs) ts e
+        in Pi ((vs,t) : ts') e'
 simplify (Sigma [] e) = simplify e
 simplify (Sigma (([],t):ts) e) = Sigma [([], simplify t)] $ simplify (Sigma ts e)
 simplify (Sigma (([v],t):ts) e)
@@ -317,14 +320,17 @@ simplify (Sigma (([v],t):ts) e)
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
     | otherwise = case simplify (Sigma ts e) of
-        Sigma ts' e' -> Sigma (([], simplify t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts') (liftTermDB (-1) e')
+        Sigma ts' e' ->
+            let (ts'',e'') = lowerTermDB 0 ts' e'
+            in Sigma (([], simplify t) : ts'') e''
         r -> Sigma [([], simplify t)] (liftTermDB (-1) r)
 simplify (Sigma ((v:vs,t):ts) e)
     | elem 0 (freeLVars $ Sigma ((vs,t):ts) e) = case simplify $ Sigma ((vs,t):ts) e of
         Sigma ts' e' -> Sigma (([v], simplify t):ts') e'
         r -> Sigma [([v], simplify t)] r
     | otherwise = Sigma [([], simplify t)] $ simplify $
-        Sigma ((vs,t) : map (\(vars,t) -> (vars, liftTermDB (-1) t)) ts) (liftTermDB (-1) e)
+        let (ts',e') = lowerTermDB (genericLength vs) ts e
+        in Sigma ((vs,t) : ts') e'
 simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)
 simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)
@@ -348,6 +354,12 @@ simplify Inv = Inv
 simplify InvIdp = InvIdp
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
+
+lowerTermDB :: DBIndex -> [([String],Term)] -> Term -> ([([String],Term)],Term)
+lowerTermDB k [] e = ([], liftTermDB' k (-1) e)
+lowerTermDB k ((vars,t):ts) e =
+    let (ts',e') = lowerTermDB (k + genericLength vars) ts e
+    in ((vars, liftTermDB' k (-1) t) : ts', e')
 
 simplifyDef :: Def -> Def
 simplifyDef (Def name Nothing expr) = Def name Nothing (simplify expr)
