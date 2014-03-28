@@ -9,6 +9,7 @@ module Value
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, trans
     , idf, idp, action, liftTerm, reduceD, lastD
+    , inv, invIdp, comp
     ) where
 
 import qualified Data.Map as M
@@ -118,7 +119,7 @@ pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
 
 trans :: Integer -> Value -> Value -> Value -> Value
-trans n b p = app n (coe $ pmap n (idp b) p)
+trans n b p = app n (coe $ pmap n (idp n b) p)
 
 getBase :: Value -> (Integer,Value)
 getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
@@ -193,8 +194,55 @@ liftTerm e t = Ne (sidToList t) e
     sidToList (Sid t a b) = (\l -> liftTermDB l (reify 0 a t), \l -> liftTermDB l (reify 0 b t)) : sidToList t
     sidToList _ = []
 
-idp :: Value -> Value
-idp = action [Ud]
+inv :: Integer -> Value -> Value
+inv 0 r@(Sidp _) = r
+inv 0 (Siso 1 a b f g p q) = Siso 1 b a g f q p
+inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
+    (Slam xf $ \k m v -> inv 0 $ ef k m v) -- TODO: ???
+    (Slam xg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
+    (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
+inv 0 (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
+inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv . e)
+inv 0 (Spair _ _) = error "TODO: inv.Spair"
+inv _ Szero = Szero
+inv _ s@(Ssuc _) = s
+inv 1 r@(Sidp (Sidp _)) = r
+inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
+inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (App Inv . e)
+inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv . l, App Inv . r), (b,a)] (App Pmap . App (Idp `App` Inv) . e)
+inv n _ = error $ "TODO: inv: " ++ show n
+
+invIdp :: Integer -> Value -> Value
+invIdp 0 x@(Sidp _) = Sidp x
+invIdp _ (Slam x f) = Slam x $ \k _ -> invIdp k
+invIdp 0 (Siso 1 a b f g p q) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
+invIdp 0 (Ne [(l,r)] e) = Ne [(\i -> Comp `App` App Inv (e i) `App` e i, App Idp . r), (r,r)] (App InvIdp . e)
+invIdp n _ = error $ "TODO: invIdp: " ++ show n
+
+comp :: Integer -> Value -> Value -> Value
+comp _ (Slam x f) (Slam _ g) = Slam x $ \k m v -> comp k (f k m $ action [Ld,Ud] v) (g k m v)
+comp 0 (Sidp _) x = x
+comp 0 x (Sidp _) = x
+comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ \i -> Comp `App` e1 i `App` e2 i
+  where maxList t [] = t
+        maxList [] t = t
+        maxList (x:xs) (_:ys) = x : maxList xs ys
+comp 1 (Sidp (Sidp _)) x = x
+comp 1 x (Sidp (Sidp _)) = x
+comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ \l -> Comp `App` e1 l `App` e2 l
+comp 1 (Sidp (Ne [(a,_)] e1)) (Ne [(l2,r2),(_,b)] e2) =
+    Ne [(\i -> Comp `App` e1 i `App` l2 i, \i -> Comp `App` e1 i `App` r2 i),(a,b)] $
+        \i -> Pmap `App` (App Idp $ Comp `App` e1 i) `App` e2 i
+comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp . e1)
+comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
+    Ne [(\i -> Comp `App` l1 i `App` l2 i, \i -> Comp `App` r1 i `App` r2 i),(a,b)] $
+        \i -> Pmap `App` (Pmap `App` App Idp Comp `App` e1 i) `App` e2 i
+comp n _ _ = error $ "TODO: comp: " ++ show n
+
+idp :: Integer -> Value -> Value
+idp 0 v = action [Ud] v
+idp 1 v = invIdp 0 v
+idp n _ = error $ "TODO: idp: " ++ show n
 
 idf :: Value
 idf = Slam "x" $ \_ _ -> id
@@ -237,13 +285,13 @@ reify i (Slam x f) (Spi _ a b) =
     in Lam [x] $ reify (i + 1) (f 0 [] v) (b 0 [] v)
 reify i (Slam _ h) (Sid t@(Spi x a b) f g) =
     let v0 = svar i a
-        v1 = idp v0
+        v1 = idp 0 v0
     in App (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 1 [] v1) $
         Sid (b 0 [] v0) (app 0 f v0) (app 0 g v0)
 reify i (Slam _ h) (Sid t@(Sid t'@(Spi x a b) f' g') f g) =
     let v0 = svar i a
-        v1 = idp v0
-        v2 = idp v1
+        v1 = idp 0 v0
+        v2 = idp 1 v1
     in App (App Pmap $ App Idp (Ext (reify i f' t') (reify i g' t'))) $
         App (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 2 [] v2) $
         Sid (Sid (b 0 [] v0) (app 0 f' v0) (app 0 g' v0)) (app 1 f v1) (app 1 g v1)

@@ -1,6 +1,5 @@
 module Eval
     ( eval
-    , comp, inv
     ) where
 
 import qualified Data.Map as M
@@ -28,15 +27,16 @@ eval _ _ Iso = Slam "A" $ \_  _  va ->
 eval _ _ Comp = Slam "p" $ \_ _ p -> Slam "q" $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" $ \k _ -> inv k
 eval _ _ InvIdp = Slam "p" $ \k _ -> invIdp k
-eval _ _ Idp = Slam "x" $ \_ _ -> idp
+eval _ _ Idp = Slam "x" $ \k _ -> idp k
 eval _ _ Coe = Slam "p" $ \_ _ -> coe
+-- pmap : {f g : (a : A) -> B a} -> f = g -> (p : a = a') -> transport B p (f a) = g a'
 eval _ _ Pmap = Slam "p" $ \_ _ p -> Slam "q" $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
 eval n (ctx,lctx) (Ext f g) = Slam "h" $ \_ n h -> Slam "p" $ \k m p -> case (k,lastD m) of
     (0,Just Ld) -> eval 0 (M.map (action $ n ++ m) ctx, map (action $ n ++ m) lctx) f
     (0,Just Rd) -> eval 0 (M.map (action $ n ++ m) ctx, map (action $ n ++ m) lctx) g
     (0,_) -> error "eval.Ext"
-    _ -> comp (k - 1) (app k (action m h) $ action [Ld] p)
+    _ -> comp (k - 1) (app (k - 1) (action m h) $ action [Ld] p)
                       (app k (eval k (M.map (action $ n ++ m ++ [Ud]) ctx, map (action $ n ++ m ++ [Ud]) lctx) g) p)
 eval n ctx (ExtSigma _ _) = idf
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
@@ -102,9 +102,9 @@ eval 1 (ctx,lctx) e@(Id t a b) = Siso 1 (eval 0 (ctxl,lctxl) e) (eval 0 (ctxr,lc
     lr k m v = comp k (action m $ inv 0 ap) $
                comp k (pmap k (action (Ud:m) $ coe tp) v)
                       (action m bp)
-    rl 0 _ v = comp 0 (pmap 0 (idp $ Slam "p" $ \kp mp vp -> app kp (coe vp) $ action mp a1) $ inv 0 iitp) $
+    rl 0 _ v = comp 0 (pmap 0 (idp 0 $ Slam "p" $ \kp mp vp -> app kp (coe vp) $ action mp a1) $ inv 0 iitp) $
                comp 0 (pmap 0 (coe $ inv 0 tp) $ comp 0 ap $ comp 0 v $ inv 0 bp)
-                      (pmap 0 (idp $ Slam "p" $ \kp mp vp -> app kp (coe vp) $ action mp b1) iitp)
+                      (pmap 0 (idp 0 $ Slam "p" $ \kp mp vp -> app kp (coe vp) $ action mp b1) iitp)
     rl k _ _ = error $ "TODO: eval.Id.inv: " ++ show k
     
     ctxl = M.map (action [Ld]) ctx
@@ -172,50 +172,3 @@ rec 1 p z s = go
             (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))
     go _ = error "rec.1"
 rec n _ _ _ = error $ "TODO: rec: " ++ show n
-
-inv :: Integer -> Value -> Value
-inv 0 r@(Sidp _) = r
-inv 0 (Siso 1 a b f g p q) = Siso 1 b a g f q p
-inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
-    (Slam xf $ \k m v -> inv 0 $ ef k m v) -- TODO: ???
-    (Slam xg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
-    (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
-inv 0 (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
-inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv . e)
-inv 0 (Spair _ _) = error "TODO: inv.Spair"
-inv _ Szero = Szero
-inv _ s@(Ssuc _) = s
-inv 1 r@(Sidp (Sidp _)) = r
-inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
-inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (App Inv . e)
-inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv . l, App Inv . r), (b,a)] (App Pmap . App (Idp `App` Inv) . e)
-inv n _ = error $ "TODO: inv: " ++ show n
-
-invIdp :: Integer -> Value -> Value
-invIdp 0 x@(Sidp _) = Sidp x
-invIdp n (Slam x f) = Slam x $ \k m v -> error $ "TODO: invIdp.Slam: " ++ show n
-    {- ? : comp k (inv k $ f k m $ inv k v) (f k m v) = idp (f k m v)
-    invIdp k (f k m v) : comp k (inv k $ f k m v) (f k m v) = idp (f k m v) -}
-invIdp 0 (Siso 1 a b f g p q) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
--- invIdp 0 (Ne [(l,r)] e) = Ne [(Comp `App` (App Inv e) `App` e, App Idp r), (r,r)] $ App (Var "invIdp") e
-invIdp n _ = error $ "TODO: invIdp: " ++ show n
-
-comp :: Integer -> Value -> Value -> Value
-comp _ (Slam x f) (Slam _ g) = Slam x $ \k m v -> comp k (f k m v) (g k m v)
-comp 0 (Sidp _) x = x
-comp 0 x (Sidp _) = x
-comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ \i -> Comp `App` e1 i `App` e2 i
-  where maxList t [] = t
-        maxList [] t = t
-        maxList (x:xs) (_:ys) = x : maxList xs ys
-comp 1 (Sidp (Sidp _)) x = x
-comp 1 x (Sidp (Sidp _)) = x
-comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ \l -> Comp `App` e1 l `App` e2 l
-comp 1 (Sidp (Ne [(a,_)] e1)) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(\i -> Comp `App` e1 i `App` l2 i, \i -> Comp `App` e1 i `App` r2 i),(a,b)] $
-        \i -> Pmap `App` (App Idp $ Comp `App` e1 i) `App` e2 i
-comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp . e1)
-comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(\i -> Comp `App` l1 i `App` l2 i, \i -> Comp `App` r1 i `App` r2 i),(a,b)] $
-        \i -> Pmap `App` (Pmap `App` App Idp Comp `App` e1 i) `App` e2 i
-comp n _ _ = error $ "TODO: comp: " ++ show n

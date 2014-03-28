@@ -229,7 +229,7 @@ typeOfTerm i ctx (App Inv e) = case typeOfTerm i ctx e of
 typeOfTerm i ctx (App InvIdp e) = case typeOfTerm i ctx e of
     t@(Sid _ _ _) ->
         let e' = eval 0 (ctxToCtxV ctx) e
-        in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp e')
+        in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
     _ -> error "typeOfTerm.App.InvIdp"
 typeOfTerm i ctx (App (App Comp e1) e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
     (Sid t x _, Sid _ _ z) -> Sid t x z

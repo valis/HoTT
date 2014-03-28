@@ -348,7 +348,7 @@ typeOfH (App e1 e) N | InvIdp _ <- dropParens e1 = do
         Sid _ _ _ -> do
             (i,_,mctx,ctx) <- ask
             let e' = evalRaw i mctx ctx e Nothing
-            return $ Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp e')
+            return $ Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
         _ -> expTypeBut "Id" e t
 typeOfH (App e1' e2) N | App e3 e1 <- dropParens e1', Comp (PComp (lc,_)) <- dropParens e3 = do
     r <- liftTCM2' (,) (typeOf e1) (typeOf e2)
