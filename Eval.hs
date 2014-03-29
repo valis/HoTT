@@ -74,7 +74,10 @@ eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
     go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
     go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
 eval n _ (Sigma _ _) = error $ "TODO: eval.Sigma: " ++ show n
-eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
+eval n ctx (App e1 _ es) = go (eval n ctx e1) es
+  where
+    go v [] = v
+    go v (e2:es) = go (app n v $ eval n ctx e2) es
 eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
 eval n (_,ctx) (LVar v) = ctx `genericIndex` v
@@ -143,10 +146,12 @@ rec 0 p z s = go
     go Szero = z
     go (Ssuc x) = app 0 (app 0 s x) (go x)
     go t@(Ne [] e) =
-        let r l = Rec `App` reify l p (Snat `sarr` Stype maxBound)
-                      `App` reify l z (app 0 p Szero)
-                      `App` reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
-                      `App` e l
+        let r l = App Rec errApp
+                [ reify l p (Snat `sarr` Stype maxBound)
+                , reify l z (app 0 p Szero)
+                , reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
+                , e l
+                ]
         in liftTerm r (app 0 p t)
     go _ = error "rec.0"
 -- rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (suc x)) -> (x : Nat) -> P x
@@ -157,16 +162,26 @@ rec 1 p z s = go
   where
     go Szero = z
     go (Ssuc x) = app 1 (app 1 s x) (go x)
-    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (App Idp . e)
+    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (appE Idp . e)
     go x@(Ne [(el,er)] e) =
-        let r l = Pmap `App` (Pmap `App` (Pmap `App` (Pmap `App` (Idp `App` Rec)
-                `App` reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p)))
-                `App` reify l z
-                    (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
-                `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
-                       in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
-                        $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
-                `App` e l
+        let r l = appT Pmap errApp
+                [ appT Pmap errApp
+                    [ appT Pmap errApp
+                        [ appT Pmap errApp
+                            [ appE Idp Rec
+                            , reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p))
+                            ]
+                        , reify l z (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero)
+                                         (action [Ld] z)
+                                         (action [Rd] z)
+                                    )
+                        ]
+                    , let t = Pi [(["x"],Nat)] $ Pi [([],appN (Var "P") [LVar 0])] $ appN (Var "P") [appN Suc [LVar 0]]
+                      in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
+                            $ Id t (error "rec.1.1") (error "rec.1.2") -- (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")
+                    ]
+                , e l
+                ]
         in liftTerm r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
             (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
             (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))

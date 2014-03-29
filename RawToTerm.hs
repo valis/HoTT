@@ -96,9 +96,11 @@ rawExprToTerm i mctx ctx (E.Pair e1 e2) (Just (Ssigma _ a b)) =
          (rawExprToTerm i mctx ctx e2 $ Just $ b 0 [] $ evalRaw i mctx ctx e1 $ Just a)
 rawExprToTerm i _ _ (E.Pair e1 e2) (Just _) = error "rawExprToTerm.Pair"
 rawExprToTerm i _ _ (E.Proj1 _) _ = Proj1
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj1 _ <- dropParens e1 = App Proj1 (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj1 _ <- dropParens e1 = appN Proj1 [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i _ _ (E.Proj2 _) _ = Proj2
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj2 _ <- dropParens e1 = App Proj2 (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj2 _ <- dropParens e1 =
+    let e' = rawExprToTerm i mctx ctx e Nothing
+    in App Proj2 (error "TODO: rawExprToTerm.Proj2") [e']
 rawExprToTerm i mctx ctx (E.Pair e1 e2) Nothing =
     Pair (rawExprToTerm i mctx ctx e1 Nothing) (rawExprToTerm i mctx ctx e2 Nothing)
 rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
@@ -106,7 +108,9 @@ rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
         t1 = typeOfTerm i ctx e1'
     in Id (reifyType i t1) e1' $ rawExprToTerm i mctx ctx e2 (Just t1)
 rawExprToTerm i mctx ctx (E.Pmap _) _ = Pmap
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = App Pmap (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) (Just (Spi _ (Sid a x y) b)) | E.Pmap _ <- dropParens e1 =
+    App Pmap (error "TODO: rawExprToTerm.App.Pmap") [rawExprToTerm i mctx ctx e Nothing]
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = error "rawExprToTerm.App.Pmap"
 rawExprToTerm i mctx ctx (E.App e1' e2) _
     | E.App e3 e4 <- dropParens e1'
     , E.Pmap _ <- dropParens e3
@@ -115,24 +119,33 @@ rawExprToTerm i mctx ctx (E.App e1' e2) _
         let e2' = rawExprToTerm i mctx ctx e2 Nothing
         in case typeOfTerm i ctx e2' of
             Sid t _ _ -> let e' = rawExprToTerm i mctx ctx e1 $ Just $ t `sarr` Ne [] (const NoVar)
-                         in App (App Pmap (App Idp e')) e2'
+                             e't = reifyType i (eval 0 (ctxToCtxV ctx) e')
+                         in App Pmap (error "TODO: rawExprToTerm.App.App.Pmap.Idp")
+                            [App Idp (Just $ Pi [(["x"],e't)] $ Id e't (LVar 0) (LVar 0)) [e'], e2']
             _ -> error "rawExprToTerm.App.App.Idp"
 rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- dropParens e3 =
-    App (App Pmap (rawExprToTerm i mctx ctx e1 Nothing)) (rawExprToTerm i mctx ctx e2 Nothing)
+    App Pmap (error "TODO: rawExprToTerm.App.App.Pmap")
+    [rawExprToTerm i mctx ctx e1 Nothing, rawExprToTerm i mctx ctx e2 Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t _ _)) | E.Idp _ <- dropParens e1 =
-    App Idp $ rawExprToTerm i mctx ctx e (Just t)
+    let e' = rawExprToTerm i mctx ctx e (Just t)
+        t' = reifyType i t
+    in App Idp (Just $ Pi [(["x"],t')] $ Id t' (LVar 0) (LVar 0)) [e']
 rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Idp _ <- dropParens e1 = error "rawExprToTerm.App.Idp"
-rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 = App Coe (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 =
+    let e' = rawExprToTerm i mctx ctx e Nothing
+        t' = reifyType i (typeOfTerm i ctx e')
+    in App Idp (Just $ Pi [(["x"],t')] $ Id t' (LVar 0) (LVar 0)) [e']
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 =
+    App Coe (error "TODO: rawExprToTerm.App.Coe") [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Spi x a b) f g)) | E.Ext _ <- dropParens e1 =
-    App (Ext (reify i f t) (reify i g t)) $ rawExprToTerm i mctx ctx e $ Just $
+    App (Ext (reify i f t) (reify i g t)) (error "TODO: rawExprToTerm.App.Ext") $ return $ rawExprToTerm i mctx ctx e $ Just $
     Spi x a $ \k m v ->
         let r1 = b k m v
             r2 = app k (action m f) v 
             r3 = app k (action m g) v
         in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Ssigma x a b) p q)) | E.Ext _ <- dropParens e1 =
-    App (ExtSigma (reify i p t) (reify i q t)) $ rawExprToTerm i mctx ctx e $ Just $
+    App (ExtSigma (reify i p t) (reify i q t)) (error "rawExprToTerm.App.ExtSigma") $ return $ rawExprToTerm i mctx ctx e $ Just $
     Ssigma x (Sid a (proj1 p) (proj1 q)) $ \k m v ->
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x b) v (action m $ proj2 p)
@@ -144,17 +157,17 @@ rawExprToTerm i _ _ (E.Ext _) (Just (Spi _ a b)) = case b 0 [] (error "rawExprTo
     _ -> error "rawExprToTerm.Ext.Pi"
 rawExprToTerm i _ _ (E.Ext _) _ = error "rawExprToTerm.Ext"
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t x y)) | E.Inv _ <- dropParens e1 =
-    App Inv $ rawExprToTerm i mctx ctx e $ Just (Sid t y x)
+    appN Inv [rawExprToTerm i mctx ctx e $ Just (Sid t y x)]
 rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Inv _ <- dropParens e1 = error "rawExprToTerm.App.Inv"
-rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = App Inv (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.InvIdp _ <- dropParens e1 = App InvIdp (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = appN Inv [rawExprToTerm i mctx ctx e Nothing]
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.InvIdp _ <- dropParens e1 =
+    App InvIdp (error "TODO: rawExprToTerm.App.InvIdp")[rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Comp _ <- dropParens e3 =
-    Comp `App` rawExprToTerm i mctx ctx e1 Nothing `App` rawExprToTerm i mctx ctx e2 Nothing
+    appN Comp [rawExprToTerm i mctx ctx e1 Nothing, rawExprToTerm i mctx ctx e2 Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm i mctx ctx e1 Nothing
     in case typeOfTerm i ctx e1' of
-        Spi _ t2 _ -> App e1' $ rawExprToTerm i mctx ctx e2 (Just t2)
-        Sid _ _ _ -> App e1' (rawExprToTerm i mctx ctx e2 Nothing)
+        t@(Spi _ t2 _) -> appT e1' (Just $ reifyType i t) [rawExprToTerm i mctx ctx e2 (Just t2)]
         _ -> error $ "rawExprToTerm.App"
 rawExprToTerm _ _ _ (E.Var (E.NoArg _)) _ = NoVar
 rawExprToTerm _ _ _ (E.Var (E.Arg (E.PIdent (_,"_")))) _ = NoVar
@@ -197,47 +210,52 @@ typeOfTerm i (ctx,lctx) (Sigma ((vars,t):vs) e) =
         _ -> error "typeOfTerm.Sigma"
 typeOfTerm i ctx (Pair e1 e2) = typeOfTerm i ctx e1 `sprod` typeOfTerm i ctx e2
 typeOfTerm i ctx Proj1 = error "typeOfTerm.Proj1"
-typeOfTerm i ctx (App Proj1 e) = case typeOfTerm i ctx e of
+typeOfTerm i ctx (App Proj1 _ [e]) = case typeOfTerm i ctx e of
     Ssigma _ a _ -> a
     _ -> error "typeOfTerm.App.Proj1"
+typeOfTerm i ctx (App Proj1 t (e:es)) = typeOfTerm i ctx $ App (App Proj1 t [e]) Nothing es
 typeOfTerm i ctx Proj2 = error "typeOfTerm.Proj2"
-typeOfTerm i ctx (App Proj2 e) = case typeOfTerm i ctx e of
-    Ssigma _ _ b -> b 0 [] $ eval 0 (ctxToCtxV ctx) (App Proj1 e)
+typeOfTerm i ctx (App Proj2 _ [e]) = case typeOfTerm i ctx e of
+    Ssigma _ _ b -> b 0 [] $ eval 0 (ctxToCtxV ctx) (appN Proj1 [e])
     _ -> error "typeOfTerm.App.Proj1"
+typeOfTerm i ctx (App Proj2 t (e:es)) = typeOfTerm i ctx $ App (App Proj2 t [e]) Nothing es
 typeOfTerm i ctx (Id t _ _) = typeOfTerm i ctx t
-typeOfTerm i ctx (App Idp e) =
+typeOfTerm i ctx (App Idp _ [e]) =
     let v = eval 0 (ctxToCtxV ctx) e
     in Sid (typeOfTerm i ctx e) v v
 -- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
-typeOfTerm i ctx (App (App Pmap (App Idp e1)) e2) =
+typeOfTerm i ctx (App Pmap _ [App Idp _ [e1], e2]) =
     let e' = eval 0 (ctxToCtxV ctx) e1
     in case typeOfTerm i ctx e2 of
         Sid t a b -> typeOfLam i ctx e1 t (app 0 e' a) (app 0 e' b) (eval 0 (ctxToCtxV ctx) e2)
         _ -> error "typeOfTerm.App.App.Pmap.Idp"
-typeOfTerm i ctx (App (App Pmap e1) e2) =
+typeOfTerm i ctx (App Pmap _ [e1,e2]) =
     case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
         (Sid (Spi v _ b) f g, Sid _ x y) ->
             Sid (b 0 [] y) (trans 0 (Slam v b) (eval 0 (ctxToCtxV ctx) e2) (app 0 f x)) (app 0 g y)
         _ -> error "typeOfTerm.App.App.Pmap"
-typeOfTerm i ctx (App Coe e) = case typeOfTerm i ctx e of
+typeOfTerm i ctx (App Coe _ [e]) = case typeOfTerm i ctx e of
     Sid _ x y -> x `sarr` y
     _ -> error "typeOfTerm.App.Coe"
-typeOfTerm i ctx (App Inv e) = case typeOfTerm i ctx e of
+typeOfTerm i ctx (App Coe t (e:es)) = typeOfTerm i ctx $ App (App Coe t [e]) Nothing es
+typeOfTerm i ctx (App Inv _ [e]) = case typeOfTerm i ctx e of
     Sid t x y -> Sid t y x
     _ -> error "typeOfTerm.App.Inv"
 -- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
-typeOfTerm i ctx (App InvIdp e) = case typeOfTerm i ctx e of
+typeOfTerm i ctx (App InvIdp _ [e]) = case typeOfTerm i ctx e of
     t@(Sid _ _ _) ->
         let e' = eval 0 (ctxToCtxV ctx) e
         in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
     _ -> error "typeOfTerm.App.InvIdp"
-typeOfTerm i ctx (App (App Comp e1) e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
+typeOfTerm i ctx (App Comp _ [e1,e2]) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
     (Sid t x _, Sid _ _ z) -> Sid t x z
     _ -> error "typeOfTerm.App.Comp"
-typeOfTerm i ctx (App e1 e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
+typeOfTerm i ctx (App e _ []) = typeOfTerm i ctx e
+typeOfTerm i ctx (App e1 _ [e2]) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
     (Spi _ _ b, _) -> b 0 [] $ eval 0 (ctxToCtxV ctx) e2
     (Sid (Spi _ _ t) f g, Sid _ a b) -> Sid (t 0 [] $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
+typeOfTerm i ctx (App e1 t (e2:es)) = typeOfTerm i ctx (App (App e1 t [e2]) Nothing es)
 typeOfTerm _ (_,ctx) (LVar v) = snd $ ctx `genericIndex` v
 typeOfTerm i ctx NoVar = error "typeOfTerm.NoVar"
 typeOfTerm i (ctx,_) (Var v) = case M.lookup v ctx of
@@ -247,8 +265,8 @@ typeOfTerm i _ Nat = Stype (Finite 0)
 typeOfTerm i _ Suc = Snat `sarr` Snat
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfTerm i _ Rec = eval 0 (M.empty,[]) $ Pi [(["P"], Pi [([],Nat)] $ Universe Omega)] $
-    Pi [([], App (LVar 0) $ NatConst 0)] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ App (LVar 1) (LVar 0)
-  where iht = Pi [(["x"],Nat)] $ Pi [([], App (LVar 1) (LVar 0))] $ App (LVar 1) $ App Suc (LVar 0)
+    Pi [([], appN (LVar 0) [NatConst 0])] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ appN (LVar 1) [LVar 0]
+  where iht = Pi [(["x"],Nat)] $ Pi [([], appN (LVar 1) [LVar 0])] $ appN (LVar 1) [appN Suc [LVar 0]]
 typeOfTerm i ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
 typeOfTerm i ctx (Ext f g) = Sid (typeOfTerm i ctx f) (eval 0 (ctxToCtxV ctx) f) (eval 0 (ctxToCtxV ctx) g)
 typeOfTerm i ctx (ExtSigma p q) = Sid (typeOfTerm i ctx p) (eval 0 (ctxToCtxV ctx) p) (eval 0 (ctxToCtxV ctx) q)
@@ -265,8 +283,8 @@ typeOfTerm _ _ Iso =
                Pi [(["B"],Universe $ pred $ pred maxBound)] $
                Pi [(["f"],Pi [([],LVar 1)] $ LVar 0)] $
                Pi [(["g"],Pi [([],LVar 1)] $ LVar 2)] $
-               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (LVar 1 `App` (LVar 2 `App` LVar 0)) (LVar 0))] $
-               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (LVar 2 `App` (LVar 1 `App` LVar 0)) (LVar 0))] $
+               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (LVar 1 `appN` [LVar 2 `appN` [LVar 0]]) (LVar 0))] $
+               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (LVar 2 `appN` [LVar 1 `appN` [LVar 0]]) (LVar 0))] $
                Id (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
     in eval 0 (M.empty,[]) term
 

@@ -170,8 +170,9 @@ typeOfH e@(Pmap (Ppmap (lc,_))) (T exp@(Spi v a@(Sid (Spi v' a' b') f g) b)) = d
         Just (Spi v2 a2'@(Sid a2 x y) b2') | cmpTypes i a2 a' -> do
             let ctx' = [("a",a),("a'",a'),("x",x),("y",y),("B",Slam v' b'),("f'",app 0 f x),("g'",app 0 g y)]
                 term = T.Pi [([],T.Var "a")] $ T.Pi [(["p"],T.Id (T.Var "a'") (T.Var "x") (T.Var "y"))] $
-                    T.Id (T.Var "B" `T.App` T.Var "y")
-                         (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
+                    T.Id (T.Var "B" `T.appN` [T.Var "y"])
+                         (T.App T.Coe (error "TODO: typeOf.1") [T.App T.Pmap (error "TODO: typeOf.2")
+                            [T.App T.Idp (error "TODO: typeOf.3") [T.Var "B"], T.LVar 0], T.Var "f'"])
                          (T.Var "g'")
             cmpTypesErr exp (eval 0 (M.fromList ctx', []) term) e
             return exp
@@ -183,9 +184,11 @@ typeOfH ea@(App e1 e) (T ty@(Spi v a'@(Sid a x y) b')) | Pmap _ <- dropParens e1
     case t of
         Sid (Spi v1 a1 b1) f g | cmpTypes i a a1 -> do
             let ctx' = [("a'",a'),("B",Slam v1 b1),("y",y),("f'",app 0 f x),("g'",app 0 g y)]
-                term = T.Pi [(["p"],T.Var "a'")] $ T.Id (T.Var "B" `T.App` T.Var "y")
-                    (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
-                    (T.Var "g'")
+                term = T.Pi [(["p"],T.Var "a'")] $
+                    T.Id (T.Var "B" `T.appN` [T.Var "y"])
+                         (T.App T.Coe (error "TODO: typeOf.1") [T.App T.Pmap (error "TODO: typeOf.2")
+                            [T.App T.Idp (error "TODO: typeOf.3") [T.Var "B"], T.LVar 0], T.Var "f'"])
+                         (T.Var "g'")
             cmpTypesErr ty (eval 0 (M.fromList ctx', []) term) ea
             return ty
         _ -> errorTCM $ emsgLC (getPos e) "" $
@@ -252,7 +255,7 @@ typeOfH (Proj1 (PProjl (lc,_))) (T exp) = proj1ErrorMsg lc exp
 -- proj2 : (p : (x : A) -> B x) -> B (proj1 p)
 typeOfH (Proj2 (PProjr (lc,_))) (T r@(Spi x a'@(Ssigma _ a b) b')) = do
     (i,_,_,_) <- ask
-    if cmpTypes (i + 1) (b 0 [] $ liftTerm (\l -> T.App T.Proj1 $ T.LVar $ l - i - 1) a) (b' 0 [] $ svar i a')
+    if cmpTypes (i + 1) (b 0 [] $ liftTerm (\l -> T.appN T.Proj1 [T.LVar $ l - i - 1]) a) (b' 0 [] $ svar i a')
         then return r
         else proj2ErrorMsg lc r
 typeOfH (Proj2 (PProjr (lc,_))) (T exp) = proj2ErrorMsg lc exp
@@ -277,8 +280,8 @@ typeOfH e@(InvIdp _) (T exp@(Spi v a@(Sid t x y) b)) = do
     let ctx' = (M.fromList [("a",a)], [])
         term = T.Pi [(["p"],T.Var "a")] $ T.Id
             (T.Id (T.Var "a") (T.LVar 0) (T.LVar 0))
-            (T.Comp `T.App` (T.Inv `T.App` T.LVar 0) `T.App` T.LVar 0)
-            (T.Idp `T.App` T.LVar 0)
+            (T.appN T.Comp [T.appN T.Inv [T.LVar 0], T.LVar 0])
+            (T.App T.Idp (Just $ T.Pi [(["x"], T.Var "a")] $ T.Id (T.Var "a") (T.LVar 0) (T.LVar 0)) [T.LVar 0])
     cmpTypesErr exp (eval 0 ctx' term) e
     return exp
 typeOfH (InvIdp (PInvIdp (lc,_))) (T exp) = do
@@ -393,8 +396,8 @@ typeOfH (Suc _) N = return (sarr Snat Snat)
 typeOfH (NatConst _) N = return Snat
 -- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
 typeOfH (Rec _) N = return $ eval 0 (M.empty,[]) $ T.Pi [(["P"], T.Pi [([],T.Nat)] $ T.Universe Omega)] $
-    T.Pi [([], T.App (T.LVar 0) $ T.NatConst 0)] $ T.Pi [([], iht)] $ T.Pi [(["x"],T.Nat)] $ T.App (T.LVar 1) (T.LVar 0)
-  where iht = T.Pi [(["x"],T.Nat)] $ T.Pi [([], T.App (T.LVar 1) (T.LVar 0))] $ T.App (T.LVar 1) $ T.App T.Suc (T.LVar 0)
+    T.Pi [([], T.appN (T.LVar 0) [T.NatConst 0])] $ T.Pi [([], iht)] $ T.Pi [(["x"],T.Nat)] $ T.appN (T.LVar 1) [T.LVar 0]
+  where iht = T.Pi [(["x"],T.Nat)] $ T.Pi [([], T.appN (T.LVar 1) [T.LVar 0])] $ T.appN (T.LVar 1) [T.appN T.Suc [T.LVar 0]]
 typeOfH (Typed e t) N = do
     typeOfH t $ T (Stype maxBound)
     (i,_,mctx,ctx) <- ask
@@ -405,9 +408,9 @@ typeOfH (Iso _) N =
                T.Pi [(["f"],T.Pi [([],T.LVar 1)] $ T.LVar 0)] $
                T.Pi [(["g"],T.Pi [([],T.LVar 1)] $ T.LVar 2)] $
                T.Pi [([],T.Pi [(["a"],T.LVar 3)] $
-                    T.Id (T.LVar 4) (T.LVar 1 `T.App` (T.LVar 2 `T.App` T.LVar 0)) (T.LVar 0))] $
+                    T.Id (T.LVar 4) (T.LVar 1 `T.appN` [T.LVar 2 `T.appN` [T.LVar 0]]) (T.LVar 0))] $
                T.Pi [([],T.Pi [(["b"],T.LVar 2)] $
-                    T.Id (T.LVar 3) (T.LVar 2 `T.App` (T.LVar 1 `T.App` T.LVar 0)) (T.LVar 0))] $
+                    T.Id (T.LVar 3) (T.LVar 2 `T.appN` [T.LVar 1 `T.appN` [T.LVar 0]]) (T.LVar 0))] $
                T.Id (T.Universe $ pred $ pred maxBound) (T.LVar 3) (T.LVar 2)
     in return (eval 0 (M.empty,[]) term)
 typeOfH (Comp (PComp (lc,_))) N = inferErrorMsg lc "comp"

@@ -10,6 +10,7 @@ module Value
     , proj1, proj2, app, coe, pmap, trans
     , idf, idp, action, liftTerm, reduceD, lastD
     , inv, invIdp, comp
+    , appE, errApp
     ) where
 
 import qualified Data.Map as M
@@ -126,73 +127,79 @@ getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
 liftTerm :: ITerm -> Value -> Value
-liftTerm e t | App Idp _ <- e 0 = case t of
+liftTerm e t | App Idp _ [_] <- e 0 = case t of
     Sid t' _ _-> action [Ud] $ flip liftTerm t' $ \i -> case e i of
-        App Idp e -> e
+        App Idp _ [e'] -> e'
         _ -> error "liftTerm.Idp"
     _ -> error "liftTerm.Idp.Id"
 liftTerm e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
     Sid _ a b -> Siso n a b
-        (liftTerm (\l -> App (iterate (App Pmap . App Idp) Coe `genericIndex` (n - 1)) (e l)) $ go t n)
+        (liftTerm (\l -> appE (iterate (appE Pmap . appE Idp) Coe `genericIndex` (n - 1)) (e l)) $ go t n)
         (liftTerm
             (\l -> if n == 1
-                    then App Inv $ App Coe (e l)
-                    else App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) (e l)
+                    then appE Inv $ appE Coe (e l)
+                    else appE (iterate (appE Pmap . appE Idp) term `genericIndex` (n - 2)) (e l)
             ) $ goRev t n)
         (error "TODO: liftTerm.Siso.1")
         (error "TODO: liftTerm.Siso.2")
     _ -> error "liftTerm.Stype"
   where
-    term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (LVar 0)
+    term = appE Pmap $ Lam ["x"] $ appE Idp $ appE Inv $ appE Coe (LVar 0)
     
     go (Sid _ a b) 1 = a `sarr` b
     go (Sid t p q) n =
-        let r = iterate (App Pmap . App Idp) Coe `genericIndex` (n - 2)
+        let r = iterate (appE Pmap . appE Idp) Coe `genericIndex` (n - 2)
             t' = go t (n - 1)
-        in Sid t' (liftTerm (\l -> App r $ reify l p t) t') (liftTerm (\l -> App r $ reify l q t) t')
+        in Sid t' (liftTerm (\l -> appT r errApp [reify l p t]) t') (liftTerm (\l -> appT r errApp [reify l q t]) t')
     go _ _ = error "liftTerm.Stype.go"
     
     goRev (Sid _ a b) 1 = b `sarr` a
     goRev (Sid t p q) 2 =
         let t' = goRev t 1
-            a' l = App Inv $ App Coe (reify l p t)
-            b' l = App Inv $ App Coe (reify l q t)
+            a' l = appE Inv $ appE Coe (reify l p t)
+            b' l = appE Inv $ appE Coe (reify l q t)
         in Sid t' (liftTerm a' t') (liftTerm b' t')
     goRev (Sid t p q) n = 
-        let r = iterate (App Pmap . App Idp) term `genericIndex` (n - 3)
+        let r = iterate (appE Pmap . appE Idp) term `genericIndex` (n - 3)
             t' = goRev t (n - 1)
-        in Sid t' (liftTerm (\l -> App r $ reify l p t) t') (liftTerm (\l -> App r $ reify l q t) t')
+        in Sid t' (liftTerm (\l -> appT r errApp [reify l p t]) t') (liftTerm (\l -> appT r errApp [reify l q t]) t')
     goRev _ _ = error "liftTerm.goRev"
 liftTerm e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
-    go a (b 0 [] $ action (genericReplicate k Rd) v) (\l -> actionTerm m $ iterate (App Pmap) (e l) `genericIndex` n) k v
+    go a (b 0 [] $ action (genericReplicate k Rd) v) (\l -> actionTerm m $ iterate (appE Pmap) (e l) `genericIndex` n) k v
   where
     actionTerm :: [D] -> Term -> Term
     actionTerm [] e = e
-    actionTerm (Ud:a) e = actionTerm a $ App Pmap (App Idp e)
-    actionTerm (_:a) (App Pmap (App Idp e)) = actionTerm a e
+    actionTerm (Ud:a) e = actionTerm a $ appE Pmap (appE Idp e)
+    actionTerm (_:a) (App Pmap _ [App Idp _ [e]]) = actionTerm a e
     actionTerm _ _ = error "Value.actionTerm"
     
-    go a b e' k v = liftTerm (\l -> appTerm (e' l) $ reify l v $ liftTypeValue k v a) (goType k v)
+    go a b e' k v = liftTerm (\l -> appIdp (e' l) $ reify l v $ liftTypeValue k v a) (goType k v)
       where
         liftTypeValue 0 _ a = a
         liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
         
-        appTerm (App Pmap (App Idp e1)) (App Idp e2) = App Idp (appTerm e1 e2)
-        appTerm e1 e2 = App e1 e2
+        appIdp (App Pmap _ [App Idp _ [e1]]) (App Idp _ [e2]) = appE Idp (appIdp e1 e2)
+        appIdp e1 e2 = appT e1 errApp [e2]
         
         goType 0 _ = b
         goType k v = Sid (goType (k - 1) (action [Ld] v)) (go a b e' (k - 1) $ action [Ld] v)
                                                           (go a b e' (k - 1) $ action [Rd] v)
 liftTerm e t | (n,Ssigma _ a b) <- getBase t = case n of
-    0 -> let a' = liftTerm (App Proj1 . e) a
-         in Spair a' $ liftTerm (App Proj2 . e) (b 0 [] a')
+    0 -> let a' = liftTerm (appE Proj1 . e) a
+         in Spair a' $ liftTerm (appE Proj2 . e) (b 0 [] a')
     n -> error $ "TODO: liftTerm.Ssigma: " ++ show n
 liftTerm e t = Ne (sidToList t) e
   where
     sidToList :: Value -> [(ITerm,ITerm)]
     sidToList (Sid t a b) = (\l -> liftTermDB l (reify 0 a t), \l -> liftTermDB l (reify 0 b t)) : sidToList t
     sidToList _ = []
+
+errApp :: Maybe Term
+errApp = error "errApp"
+
+appE :: Term -> Term -> Term
+appE e1 e2 = App e1 errApp [e2]
 
 inv :: Integer -> Value -> Value
 inv 0 r@(Sidp _) = r
@@ -202,41 +209,41 @@ inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
     (Slam xg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
     (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
 inv 0 (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
-inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv . e)
+inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (appE Inv . e)
 inv 0 (Spair _ _) = error "TODO: inv.Spair"
 inv _ Szero = Szero
 inv _ s@(Ssuc _) = s
 inv 1 r@(Sidp (Sidp _)) = r
 inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
-inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (App Inv . e)
-inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv . l, App Inv . r), (b,a)] (App Pmap . App (Idp `App` Inv) . e)
+inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (appE Inv . e)
+inv 1 (Ne [(l,r),(a,b)] e) = Ne [(appE Inv . l, appE Inv . r), (b,a)] (appE Pmap . appE (Idp `appE` Inv) . e)
 inv n _ = error $ "TODO: inv: " ++ show n
 
 invIdp :: Integer -> Value -> Value
 invIdp 0 x@(Sidp _) = Sidp x
 invIdp _ (Slam x f) = Slam x $ \k _ -> invIdp k
 invIdp 0 (Siso 1 a b f g p q) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
-invIdp 0 (Ne [(l,r)] e) = Ne [(\i -> Comp `App` App Inv (e i) `App` e i, App Idp . r), (r,r)] (App InvIdp . e)
+invIdp 0 (Ne [(l,r)] e) = Ne [(\i -> App Comp errApp [appE Inv (e i), e i], appE Idp . r), (r,r)] (appE InvIdp . e)
 invIdp n _ = error $ "TODO: invIdp: " ++ show n
 
 comp :: Integer -> Value -> Value -> Value
 comp _ (Slam x f) (Slam _ g) = Slam x $ \k m v -> comp k (f k m $ action [Ld,Ud] v) (g k m v)
 comp 0 (Sidp _) x = x
 comp 0 x (Sidp _) = x
-comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ \i -> Comp `App` e1 i `App` e2 i
+comp 0 (Ne ((l,_):t1) e1) (Ne ((_,r):t2) e2) = Ne ((l,r):maxList t1 t2) $ \i -> App Comp errApp [e1 i, e2 i]
   where maxList t [] = t
         maxList [] t = t
         maxList (x:xs) (_:ys) = x : maxList xs ys
 comp 1 (Sidp (Sidp _)) x = x
 comp 1 x (Sidp (Sidp _)) = x
-comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ \l -> Comp `App` e1 l `App` e2 l
+comp 1 (Sidp (Ne [(a,_)] e1)) (Sidp (Ne [(_,b)] e2)) = Sidp $ Ne [(a,b)] $ \l -> App Comp errApp [e1 l, e2 l]
 comp 1 (Sidp (Ne [(a,_)] e1)) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(\i -> Comp `App` e1 i `App` l2 i, \i -> Comp `App` e1 i `App` r2 i),(a,b)] $
-        \i -> Pmap `App` (App Idp $ Comp `App` e1 i) `App` e2 i
-comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ App Idp . e1)
+    Ne [(\i -> App Comp errApp [e1 i, l2 i], \i -> App Comp errApp [e1 i, r2 i]),(a,b)] $
+        \i -> App Pmap errApp [appE Idp $ appE Comp (e1 i), e2 i]
+comp 1 x (Sidp (Ne l e1)) = comp 1 x (Ne ((e1,e1):l) $ appE Idp . e1)
 comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
-    Ne [(\i -> Comp `App` l1 i `App` l2 i, \i -> Comp `App` r1 i `App` r2 i),(a,b)] $
-        \i -> Pmap `App` (Pmap `App` App Idp Comp `App` e1 i) `App` e2 i
+    Ne [(\i -> App Comp errApp [l1 i, l2 i], \i -> App Comp errApp [r1 i, r2 i]),(a,b)] $
+        \i -> App Pmap errApp [App Pmap errApp [appE Idp Comp, e1 i], e2 i]
 comp n _ _ = error $ "TODO: comp: " ++ show n
 
 idp :: Integer -> Value -> Value
@@ -286,33 +293,33 @@ reify i (Slam x f) (Spi _ a b) =
 reify i (Slam _ h) (Sid t@(Spi x a b) f g) =
     let v0 = svar i a
         v1 = idp 0 v0
-    in App (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 1 [] v1) $
+    in appE (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 1 [] v1) $
         Sid (b 0 [] v0) (app 0 f v0) (app 0 g v0)
 reify i (Slam _ h) (Sid t@(Sid t'@(Spi x a b) f' g') f g) =
     let v0 = svar i a
         v1 = idp 0 v0
         v2 = idp 1 v1
-    in App (App Pmap $ App Idp (Ext (reify i f' t') (reify i g' t'))) $
-        App (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 2 [] v2) $
+    in appE (appE Pmap $ appE Idp (Ext (reify i f' t') (reify i g' t'))) $
+        appE (Ext (reify i f t) (reify i g t)) $ Lam [x] $ reify (i + 1) (h 2 [] v2) $
         Sid (Sid (b 0 [] v0) (app 0 f' v0) (app 0 g' v0)) (app 1 f v1) (app 1 g v1)
 reify _ (Slam _ _) _ = error "reify.Slam"
 reify i (Spair e1 e2) (Ssigma _ a b) = Pair (reify i e1 a) (reify i e2 $ b 0 [] e1)
-reify i (Spair e1 e2) (Sid t@(Ssigma _ a b) p q) = ExtSigma (reify i p t) (reify i q t) `App`
+reify i (Spair e1 e2) (Sid t@(Ssigma _ a b) p q) = ExtSigma (reify i p t) (reify i q t) `appE`
     Pair (reify i e1 $ Sid a (proj1 p) (proj1 q))
          (reify i e2 $ Sid (b 0 [] $ action [Rd] e1) (action [Ld] e1) (action [Rd] e2))
 reify _ (Spair _ _) t | (n, Ssigma _ _ _) <- getBase t = error $ "TODO: reify.Spair: " ++ show n
 reify _ (Spair _ _) _ = error "reify.Spair"
 reify i (Swtype e) (Stype _) = e i
 reify _ (Swtype _) _ = error "reify.Swtype"
-reify i s@(Siso 1 a b c d _ _) (Sid (Stype _) _ _) = Iso `App` reifyType i a `App` reifyType i b
-    `App` reify i c (a `sarr` b) `App` reify i d (b `sarr` a) `App` reifySiso5 i s `App` reifySiso6 i s
+reify i s@(Siso 1 a b c d _ _) (Sid (Stype _) _ _) = App Iso errApp
+    [reifyType i a, reifyType i b, reify i c (a `sarr` b), reify i d (b `sarr` a), reifySiso5 i s, reifySiso6 i s]
 reify _ (Siso n a b c d e f) _ = error $ "TODO: reify.Siso: " ++ show n
-reify _ (Szero) t | (n, Snat) <- getBase t = iterate (App Idp) (NatConst 0) `genericIndex` n
+reify _ (Szero) t | (n, Snat) <- getBase t = iterate (appE Idp) (NatConst 0) `genericIndex` n
 reify _ (Szero) _ = error "reify.Szero"
 reify i (Ssuc e) t | (n, Snat) <- getBase t = iidp n $ case reify i e Snat of
     NatConst n -> NatConst (n + 1)
-    t -> App Suc t
-  where iidp n x = iterate (App Idp) x `genericIndex` n
+    t -> appE Suc t
+  where iidp n x = iterate (appE Idp) x `genericIndex` n
 reify _ (Ssuc _) _ = error "reify.Ssuc"
 reify i (Spi x a b) u@(Stype _) = Pi [([x],reify i a u)] $ reify (i + 1) (b 0 [] $ svar i a) u
 reify _ (Spi _ _ _) _ = error "reify.Spi"
@@ -324,7 +331,7 @@ reify _ (Stype u) (Stype _) = Universe u
 reify _ (Stype _) _ = error "reify.Stype"
 reify _ (Snat) (Stype _) = Nat
 reify _ (Snat) _ = error "reify.Snat"
-reify i (Sidp x) (Sid t _ _) = App Idp (reify i x t)
+reify i (Sidp x) (Sid t _ _) = appE Idp (reify i x t)
 reify _ (Sidp _) _ = error "reify.Sidp"
 reify i (Ne _ e) _ = e i
 

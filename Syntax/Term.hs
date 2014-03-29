@@ -1,5 +1,6 @@
 module Syntax.Term
     ( Term(..), Def(..)
+    , appT, appN
     , DBIndex, ITerm
     , ppTerm, ppDef
     , freeLVars, liftTermDB
@@ -24,7 +25,7 @@ data Term
     | Pi [([String],Term)] Term
     | Sigma [([String],Term)] Term
     | Id Term Term Term
-    | App Term Term
+    | App Term (Maybe Term) [Term]
     | NoVar
     | Var String
     | LVar DBIndex
@@ -47,7 +48,13 @@ data Term
     | ExtSigma Term Term
     | Pair Term Term
 
-infixl 5 `App`
+appT :: Term -> Maybe Term -> [Term] -> Term
+appT e _ [] = e
+appT (App e t es) _ es' = App e t (es ++ es')
+appT e t es = App e t es
+
+appN :: Term -> [Term] -> Term
+appN e = appT e Nothing
 
 freeLVarsDef :: Def -> [DBIndex]
 freeLVarsDef (Def _ Nothing e) = freeLVars e
@@ -62,7 +69,7 @@ freeLVars (Pi ((vars,t):vs) e) = freeLVars t `union` map (\l -> l - genericLengt
 freeLVars (Sigma [] e) = freeLVars e
 freeLVars (Sigma ((vars,t):vs) e) = freeLVars t `union` map (\l -> l - genericLength vars) (freeLVars $ Sigma vs e)
 freeLVars (Id t e1 e2) = freeLVars t `union` freeLVars e1 `union` freeLVars e2
-freeLVars (App e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (App e1 _ e2) = freeLVars e1 `union` foldr union [] (map freeLVars e2)
 freeLVars (Ext e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (ExtSigma e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (Pair e1 e2) = freeLVars e1 `union` freeLVars e2
@@ -98,7 +105,7 @@ liftTermDB' n k (Sigma vars e) =
     let (v,l) = liftTermDBVars n k vars
     in Sigma v (liftTermDB' l k e)
 liftTermDB' n k (Id t e1 e2) = Id (liftTermDB' n k t) (liftTermDB' n k e1) (liftTermDB' n k e2)
-liftTermDB' n k (App e1 e2) = App (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (App e1 t e2) = App (liftTermDB' n k e1) (fmap (liftTermDB' n k) t) (map (liftTermDB' n k) e2)
 liftTermDB' n k (Ext e1 e2) = Ext (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (ExtSigma e1 e2) = ExtSigma (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Pair e1 e2) = Pair (liftTermDB' n k e1) (liftTermDB' n k e2)
@@ -158,7 +165,11 @@ instance Eq Term where
         cmp c m1 m2 (Sigma ((_,t1):ts1) e1) (Sigma ((_,t2):ts2) e2) =
             cmp c m1 m2 t1 t2 && cmp c m1 m2 (Sigma ts1 e1) (Sigma ts2 e2)
         cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
-        cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (App a1 _ b1) (App a2 _ b2) = cmp c m1 m2 a1 a2 && cmpLists b1 b2
+          where
+            cmpLists [] [] = True
+            cmpLists (x1:xs1) (x2:xs2) = cmp c m1 m2 x1 x2 && cmpLists xs1 xs2
+            cmpLists _ _ = False
         cmp c m1 m2 (Typed a1 b1) (Typed a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (ExtSigma a1 b1) (ExtSigma a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
@@ -233,7 +244,7 @@ ppTerm ctx = go ctx False
       where
         getNat :: Term -> Maybe Integer
         getNat (NatConst n) = Just n
-        getNat (App Suc x) = fmap succ (getNat x)
+        getNat (App Suc _ [x]) = fmap succ (getNat x)
         getNat _ = Nothing
     go _ _ _ NoVar = text "_"
     go _ _ _ (Var v) = text v
@@ -269,9 +280,9 @@ ppTerm ctx = go ctx False
     go ctx False l (Id _ e1 e2) =
         let l' = fmap pred l
         in ppId ctx l' e1 <+> equals <+> ppId ctx l' e2
-    go ctx False l (App e1 e2) =
+    go ctx False l (App e1 _ e2) =
         let l' = fmap pred l
-        in go ctx False l' e1 <+> go ctx True l' e2
+        in go ctx False l' e1 <+> hsep (map (go ctx True l') e2)
     go ctx False l (Typed e1 e2) =
         let l' = fmap pred l
         in go ctx (isComp e1) l' e1 <+> text "::" <+> go ctx False l' e2
@@ -332,7 +343,7 @@ simplify (Sigma ((v:vs,t):ts) e)
         let (ts',e') = lowerTermDB (genericLength vs) ts e
         in Sigma ((vs,t) : ts') e'
 simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
-simplify (App e1 e2) = App (simplify e1) (simplify e2)
+simplify (App e1 t e2) = App (simplify e1) t (map simplify e2)
 simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)
 simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify e@(Ext _ _) = e
