@@ -50,6 +50,7 @@ data Term
 
 appT :: Term -> Maybe Term -> [Term] -> Term
 appT e _ [] = e
+appT e1@(App e Nothing es) t@(Just _) es' = App e1 t es'
 appT (App e t es) _ es' = App e t (es ++ es')
 appT e t es = App e t es
 

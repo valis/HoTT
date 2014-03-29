@@ -74,10 +74,22 @@ eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
     go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
     go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
 eval n _ (Sigma _ _) = error $ "TODO: eval.Sigma: " ++ show n
-eval n ctx (App e1 _ es) = go (eval n ctx e1) es
+eval n ctx (App e1 Nothing es) = go (eval n ctx e1) es
   where
-    go v [] = v
-    go v (e2:es) = go (app n v $ eval n ctx e2) es
+    go ev [] = ev
+    go ev (e2:es) = go (app n ev $ eval n ctx e2) es
+eval n ctx@(gctx,lctx) (App e1 (Just t) es) =
+    go n (eval n ctx e1) (eval 0 (M.map (action $ genericReplicate n Rd) gctx, map (action $ genericReplicate n Rd) lctx) t) es
+  where
+    go _ ev _ [] = ev
+    go 0 ev (Spi _ _ b) (e2:es) =
+        let e2' = eval 0 ctx e2
+        in go 0 (app 0 ev e2') (b 0 [] $ action (genericReplicate n Rd) e2') es
+    go n ev (Spi _ _ b) (e2:es) =
+        let e2' = eval n ctx e2
+        in go n ({- comp (n - 1) (app (n - 1) (coe $ b n (genericReplicate n Ud) e2') $ inv (n - 1) $ invIdp (n - 1) e2') $ -} app n ev e2')
+                (b 0 [] $ action (genericReplicate n Rd) e2') es
+    go _ _ _ _ = error "eval.App"
 eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
 eval n (_,ctx) (LVar v) = ctx `genericIndex` v
@@ -146,7 +158,7 @@ rec 0 p z s = go
     go Szero = z
     go (Ssuc x) = app 0 (app 0 s x) (go x)
     go t@(Ne [] e) =
-        let r l = App Rec errApp
+        let r l = App Rec (error "TODO: rec.0.App")
                 [ reify l p (Snat `sarr` Stype maxBound)
                 , reify l z (app 0 p Szero)
                 , reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
@@ -162,13 +174,13 @@ rec 1 p z s = go
   where
     go Szero = z
     go (Ssuc x) = app 1 (app 1 s x) (go x)
-    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (appE Idp . e)
+    go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (\i -> App Idp (error "TODO: rec.1.App.1") [e i])
     go x@(Ne [(el,er)] e) =
-        let r l = appT Pmap errApp
-                [ appT Pmap errApp
-                    [ appT Pmap errApp
-                        [ appT Pmap errApp
-                            [ appE Idp Rec
+        let r l = App Pmap (error "TODO: rec.1.App.2")
+                [ App Pmap (error "TODO: rec.1.App.3")
+                    [ App Pmap (error "TODO: rec.1.App.4")
+                        [ App Pmap (error "TODO: rec.1.App.5")
+                            [ App Idp (error "TODO: rec.1.App.6") [Rec]
                             , reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p))
                             ]
                         , reify l z (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero)

@@ -171,7 +171,7 @@ typeOfH e@(Pmap (Ppmap (lc,_))) (T exp@(Spi v a@(Sid (Spi v' a' b') f g) b)) = d
             let ctx' = [("a",a),("a'",a'),("x",x),("y",y),("B",Slam v' b'),("f'",app 0 f x),("g'",app 0 g y)]
                 term = T.Pi [([],T.Var "a")] $ T.Pi [(["p"],T.Id (T.Var "a'") (T.Var "x") (T.Var "y"))] $
                     T.Id (T.Var "B" `T.appN` [T.Var "y"])
-                         (T.App T.Coe (error "TODO: typeOf.1") [T.App T.Pmap (error "TODO: typeOf.2")
+                         (T.App T.Coe Nothing [T.App T.Pmap (error "TODO: typeOf.2")
                             [T.App T.Idp (error "TODO: typeOf.3") [T.Var "B"], T.LVar 0], T.Var "f'"])
                          (T.Var "g'")
             cmpTypesErr exp (eval 0 (M.fromList ctx', []) term) e
@@ -186,8 +186,8 @@ typeOfH ea@(App e1 e) (T ty@(Spi v a'@(Sid a x y) b')) | Pmap _ <- dropParens e1
             let ctx' = [("a'",a'),("B",Slam v1 b1),("y",y),("f'",app 0 f x),("g'",app 0 g y)]
                 term = T.Pi [(["p"],T.Var "a'")] $
                     T.Id (T.Var "B" `T.appN` [T.Var "y"])
-                         (T.App T.Coe (error "TODO: typeOf.1") [T.App T.Pmap (error "TODO: typeOf.2")
-                            [T.App T.Idp (error "TODO: typeOf.3") [T.Var "B"], T.LVar 0], T.Var "f'"])
+                         (T.App T.Coe Nothing [T.App T.Pmap Nothing {- (error "TODO: typeOf.6") -}
+                            [T.App T.Idp Nothing {- (error "TODO: typeOf.7") -} [T.Var "B"], T.LVar 0], T.Var "f'"])
                          (T.Var "g'")
             cmpTypesErr ty (eval 0 (M.fromList ctx', []) term) ea
             return ty

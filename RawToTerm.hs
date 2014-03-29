@@ -100,7 +100,7 @@ rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj1 _ <- dropParens e1 = appN Proj
 rawExprToTerm i _ _ (E.Proj2 _) _ = Proj2
 rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj2 _ <- dropParens e1 =
     let e' = rawExprToTerm i mctx ctx e Nothing
-    in App Proj2 (error "TODO: rawExprToTerm.Proj2") [e']
+    in App Proj2 Nothing {- (error "TODO: rawExprToTerm.Proj2") -} [e']
 rawExprToTerm i mctx ctx (E.Pair e1 e2) Nothing =
     Pair (rawExprToTerm i mctx ctx e1 Nothing) (rawExprToTerm i mctx ctx e2 Nothing)
 rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
@@ -109,7 +109,7 @@ rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
     in Id (reifyType i t1) e1' $ rawExprToTerm i mctx ctx e2 (Just t1)
 rawExprToTerm i mctx ctx (E.Pmap _) _ = Pmap
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Spi _ (Sid a x y) b)) | E.Pmap _ <- dropParens e1 =
-    App Pmap (error "TODO: rawExprToTerm.App.Pmap") [rawExprToTerm i mctx ctx e Nothing]
+    appN Pmap [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = error "rawExprToTerm.App.Pmap"
 rawExprToTerm i mctx ctx (E.App e1' e2) _
     | E.App e3 e4 <- dropParens e1'
@@ -120,11 +120,11 @@ rawExprToTerm i mctx ctx (E.App e1' e2) _
         in case typeOfTerm i ctx e2' of
             Sid t _ _ -> let e' = rawExprToTerm i mctx ctx e1 $ Just $ t `sarr` Ne [] (const NoVar)
                              e't = reifyType i (eval 0 (ctxToCtxV ctx) e')
-                         in App Pmap (error "TODO: rawExprToTerm.App.App.Pmap.Idp")
+                         in App Pmap Nothing {- (error "TODO: rawExprToTerm.App.App.Pmap.Idp") -}
                             [App Idp (Just $ Pi [(["x"],e't)] $ Id e't (LVar 0) (LVar 0)) [e'], e2']
             _ -> error "rawExprToTerm.App.App.Idp"
 rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- dropParens e3 =
-    App Pmap (error "TODO: rawExprToTerm.App.App.Pmap")
+    App Pmap Nothing {- (error "TODO: rawExprToTerm.App.App.Pmap") -}
     [rawExprToTerm i mctx ctx e1 Nothing, rawExprToTerm i mctx ctx e2 Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t _ _)) | E.Idp _ <- dropParens e1 =
     let e' = rawExprToTerm i mctx ctx e (Just t)
@@ -136,16 +136,16 @@ rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 =
         t' = reifyType i (typeOfTerm i ctx e')
     in App Idp (Just $ Pi [(["x"],t')] $ Id t' (LVar 0) (LVar 0)) [e']
 rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 =
-    App Coe (error "TODO: rawExprToTerm.App.Coe") [rawExprToTerm i mctx ctx e Nothing]
+    App Coe Nothing [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Spi x a b) f g)) | E.Ext _ <- dropParens e1 =
-    App (Ext (reify i f t) (reify i g t)) (error "TODO: rawExprToTerm.App.Ext") $ return $ rawExprToTerm i mctx ctx e $ Just $
+    appN (Ext (reify i f t) (reify i g t)) $ return $ rawExprToTerm i mctx ctx e $ Just $
     Spi x a $ \k m v ->
         let r1 = b k m v
             r2 = app k (action m f) v 
             r3 = app k (action m g) v
         in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Ssigma x a b) p q)) | E.Ext _ <- dropParens e1 =
-    App (ExtSigma (reify i p t) (reify i q t)) (error "rawExprToTerm.App.ExtSigma") $ return $ rawExprToTerm i mctx ctx e $ Just $
+    appN (ExtSigma (reify i p t) (reify i q t)) $ return $ rawExprToTerm i mctx ctx e $ Just $
     Ssigma x (Sid a (proj1 p) (proj1 q)) $ \k m v ->
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x b) v (action m $ proj2 p)
@@ -161,7 +161,7 @@ rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t x y)) | E.Inv _ <- dropParens
 rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Inv _ <- dropParens e1 = error "rawExprToTerm.App.Inv"
 rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = appN Inv [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e) _ | E.InvIdp _ <- dropParens e1 =
-    App InvIdp (error "TODO: rawExprToTerm.App.InvIdp")[rawExprToTerm i mctx ctx e Nothing]
+    App InvIdp (error "TODO: rawExprToTerm.App.InvIdp") [rawExprToTerm i mctx ctx e Nothing]
 rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Comp _ <- dropParens e3 =
     appN Comp [rawExprToTerm i mctx ctx e1 Nothing, rawExprToTerm i mctx ctx e2 Nothing]
 rawExprToTerm i mctx ctx (E.App e1 e2) _ =
