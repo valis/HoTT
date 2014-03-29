@@ -115,7 +115,7 @@ typeOfH e1@(Lam (PLam (lc,_)) (x:xs) e) (P _ ty a b) = do
         x' = unBinder x
     s <- local (\i c mctx (ctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (ctx, (svar i ty,ty) : lctx))) (typeOf e')
     (i,_,mctx,ctx) <- ask
-    if isFreeVar i s
+    if isFreeVar 0 (i + 1) s
         then inferErrorMsg lc "lambda expression"
         else let v1 = evalRaw i mctx ctx e1 $ Just (ty `sarr` s)
              in return $ Sid s (app 0 v1 a) (app 0 v1 b)
@@ -426,7 +426,7 @@ typeOfPmap _ _ _ t2 _ e2 = expTypeBut "Id" e2 t2
 isArr :: T.DBIndex -> Value -> (Integer -> [D] -> Value -> Value) -> Maybe Value
 isArr i t f =
     let r = f 0 [] (svar i t)
-    in if isFreeVar i r then Nothing else Just r
+    in if isFreeVar 0 (i + 1) r then Nothing else Just r
 
 evalDecl :: String -> Expr -> Maybe Expr -> TCM (M.Map String T.DBIndex, Ctx, Value, Value)
 evalDecl name expr mty = do

@@ -61,22 +61,22 @@ sprod a b = Ssigma "_" a $ \k _ _ -> action (genericReplicate k Ud) b
 ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
-isFreeVar :: DBIndex -> Value -> Bool
-isFreeVar i (Slam _ f) = isFreeVar (i + 1) $ f 0 [] $ Ne [] (\_ -> NoVar)
-isFreeVar _ Szero = False
-isFreeVar i (Ssuc v) = isFreeVar i v
-isFreeVar i (Spair a b) = isFreeVar i a || isFreeVar i b
-isFreeVar i (Spi _ a b) = isFreeVar i a || isFreeVar (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
-isFreeVar i (Ssigma _ a b) = isFreeVar i a || undefined isFreeVar (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
-isFreeVar _ Snat = False
-isFreeVar _ (Stype _) = False
-isFreeVar i (Sid t a b) = isFreeVar i t || isFreeVar i a || isFreeVar i b
-isFreeVar i (Sidp v) = isFreeVar i v
-isFreeVar i (Ne ts t) =
-    any (\(l,r) -> elem 0 (freeLVars $ l $ i + 1) || elem 0 (freeLVars $ r $ i + 1)) ts || elem 0 (freeLVars $ t $ i + 1)
-isFreeVar i (Swtype t) = elem 0 $ freeLVars $ t (i + 1)
-isFreeVar i (Siso _ a b c d e f) = isFreeVar i a || isFreeVar i b || isFreeVar i c
-                                || isFreeVar i d || isFreeVar i e || isFreeVar i f
+isFreeVar :: DBIndex -> DBIndex -> Value -> Bool
+isFreeVar k i (Slam _ f) = isFreeVar (k + 1) (i + 1) $ f 0 [] $ Ne [] (\_ -> NoVar)
+isFreeVar _ _ Szero = False
+isFreeVar k i (Ssuc v) = isFreeVar k i v
+isFreeVar k i (Spair a b) = isFreeVar k i a || isFreeVar k i b
+isFreeVar k i (Spi _ a b) = isFreeVar k i a || isFreeVar (k + 1) (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
+isFreeVar k i (Ssigma _ a b) = isFreeVar k i a || undefined isFreeVar (k + 1) (i + 1) (b 0 [] $ Ne [] $ \_ -> NoVar)
+isFreeVar _ _ Snat = False
+isFreeVar _ _ (Stype _) = False
+isFreeVar k i (Sid t a b) = isFreeVar k i t || isFreeVar k i a || isFreeVar k i b
+isFreeVar k i (Sidp v) = isFreeVar k i v
+isFreeVar k i (Ne ts t) =
+    any (\(l,r) -> elem k (freeLVars $ l i) || elem k (freeLVars $ r i)) ts || elem k (freeLVars $ t i)
+isFreeVar k i (Swtype t) = elem k $ freeLVars (t i)
+isFreeVar k i (Siso _ a b c d e f) = isFreeVar k i a || isFreeVar k i b || isFreeVar k i c
+                                  || isFreeVar k i d || isFreeVar k i e || isFreeVar k i f
 
 cmpTypes :: DBIndex -> Value -> Value -> Bool
 cmpTypes i (Spi x a b)    (Spi _ a' b')    = cmpTypes i a' a && cmpTypes (i + 1) (b 0 [] $ svar i a) (b' 0 [] $ svar i a')
