@@ -15,14 +15,14 @@ import qualified Syntax.Raw as R
 import qualified Parser.AbsGrammar as E
 
 evalRaw :: DBIndex -> M.Map String DBIndex -> Ctx -> E.Expr -> Maybe Value -> Value
-evalRaw i mctx ctx e ty = eval 0 (ctxToCtxV ctx) (rawExprToTerm i mctx ctx e ty)
+evalRaw i mctx ctx e ty = eval 0 ctx (rawExprToTerm i mctx ctx e ty)
 
 rawDefsToTerm :: DBIndex -> M.Map String DBIndex -> Ctx -> [E.Def] -> [Def]
 rawDefsToTerm i mctx ctx [] = []
 rawDefsToTerm i mctx ctx (E.DefType _ t : E.Def (E.PIdent (_,name)) args e : defs) =
     let t' = rawExprToTerm i mctx ctx t Nothing
         e' = rawExprToTerm i mctx ctx (E.Lam (error "rawDefsToTerm.Lam") (map E.Binder args) e) $
-            Just $ eval 0 (ctxToCtxV ctx) t'
+            Just $ eval 0 ctx t'
     in Def name (Just (t', [])) e' : rawDefsToTerm i mctx ctx defs
 rawDefsToTerm i mctx ctx (E.Def (E.PIdent (_,name)) [] e : defs) =
     Def name Nothing (rawExprToTerm i mctx ctx e Nothing) : rawDefsToTerm i mctx ctx defs
@@ -43,15 +43,15 @@ updateCtxVar i mctx actx@(ctx,lctx) (Def name Nothing expr : ds) =
     let t = typeOfTerm i actx expr
     in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
 updateCtxVar i mctx actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
-    let t = eval 0 (ctxToCtxV actx) ty
+    let t = eval 0 actx ty
     in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
 
 updateCtx :: DBIndex -> Ctx -> [Def] -> Ctx
 updateCtx _ ctx [] = ctx
 updateCtx i actx@(ctx,lctx) (Def name Nothing expr : ds) =
-    updateCtx i (M.insert name (eval 0 (ctxToCtxV actx) expr, typeOfTerm i actx expr) ctx, lctx) ds
+    updateCtx i (M.insert name (eval 0 actx expr, typeOfTerm i actx expr) ctx, lctx) ds
 updateCtx i actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
-    updateCtx i (M.insert name (eval 0 (ctxToCtxV actx) (Lam args expr), eval 0 (ctxToCtxV actx) ty) ctx, lctx) ds
+    updateCtx i (M.insert name (eval 0 actx (Lam args expr), eval 0 actx ty) ctx, lctx) ds
 
 rawExprToTerm'depType :: ([([String],Term)] -> Term -> Term) -> DBIndex
     -> M.Map String DBIndex -> Ctx -> E.TypedVar -> E.Expr -> Maybe Value -> Term
@@ -130,14 +130,14 @@ rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Spi x a b) f g)) | E.Ext _ <
         let r1 = b k m v
             r2 = app k (action m f) v 
             r3 = app k (action m g) v
-        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
+        in eval k (M.fromList [("r1",(r1,Stype maxBound)),("r2",(r2,r1)),("r3",(r3,r1))], []) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid t@(Ssigma x a b) p q)) | E.Ext _ <- dropParens e1 =
     App (ExtSigma (reify i p t) (reify i q t)) $ rawExprToTerm i mctx ctx e $ Just $
     Ssigma x (Sid a (proj1 p) (proj1 q)) $ \k m v ->
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x b) v (action m $ proj2 p)
             r3 = proj2 q
-        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
+        in eval k (M.fromList [("r1",(r1,Stype maxBound)),("r2",(r2,r1)),("r3",(r3,r1))], []) $ Id (Var "r1") (Var "r2") (Var "r3")
 rawExprToTerm i _ _ (E.Ext _) (Just (Spi _ a b)) = case b 0 [] (error "rawExprToTerm.Ext.Var") of
     Sid t@(Spi _ _ _) f g -> Ext (reify i f t) (reify i g t)
     Sid t@(Ssigma _ _ _) p q -> ExtSigma (reify i p t) (reify i q t)
@@ -173,7 +173,7 @@ rawExprToTerm _ _ _ (E.Universe (E.U (_,x))) _ = Universe (parseLevel x)
 rawExprToTerm i mctx ctx (E.Paren _ e) ty = rawExprToTerm i mctx ctx e ty
 rawExprToTerm i mctx ctx (E.Typed e1 e2) _ =
     let e2' = rawExprToTerm i mctx ctx e2 $ Just (Stype maxBound)
-    in Typed (rawExprToTerm i mctx ctx e1 $ Just $ eval 0 (ctxToCtxV ctx) e2') e2'
+    in Typed (rawExprToTerm i mctx ctx e1 $ Just $ eval 0 ctx e2') e2'
 
 updateLCtx :: DBIndex -> Value -> [(Value,Value)] -> [String] -> [(Value,Value)]
 updateLCtx _ tv lctx [] = lctx
@@ -185,13 +185,13 @@ typeOfTerm i ctx (Lam [] e) = typeOfTerm i ctx e
 typeOfTerm _ _ (Lam _ _) = error "typeOfTerm.Lam"
 typeOfTerm i ctx (Pi [] e) = typeOfTerm i ctx e
 typeOfTerm i (ctx,lctx) (Pi ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx vars) (Pi vs e)
+    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctx,lctx) t) lctx vars) (Pi vs e)
     in case (typeOfTerm i (ctx,lctx) t, r) of
         (Stype k1, Stype k2) -> Stype (max k1 k2)
         _ -> error "typeOfTerm.Pi"
 typeOfTerm i ctx (Sigma [] e) = typeOfTerm i ctx e
 typeOfTerm i (ctx,lctx) (Sigma ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx vars) (Sigma vs e)
+    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctx,lctx) t) lctx vars) (Sigma vs e)
     in case (typeOfTerm i (ctx,lctx) t, r) of
         (Stype k1, Stype k2) -> Stype (max k1 k2)
         _ -> error "typeOfTerm.Sigma"
@@ -202,22 +202,22 @@ typeOfTerm i ctx (App Proj1 e) = case typeOfTerm i ctx e of
     _ -> error "typeOfTerm.App.Proj1"
 typeOfTerm i ctx Proj2 = error "typeOfTerm.Proj2"
 typeOfTerm i ctx (App Proj2 e) = case typeOfTerm i ctx e of
-    Ssigma _ _ b -> b 0 [] $ eval 0 (ctxToCtxV ctx) (App Proj1 e)
+    Ssigma _ _ b -> b 0 [] $ eval 0 ctx (App Proj1 e)
     _ -> error "typeOfTerm.App.Proj1"
 typeOfTerm i ctx (Id t _ _) = typeOfTerm i ctx t
 typeOfTerm i ctx (App Idp e) =
-    let v = eval 0 (ctxToCtxV ctx) e
+    let v = eval 0 ctx e
     in Sid (typeOfTerm i ctx e) v v
 -- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
 typeOfTerm i ctx (App (App Pmap (App Idp e1)) e2) =
-    let e' = eval 0 (ctxToCtxV ctx) e1
+    let e' = eval 0 ctx e1
     in case typeOfTerm i ctx e2 of
-        Sid t a b -> typeOfLam i ctx e1 t (app 0 e' a) (app 0 e' b) (eval 0 (ctxToCtxV ctx) e2)
+        Sid t a b -> typeOfLam i ctx e1 t (app 0 e' a) (app 0 e' b) (eval 0 ctx e2)
         _ -> error "typeOfTerm.App.App.Pmap.Idp"
 typeOfTerm i ctx (App (App Pmap e1) e2) =
     case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
         (Sid (Spi v _ b) f g, Sid _ x y) ->
-            Sid (b 0 [] y) (trans 0 (Slam v b) (eval 0 (ctxToCtxV ctx) e2) (app 0 f x)) (app 0 g y)
+            Sid (b 0 [] y) (trans 0 (Slam v b) (eval 0 ctx e2) (app 0 f x)) (app 0 g y)
         _ -> error "typeOfTerm.App.App.Pmap"
 typeOfTerm i ctx (App Coe e) = case typeOfTerm i ctx e of
     Sid _ x y -> x `sarr` y
@@ -228,14 +228,14 @@ typeOfTerm i ctx (App Inv e) = case typeOfTerm i ctx e of
 -- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
 typeOfTerm i ctx (App InvIdp e) = case typeOfTerm i ctx e of
     t@(Sid _ _ _) ->
-        let e' = eval 0 (ctxToCtxV ctx) e
+        let e' = eval 0 ctx e
         in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
     _ -> error "typeOfTerm.App.InvIdp"
 typeOfTerm i ctx (App (App Comp e1) e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
     (Sid t x _, Sid _ _ z) -> Sid t x z
     _ -> error "typeOfTerm.App.Comp"
 typeOfTerm i ctx (App e1 e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
-    (Spi _ _ b, _) -> b 0 [] $ eval 0 (ctxToCtxV ctx) e2
+    (Spi _ _ b, _) -> b 0 [] $ eval 0 ctx e2
     (Sid (Spi _ _ t) f g, Sid _ a b) -> Sid (t 0 [] $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
     _ -> error "typeOfTerm.App"
 typeOfTerm _ (_,ctx) (LVar v) = snd $ ctx `genericIndex` v
@@ -249,9 +249,9 @@ typeOfTerm i _ Suc = Snat `sarr` Snat
 typeOfTerm i _ Rec = eval 0 (M.empty,[]) $ Pi [(["P"], Pi [([],Nat)] $ Universe Omega)] $
     Pi [([], App (LVar 0) $ NatConst 0)] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ App (LVar 1) (LVar 0)
   where iht = Pi [(["x"],Nat)] $ Pi [([], App (LVar 1) (LVar 0))] $ App (LVar 1) $ App Suc (LVar 0)
-typeOfTerm i ctx (Typed _ t) = eval 0 (ctxToCtxV ctx) t
-typeOfTerm i ctx (Ext f g) = Sid (typeOfTerm i ctx f) (eval 0 (ctxToCtxV ctx) f) (eval 0 (ctxToCtxV ctx) g)
-typeOfTerm i ctx (ExtSigma p q) = Sid (typeOfTerm i ctx p) (eval 0 (ctxToCtxV ctx) p) (eval 0 (ctxToCtxV ctx) q)
+typeOfTerm i ctx (Typed _ t) = eval 0 ctx t
+typeOfTerm i ctx (Ext f g) = Sid (typeOfTerm i ctx f) (eval 0 ctx f) (eval 0 ctx g)
+typeOfTerm i ctx (ExtSigma p q) = Sid (typeOfTerm i ctx p) (eval 0 ctx p) (eval 0 ctx q)
 typeOfTerm _ _ (NatConst _) = Snat
 typeOfTerm _ _ (Universe l) = Stype (succ l)
 typeOfTerm _ _ Pmap = error "typeOfTerm.Pmap"

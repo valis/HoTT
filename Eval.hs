@@ -5,17 +5,19 @@ module Eval
 import qualified Data.Map as M
 import Data.Maybe
 import Data.List
+import Control.Arrow((***))
 
 import Syntax.Common
 import Syntax.Term
 import Value
 
-eval :: Integer -> CtxV -> Term -> Value
+eval :: Integer -> Ctx -> Term -> Value
 -- iso A B f g
 -- pmap (\A -> idp (iso A B f g)) (p : A1 = A2)
 --   : iso A1 B (\a -> f (coe (inv p) a)) (\b -> coe (inv p) (g b)) = iso A2 B (f : A2 -> B) (g : B -> A2)
 -- pmap (\A -> idp (iso A A (\x -> x) (\x -> x))) (p : A1 = A2)
 --   : iso A2 A2 (\x -> coe p (coe (inv p) x)) (\x -> coe p (coe (inv p) x)) = iso A2 A2 (\x -> x) (\x -> x)
+{-
 eval _ _ Iso = Slam "A" $ \_  _  va ->
                Slam "B" $ \_  mb vb ->
                Slam "f" $ \_  mf vf ->
@@ -24,6 +26,8 @@ eval _ _ Iso = Slam "A" $ \_  _  va ->
                Slam "q" $ \kq mq vq ->
     Siso kq (error "TODO: eval.Iso.1") (error "TODO: eval.Iso.2") (error "TODO: eval.Iso.3")
             (error "TODO: eval.Iso.4") (error "TODO: eval.Iso.5") (error "TODO: eval.Iso.6")
+-}
+eval _ _ Iso = error "TODO: eval.Iso"
 eval _ _ Comp = Slam "p" $ \_ _ p -> Slam "q" $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" $ \k _ -> inv k
 eval _ _ InvIdp = Slam "p" $ \k _ -> invIdp k
@@ -33,33 +37,33 @@ eval _ _ Coe = Slam "p" $ \_ _ -> coe
 eval _ _ Pmap = Slam "p" $ \_ _ p -> Slam "q" $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
 eval n (ctx,lctx) (Ext f g) = Slam "h" $ \_ n h -> Slam "p" $ \k m p -> case (k,lastD m) of
-    (0,Just Ld) -> eval 0 (M.map (action $ n ++ m) ctx, map (action $ n ++ m) lctx) f
-    (0,Just Rd) -> eval 0 (M.map (action $ n ++ m) ctx, map (action $ n ++ m) lctx) g
+    (0,Just Ld) -> eval 0 (M.map (action (n ++ m) *** action (n ++ m)) ctx, map (action (n ++ m) *** action (n ++ m)) lctx) f
+    (0,Just Rd) -> eval 0 (M.map (action (n ++ m) *** action (n ++ m)) ctx, map (action (n ++ m) *** action (n ++ m)) lctx) g
     (0,_) -> error "eval.Ext"
     _ -> comp (k - 1) (app (k - 1) (action m h) $ action [Ld] p)
-                      (app k (eval k (M.map (action $ n ++ m ++ [Ud]) ctx, map (action $ n ++ m ++ [Ud]) lctx) g) p)
+                      (app k (eval k (M.map (action (n ++ m ++ [Ud]) *** action (n ++ m ++ [Ud])) ctx, map (action (n ++ m ++ [Ud]) *** action (n ++ m ++ [Ud])) lctx) g) p)
 eval n ctx (ExtSigma _ _) = idf
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" $ \_ _ -> proj2
 eval n ctx (Let [] e) = eval n ctx e
-eval n (ctx,lctx) (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n (ctx,lctx) d) ctx, lctx) (Let ds e)
-eval n (ctx,lctx) (Let (Def v (Just (_,args)) d : ds) e) =
-    eval n (M.insert v (eval n (ctx,lctx) $ Lam args d) ctx, lctx) (Let ds e)
-eval n ctx (Lam args e) = go n ctx args
+eval n (ctx,lctx) (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n (ctx,lctx) d, error "TODO: eval.Let") ctx, lctx) (Let ds e)
+eval n (ctx,lctx) (Let (Def v (Just (t,args)) d : ds) e) =
+    eval n (M.insert v (eval n (ctx,lctx) $ Lam args d, eval n (ctx,lctx) t) ctx, lctx) (Let ds e)
+eval n ctx (Lam args e) = go n ctx args -- TODO: Fix this.
   where
     go n ctx []     = eval n ctx e
-    go n (ctx,lctx) s@(a:as) = Slam a $ \k m v -> go k (M.map (action m) ctx, v : map (action m) lctx) as
+    go n (ctx,lctx) s@(a:as) = Slam a $ \k m v -> go k (M.map (action m *** action m) ctx, (v, error "eval.Lam") : map (action m *** action m) lctx) as
 eval n ctx (Pi [] e) = eval n ctx e
 eval 0 (ctx,lctx) (Pi ((vs,t):ts) e) = go ctx lctx vs
   where
     tv = eval 0 (ctx,lctx) t
     go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Pi ts e)
-    go ctx lctx [v] = Spi v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
-    go ctx lctx (v:vs) = Spi v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
+    go ctx lctx [v] = Spi v tv $ \k m a -> eval k (M.map (action m *** action m) ctx, (a, action (genericReplicate k Ud) tv) : map (action m *** action m) lctx) (Pi ts e)
+    go ctx lctx (v:vs) = Spi v tv $ \k m a -> go (M.map (action m *** action m) ctx) ((a, action (genericReplicate k Ud) tv) : map (action m *** action m) lctx) vs
 eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso 1
-    (eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e')
-    (eval 0 (M.map (action [Rd]) ctx, map (action [Rd]) lctx) e')
+    (eval 0 (M.map (action [Ld] *** action [Ld]) ctx, map (action [Ld] *** action [Ld]) lctx) e')
+    (eval 0 (M.map (action [Rd] *** action [Rd]) ctx, map (action [Rd] *** action [Rd]) lctx) e')
     (Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx -> app kx (action (mx ++ mf) $ coe $ eval 1 (ctx,lctx) $ Pi ts e) $
                              app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) t) vx)
     (Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx -> app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) $ Pi ts e) $
@@ -71,13 +75,13 @@ eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
   where
     tv = eval 0 (ctx,lctx) t
     go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Sigma ts e)
-    go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
-    go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
+    go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m *** action m) ctx, (a, action (genericReplicate k Ud) tv) : map (action m *** action m) lctx) (Sigma ts e)
+    go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m *** action m) ctx) ((a, action (genericReplicate k Ud) tv) : map (action m *** action m) lctx) vs
 eval n _ (Sigma _ _) = error $ "TODO: eval.Sigma: " ++ show n
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
-eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
+eval n (ctx,_) (Var v) = fst $ fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
-eval n (_,ctx) (LVar v) = ctx `genericIndex` v
+eval n (_,ctx) (LVar v) = fst $ ctx `genericIndex` v
 eval _ ctx Suc = Slam "n" $ \_ _ -> Ssuc
 eval _ ctx Rec = Slam "P" $ \pk pm pv ->
                  Slam "z" $ \zk zm zv ->
@@ -107,10 +111,10 @@ eval 1 (ctx,lctx) e@(Id t a b) = Siso 1 (eval 0 (ctxl,lctxl) e) (eval 0 (ctxr,lc
                       (pmap 0 (idp 0 $ Slam "p" $ \kp mp vp -> app kp (coe vp) $ action mp b1) iitp)
     rl k _ _ = error $ "TODO: eval.Id.inv: " ++ show k
     
-    ctxl = M.map (action [Ld]) ctx
-    ctxr = M.map (action [Ld]) ctx
-    lctxl = map (action [Ld]) lctx
-    lctxr = map (action [Rd]) lctx
+    ctxl = M.map (action [Ld] *** action [Ld]) ctx
+    ctxr = M.map (action [Rd] *** action [Rd]) ctx
+    lctxl = map (action [Ld] *** action [Ld]) lctx
+    lctxr = map (action [Rd] *** action [Rd]) lctx
     a1 = eval 0 (ctxl,lctxl) a
     b1 = eval 0 (ctxl,lctxl) b
     ap = eval 1 (ctx,lctx) a
@@ -163,9 +167,12 @@ rec 1 p z s = go
                 `App` reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p)))
                 `App` reify l z
                     (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
-                `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
-                       in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
-                        $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
+                `App` (let t p2 = Pi [(["x"],Nat)] $ Pi [([],App (Var p2) (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
+                       in reify l s $ eval 0 (M.fromList [ ("P" , (p, Snat `sarr` Stype maxBound))
+                                                         , ("s1", (action [Ld] s, error "TODO: rec.1.1"))
+                                                         , ("s2", (action [Rd] s, error "TODO: rec.1.2"))
+                                                         ], [])
+                        $ Id (t "P") (Coe `App` (Pmap `App` Lam ["P2"] (t "P2") `App` Var "P") `App` Var "s1") (Var "s2")))
                 `App` e l
         in liftTerm r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
             (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
