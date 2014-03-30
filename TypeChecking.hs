@@ -371,7 +371,7 @@ typeOfH (Id a b) N = do
     a' <- typeOf a
     typeOfH b (T a')
     (i,_,_,ctx) <- ask
-    return $ typeOfTerm i ctx (reifyType i a')
+    return $ typeOfTerm 0 ctx (reifyType i a')
 typeOfH (Nat _) N = return $ Stype (Finite 0)
 typeOfH (Universe (U (_,t))) N = return $ Stype $ succ (parseLevel t)
 typeOfH (App e1 e2) N = do

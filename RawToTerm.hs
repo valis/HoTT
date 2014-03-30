@@ -37,21 +37,14 @@ exprToVars = reverse . go
     go (E.App a (E.Var (E.Arg (E.PIdent (_,x))))) = x : go a
     go _ = error "exprToVars"
 
-updateCtxVar :: DBIndex -> M.Map String DBIndex -> Ctx -> [Def] -> (M.Map String DBIndex, Ctx)
-updateCtxVar _ mctx ctx [] = (mctx, ctx)
-updateCtxVar i mctx actx@(ctx,lctx) (Def name Nothing expr : ds) =
-    let t = typeOfTerm i actx expr
-    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
-updateCtxVar i mctx actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
+updateCtxVar :: M.Map String DBIndex -> Ctx -> [Def] -> (M.Map String DBIndex, Ctx)
+updateCtxVar mctx ctx [] = (mctx, ctx)
+updateCtxVar mctx actx@(ctx,lctx) (Def name Nothing expr : ds) =
+    let t = typeOfTerm 0 actx expr
+    in updateCtxVar (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
+updateCtxVar mctx actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
     let t = eval 0 actx ty
-    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
-
-updateCtx :: DBIndex -> Ctx -> [Def] -> Ctx
-updateCtx _ ctx [] = ctx
-updateCtx i actx@(ctx,lctx) (Def name Nothing expr : ds) =
-    updateCtx i (M.insert name (eval 0 actx expr, typeOfTerm i actx expr) ctx, lctx) ds
-updateCtx i actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
-    updateCtx i (M.insert name (eval 0 actx (Lam args expr), eval 0 actx ty) ctx, lctx) ds
+    in updateCtxVar (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
 
 rawExprToTerm'depType :: ([([String],Term)] -> Term -> Term) -> DBIndex
     -> M.Map String DBIndex -> Ctx -> E.TypedVar -> E.Expr -> Maybe Value -> Term
@@ -75,7 +68,7 @@ rawExprToTerm :: DBIndex -> M.Map String DBIndex -> Ctx -> E.Expr -> Maybe Value
 rawExprToTerm i mctx ctx e (Just (Ne _ t)) | NoVar <- t 0 = rawExprToTerm i mctx ctx e Nothing
 rawExprToTerm i mctx ctx (E.Let defs expr) ty =
     let defs' = rawDefsToTerm i mctx ctx defs
-        (mctx',ctx') = updateCtxVar i mctx ctx defs'
+        (mctx',ctx') = updateCtxVar mctx ctx defs'
     in Let defs' (rawExprToTerm i mctx' ctx' expr ty)
 rawExprToTerm i mctx ctx (E.Lam _ [] expr) ty = rawExprToTerm i mctx ctx expr ty
 rawExprToTerm i mctx (ctx,lctx) (E.Lam j (arg:args) expr) (Just (Spi _ t s)) =
@@ -103,7 +96,7 @@ rawExprToTerm i mctx ctx (E.Pair e1 e2) Nothing =
     Pair (rawExprToTerm i mctx ctx e1 Nothing) (rawExprToTerm i mctx ctx e2 Nothing)
 rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
     let e1' = rawExprToTerm i mctx ctx e1 Nothing
-        t1 = typeOfTerm i ctx e1'
+        t1 = typeOfTerm 0 ctx e1'
     in Id (reifyType i t1) e1' $ rawExprToTerm i mctx ctx e2 (Just t1)
 rawExprToTerm i mctx ctx (E.Pmap _) _ = Pmap
 rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = App Pmap (rawExprToTerm i mctx ctx e Nothing)
@@ -113,7 +106,7 @@ rawExprToTerm i mctx ctx (E.App e1' e2) _
     , E.App e5 e1 <- dropParens e4
     , E.Idp _ <- dropParens e5 =
         let e2' = rawExprToTerm i mctx ctx e2 Nothing
-        in case typeOfTerm i ctx e2' of
+        in case typeOfTerm 0 ctx e2' of
             Sid t _ _ -> let e' = rawExprToTerm i mctx ctx e1 $ Just $ t `sarr` Ne [] (const NoVar)
                          in App (App Pmap (App Idp e')) e2'
             _ -> error "rawExprToTerm.App.App.Idp"
@@ -152,7 +145,7 @@ rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Com
     Comp `App` rawExprToTerm i mctx ctx e1 Nothing `App` rawExprToTerm i mctx ctx e2 Nothing
 rawExprToTerm i mctx ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm i mctx ctx e1 Nothing
-    in case typeOfTerm i ctx e1' of
+    in case typeOfTerm 0 ctx e1' of
         Spi _ t2 _ -> App e1' $ rawExprToTerm i mctx ctx e2 (Just t2)
         Sid _ _ _ -> App e1' (rawExprToTerm i mctx ctx e2 Nothing)
         _ -> error $ "rawExprToTerm.App"
@@ -174,106 +167,3 @@ rawExprToTerm i mctx ctx (E.Paren _ e) ty = rawExprToTerm i mctx ctx e ty
 rawExprToTerm i mctx ctx (E.Typed e1 e2) _ =
     let e2' = rawExprToTerm i mctx ctx e2 $ Just (Stype maxBound)
     in Typed (rawExprToTerm i mctx ctx e1 $ Just $ eval 0 ctx e2') e2'
-
-updateLCtx :: DBIndex -> Value -> [(Value,Value)] -> [String] -> [(Value,Value)]
-updateLCtx _ tv lctx [] = lctx
-updateLCtx i tv lctx (_:vs) = updateLCtx (i + 1) tv ((svar i tv, tv) : lctx) vs
-
-typeOfTerm :: DBIndex -> Ctx -> Term -> Value
-typeOfTerm i ctx (Let defs e) = typeOfTerm i (updateCtx i ctx defs) e
-typeOfTerm i ctx (Lam [] e) = typeOfTerm i ctx e
-typeOfTerm _ _ (Lam _ _) = error "typeOfTerm.Lam"
-typeOfTerm i ctx (Pi [] e) = typeOfTerm i ctx e
-typeOfTerm i (ctx,lctx) (Pi ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctx,lctx) t) lctx vars) (Pi vs e)
-    in case (typeOfTerm i (ctx,lctx) t, r) of
-        (Stype k1, Stype k2) -> Stype (max k1 k2)
-        _ -> error "typeOfTerm.Pi"
-typeOfTerm i ctx (Sigma [] e) = typeOfTerm i ctx e
-typeOfTerm i (ctx,lctx) (Sigma ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctx,lctx) t) lctx vars) (Sigma vs e)
-    in case (typeOfTerm i (ctx,lctx) t, r) of
-        (Stype k1, Stype k2) -> Stype (max k1 k2)
-        _ -> error "typeOfTerm.Sigma"
-typeOfTerm i ctx (Pair e1 e2) = typeOfTerm i ctx e1 `sprod` typeOfTerm i ctx e2
-typeOfTerm i ctx Proj1 = error "typeOfTerm.Proj1"
-typeOfTerm i ctx (App Proj1 e) = case typeOfTerm i ctx e of
-    Ssigma _ a _ -> a
-    _ -> error "typeOfTerm.App.Proj1"
-typeOfTerm i ctx Proj2 = error "typeOfTerm.Proj2"
-typeOfTerm i ctx (App Proj2 e) = case typeOfTerm i ctx e of
-    Ssigma _ _ b -> b 0 [] $ eval 0 ctx (App Proj1 e)
-    _ -> error "typeOfTerm.App.Proj1"
-typeOfTerm i ctx (Id t _ _) = typeOfTerm i ctx t
-typeOfTerm i ctx (App Idp e) =
-    let v = eval 0 ctx e
-    in Sid (typeOfTerm i ctx e) v v
--- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
-typeOfTerm i ctx (App (App Pmap (App Idp e1)) e2) =
-    let e' = eval 0 ctx e1
-    in case typeOfTerm i ctx e2 of
-        Sid t a b -> typeOfLam i ctx e1 t (app 0 e' a) (app 0 e' b) (eval 0 ctx e2)
-        _ -> error "typeOfTerm.App.App.Pmap.Idp"
-typeOfTerm i ctx (App (App Pmap e1) e2) =
-    case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
-        (Sid (Spi v _ b) f g, Sid _ x y) ->
-            Sid (b 0 [] y) (trans 0 (Slam v b) (eval 0 ctx e2) (app 0 f x)) (app 0 g y)
-        _ -> error "typeOfTerm.App.App.Pmap"
-typeOfTerm i ctx (App Coe e) = case typeOfTerm i ctx e of
-    Sid _ x y -> x `sarr` y
-    _ -> error "typeOfTerm.App.Coe"
-typeOfTerm i ctx (App Inv e) = case typeOfTerm i ctx e of
-    Sid t x y -> Sid t y x
-    _ -> error "typeOfTerm.App.Inv"
--- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
-typeOfTerm i ctx (App InvIdp e) = case typeOfTerm i ctx e of
-    t@(Sid _ _ _) ->
-        let e' = eval 0 ctx e
-        in Sid (Sid t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
-    _ -> error "typeOfTerm.App.InvIdp"
-typeOfTerm i ctx (App (App Comp e1) e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
-    (Sid t x _, Sid _ _ z) -> Sid t x z
-    _ -> error "typeOfTerm.App.Comp"
-typeOfTerm i ctx (App e1 e2) = case (typeOfTerm i ctx e1, typeOfTerm i ctx e2) of
-    (Spi _ _ b, _) -> b 0 [] $ eval 0 ctx e2
-    (Sid (Spi _ _ t) f g, Sid _ a b) -> Sid (t 0 [] $ error "typeOfTerm.App.Id") (app 0 f a) (app 0 g b)
-    _ -> error "typeOfTerm.App"
-typeOfTerm _ (_,ctx) (LVar v) = snd $ ctx `genericIndex` v
-typeOfTerm i ctx NoVar = error "typeOfTerm.NoVar"
-typeOfTerm i (ctx,_) (Var v) = case M.lookup v ctx of
-    Nothing -> error $ "typeOfTerm.Var: " ++ v
-    Just (_,t) -> t
-typeOfTerm i _ Nat = Stype (Finite 0)
-typeOfTerm i _ Suc = Snat `sarr` Snat
--- Rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (Suc x)) -> (x : Nat) -> P x
-typeOfTerm i _ Rec = eval 0 (M.empty,[]) $ Pi [(["P"], Pi [([],Nat)] $ Universe Omega)] $
-    Pi [([], App (LVar 0) $ NatConst 0)] $ Pi [([], iht)] $ Pi [(["x"],Nat)] $ App (LVar 1) (LVar 0)
-  where iht = Pi [(["x"],Nat)] $ Pi [([], App (LVar 1) (LVar 0))] $ App (LVar 1) $ App Suc (LVar 0)
-typeOfTerm i ctx (Typed _ t) = eval 0 ctx t
-typeOfTerm i ctx (Ext f g) = Sid (typeOfTerm i ctx f) (eval 0 ctx f) (eval 0 ctx g)
-typeOfTerm i ctx (ExtSigma p q) = Sid (typeOfTerm i ctx p) (eval 0 ctx p) (eval 0 ctx q)
-typeOfTerm _ _ (NatConst _) = Snat
-typeOfTerm _ _ (Universe l) = Stype (succ l)
-typeOfTerm _ _ Pmap = error "typeOfTerm.Pmap"
-typeOfTerm _ _ Idp = error "typeOfTerm.Idp"
-typeOfTerm _ _ Coe = error "typeOfTerm.Coe"
-typeOfTerm _ _ Comp = error "typeOfTerm.Comp"
-typeOfTerm _ _ Inv = error "typeOfTerm.Inv"
-typeOfTerm _ _ InvIdp = error "typeOfTerm.InvIdp"
-typeOfTerm _ _ Iso = 
-    let term = Pi [(["A"],Universe $ pred $ pred maxBound)] $
-               Pi [(["B"],Universe $ pred $ pred maxBound)] $
-               Pi [(["f"],Pi [([],LVar 1)] $ LVar 0)] $
-               Pi [(["g"],Pi [([],LVar 1)] $ LVar 2)] $
-               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (LVar 1 `App` (LVar 2 `App` LVar 0)) (LVar 0))] $
-               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (LVar 2 `App` (LVar 1 `App` LVar 0)) (LVar 0))] $
-               Id (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
-    in eval 0 (M.empty,[]) term
-
-typeOfLam :: DBIndex -> Ctx -> Term -> Value -> Value -> Value -> Value -> Value
-typeOfLam i ctx (Let defs e) t a b p = typeOfLam i (updateCtx i ctx defs) e t a b p
-typeOfLam i ctx (Lam [] e) t a b p = typeOfLam i ctx e t a b p
-typeOfLam i (ctx,lctx) (Lam (x:xs) e) t a b _ = Sid (typeOfTerm i (ctx, (error "typeOfLam.Var", t) : lctx) (Lam xs e)) a b
-typeOfLam i ctx e t a b p = case typeOfTerm i ctx e of
-    Spi v _ r -> Sid (r 0 [] b) (trans 0 (Slam v r) p a) b
-    _ -> error "typeOfLam.Pi"
