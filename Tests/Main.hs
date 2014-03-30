@@ -11,6 +11,7 @@ import Data.List
 import Text.PrettyPrint
 import Control.DeepSeq
 import Data.Maybe
+import Data.IORef
 
 import Parser.ErrM
 import qualified Parser.AbsGrammar as R
@@ -31,27 +32,24 @@ processDecl name args expr ty = do
         (ty,args) = fromMaybe (error "processDecl") mty
     return (args,e',ty,ctx)
 
-processDecls :: Ctx -> [(String,Maybe R.Expr,[R.Arg],R.Expr)] -> [(String, EDocM Def)]
-processDecls _ [] = []
-processDecls ctx ((name,ty,args,expr) : decls) = case runTCM (processDecl name args expr ty) 0 [] M.empty ctx of
-    Left errs -> (name, Left errs) : processDecls ctx decls
-    Right (args',expr',ty',ctx') -> (name, Right (Def name (Just (ty',args')) expr')) : processDecls ctx' decls
-
 parser :: String -> Err R.Defs
 parser = pDefs . resolveLayout True . myLexer
 
-testFile :: Bool -> String -> String -> Test
-testFile onlyTC file cnt = TestLabel (takeWhile (/= '.') file) $ case parser cnt of
+testFile :: IORef Ctx -> Bool -> String -> String -> Test
+testFile ref onlyTC file cnt = TestLabel (takeWhile (/= '.') file) $ case parser cnt of
     Bad s -> TestCase (assertFailure s)
-    Ok (R.Defs defs) -> case fmap (processDecls (M.empty,[]) . processDefs) (preprocessDefs defs) of
+    Ok (R.Defs defs) -> case fmap processDefs (preprocessDefs defs) of
         Left errs -> TestCase $ assertFailure (errsToStr errs)
-        Right res -> TestList $ flip map res $ \(name,edef) -> TestLabel name $ TestCase $ case edef of
-            Left errs -> do
-                assertBool (errsToStr errs) (isSuffixOf "fail" name)
-                errsToStr errs `deepseq` return ()
-            Right def -> do
-                assertBool "" $ not (isSuffixOf "fail" name)
-                when (not onlyTC) $ render (ppDef [] def) `deepseq` return ()
+        Right res -> TestList $ flip map res $ \(name,ty,args,expr) -> TestLabel name $ TestCase $ do
+            ctx <- readIORef ref
+            case runTCM (processDecl name args expr ty) 0 [] M.empty ctx of
+                Left errs -> do
+                    assertBool (errsToStr errs) (isSuffixOf "fail" name)
+                    errsToStr errs `deepseq` return ()
+                Right (args',expr',ty',ctx') -> do
+                    assertBool "" $ not (isSuffixOf "fail" name)
+                    when (not onlyTC) $ render (ppDef [] $ Def name (Just (ty',args')) expr') `deepseq` return ()
+                    writeIORef ref ctx'
   where
     errsToStr = intercalate "\n\n" . map (erenderWithFilename file)
 
@@ -62,4 +60,5 @@ main = do
         files' = filter (not . isInfixOf "_output") files
     files' <- filterM (doesFileExist . ("tests/" ++)) files'
     cnts <- mapM (\file -> fmap (\cnt -> (file,cnt)) $ readFile $ "tests/" ++ file) files'
-    runTestTT $ TestList $ map (\(file,cnt) -> testFile onlyTC file cnt) cnts
+    ref <- newIORef (M.empty, [])
+    runTestTT $ TestList $ map (\(file,cnt) -> testFile ref onlyTC file cnt) cnts
