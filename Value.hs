@@ -8,7 +8,7 @@ module Value
     , isFreeVar
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, trans
-    , idf, idp, action, liftTerm, reduceD, lastD
+    , idf, idp, action, reflect, reduceD, lastD
     , inv, invIdp, comp
     ) where
 
@@ -94,10 +94,10 @@ cmpValues :: DBIndex -> Value -> Value -> Value -> Bool
 cmpValues i e1 e2 t = reify i e1 t == reify i e2 t
 
 svar :: DBIndex -> Value -> Value
-svar i = liftTerm $ \l -> LVar (l - i - 1)
+svar i = reflect $ \l -> LVar (l - i - 1)
 
 gvar :: String -> Value -> Value
-gvar v = liftTerm $ \_ -> Var v
+gvar v = reflect $ \_ -> Var v
 
 proj1 :: Value -> Value
 proj1 (Spair a _) = a
@@ -125,24 +125,24 @@ getBase :: Value -> (Integer,Value)
 getBase (Sid t _ _) = let (n,r) = getBase t in (n + 1, r)
 getBase r = (0,r)
 
-liftTerm :: ITerm -> Value -> Value
-liftTerm e t | App Idp _ <- e 0 = case t of
-    Sid t' _ _-> action [Ud] $ flip liftTerm t' $ \i -> case e i of
+reflect :: ITerm -> Value -> Value
+reflect e t | App Idp _ <- e 0 = case t of
+    Sid t' _ _-> action [Ud] $ flip reflect t' $ \i -> case e i of
         App Idp e -> e
-        _ -> error "liftTerm.Idp"
-    _ -> error "liftTerm.Idp.Id"
-liftTerm e t | (n,Stype _) <- getBase t = case t of
+        _ -> error "reflect.Idp"
+    _ -> error "reflect.Idp.Id"
+reflect e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
     Sid _ a b -> Siso n a b
-        (liftTerm (\l -> App (iterate (App Pmap . App Idp) Coe `genericIndex` (n - 1)) (e l)) $ go t n)
-        (liftTerm
+        (reflect (\l -> App (iterate (App Pmap . App Idp) Coe `genericIndex` (n - 1)) (e l)) $ go t n)
+        (reflect
             (\l -> if n == 1
                     then App Inv $ App Coe (e l)
                     else App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) (e l)
             ) $ goRev t n)
-        (error "TODO: liftTerm.Siso.1")
-        (error "TODO: liftTerm.Siso.2")
-    _ -> error "liftTerm.Stype"
+        (error "TODO: reflect.Siso.1")
+        (error "TODO: reflect.Siso.2")
+    _ -> error "reflect.Stype"
   where
     term = App Pmap $ Lam ["x"] $ App Idp $ App Inv $ App Coe (LVar 0)
     
@@ -150,21 +150,21 @@ liftTerm e t | (n,Stype _) <- getBase t = case t of
     go (Sid t p q) n =
         let r = iterate (App Pmap . App Idp) Coe `genericIndex` (n - 2)
             t' = go t (n - 1)
-        in Sid t' (liftTerm (\l -> App r $ reify l p t) t') (liftTerm (\l -> App r $ reify l q t) t')
-    go _ _ = error "liftTerm.Stype.go"
+        in Sid t' (reflect (\l -> App r $ reify l p t) t') (reflect (\l -> App r $ reify l q t) t')
+    go _ _ = error "reflect.Stype.go"
     
     goRev (Sid _ a b) 1 = b `sarr` a
     goRev (Sid t p q) 2 =
         let t' = goRev t 1
             a' l = App Inv $ App Coe (reify l p t)
             b' l = App Inv $ App Coe (reify l q t)
-        in Sid t' (liftTerm a' t') (liftTerm b' t')
+        in Sid t' (reflect a' t') (reflect b' t')
     goRev (Sid t p q) n = 
         let r = iterate (App Pmap . App Idp) term `genericIndex` (n - 3)
             t' = goRev t (n - 1)
-        in Sid t' (liftTerm (\l -> App r $ reify l p t) t') (liftTerm (\l -> App r $ reify l q t) t')
-    goRev _ _ = error "liftTerm.goRev"
-liftTerm e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
+        in Sid t' (reflect (\l -> App r $ reify l p t) t') (reflect (\l -> App r $ reify l q t) t')
+    goRev _ _ = error "reflect.goRev"
+reflect e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
     go a (b 0 [] $ action (genericReplicate k Rd) v) (\l -> actionTerm m $ iterate (App Pmap) (e l) `genericIndex` n) k v
   where
     actionTerm :: [D] -> Term -> Term
@@ -173,7 +173,7 @@ liftTerm e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
     actionTerm (_:a) (App Pmap (App Idp e)) = actionTerm a e
     actionTerm _ _ = error "Value.actionTerm"
     
-    go a b e' k v = liftTerm (\l -> appTerm (e' l) $ reify l v $ liftTypeValue k v a) (goType k v)
+    go a b e' k v = reflect (\l -> appTerm (e' l) $ reify l v $ liftTypeValue k v a) (goType k v)
       where
         liftTypeValue 0 _ a = a
         liftTypeValue k v a = Sid (liftTypeValue (k - 1) (action [Ld] v) a) (action [Ld] v) (action [Rd] v)
@@ -184,11 +184,11 @@ liftTerm e t | (n, Spi x a b) <- getBase t = Slam x $ \k m v ->
         goType 0 _ = b
         goType k v = Sid (goType (k - 1) (action [Ld] v)) (go a b e' (k - 1) $ action [Ld] v)
                                                           (go a b e' (k - 1) $ action [Rd] v)
-liftTerm e t | (n,Ssigma _ a b) <- getBase t = case n of
-    0 -> let a' = liftTerm (App Proj1 . e) a
-         in Spair a' $ liftTerm (App Proj2 . e) (b 0 [] a')
-    n -> error $ "TODO: liftTerm.Ssigma: " ++ show n
-liftTerm e t = Ne (sidToList t) e
+reflect e t | (n,Ssigma _ a b) <- getBase t = case n of
+    0 -> let a' = reflect (App Proj1 . e) a
+         in Spair a' $ reflect (App Proj2 . e) (b 0 [] a')
+    n -> error $ "TODO: reflect.Ssigma: " ++ show n
+reflect e t = Ne (sidToList t) e
   where
     sidToList :: Value -> [(ITerm,ITerm)]
     sidToList (Sid t a b) = (\l -> liftTermDB l (reify 0 a t), \l -> liftTermDB l (reify 0 b t)) : sidToList t

@@ -147,7 +147,7 @@ rec 0 p z s = go
                       `App` reify l z (app 0 p Szero)
                       `App` reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
                       `App` e l
-        in liftTerm r (app 0 p t)
+        in reflect r (app 0 p t)
     go _ = error "rec.0"
 -- rec : (P : Nat -> Type) -> P 0 -> ((x : Nat) -> P x -> P (suc x)) -> (x : Nat) -> P x
 -- pmap (idp rec) : (P : P1 = P2) -> (z : Idp (P2 0) (coe (pmap P (idp 0)) z1) z2)
@@ -167,7 +167,7 @@ rec 1 p z s = go
                        in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
                         $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
                 `App` e l
-        in liftTerm r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
+        in reflect r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
             (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
             (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))
     go _ = error "rec.1"

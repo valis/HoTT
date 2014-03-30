@@ -252,7 +252,7 @@ typeOfH (Proj1 (PProjl (lc,_))) (T exp) = proj1ErrorMsg lc exp
 -- proj2 : (p : (x : A) -> B x) -> B (proj1 p)
 typeOfH (Proj2 (PProjr (lc,_))) (T r@(Spi x a'@(Ssigma _ a b) b')) = do
     (i,_,_,_) <- ask
-    if cmpTypes (i + 1) (b 0 [] $ liftTerm (\l -> T.App T.Proj1 $ T.LVar $ l - i - 1) a) (b' 0 [] $ svar i a')
+    if cmpTypes (i + 1) (b 0 [] $ reflect (\l -> T.App T.Proj1 $ T.LVar $ l - i - 1) a) (b' 0 [] $ svar i a')
         then return r
         else proj2ErrorMsg lc r
 typeOfH (Proj2 (PProjr (lc,_))) (T exp) = proj2ErrorMsg lc exp
