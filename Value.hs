@@ -1,5 +1,6 @@
 module Value
     ( Value(..)
+    , SisoData(..)
     , D(..), GlobMap
     , svar, gvar, sarr, sprod
     , Ctx, CtxV
@@ -18,6 +19,16 @@ import Data.List
 import Syntax.Common
 import Syntax.Term
 
+data SisoData = SisoData
+    { sisoLeft :: Value                     -- A : Type
+    , sisoRight :: Value                    -- B : Type
+    , sisoLR :: Value                       -- f : A -> B
+    , sisoRL :: Value                       -- g : B -> A
+    , sisoLI :: Value                       -- (a : A) -> g (f a) = a
+    , sisoRI :: Value                       -- (b : B) -> f (g b) = b
+    , sisoInv :: Integer -> Value -> Value  -- x = y | self -> y = x | inv self
+    }
+
 data D = Ld | Rd | Ud deriving (Eq, Show)
 type GlobMap = [D]
 data Value
@@ -30,6 +41,7 @@ data Value
     | Sidp Value -- Constructor for Id
     | Ne [(ITerm,ITerm)] ITerm
     | Swtype ITerm -- Wrapper for types
+    | Siso1 SisoData -- 1-constructor for Type_k
     | Siso Integer Value Value Value Value Value Value -- Higher constructor for Type_k
     -- | Scomp Value Value | Ssym Value
 type Ctx  = (M.Map String (Value,Value), [(Value,Value)])
@@ -75,6 +87,8 @@ isFreeVar k i (Sidp v) = isFreeVar k i v
 isFreeVar k i (Ne ts t) =
     any (\(l,r) -> elem k (freeLVars $ l i) || elem k (freeLVars $ r i)) ts || elem k (freeLVars $ t i)
 isFreeVar k i (Swtype t) = elem k $ freeLVars (t i)
+isFreeVar k i (Siso1 (SisoData a b c d e f _)) = isFreeVar k i a || isFreeVar k i b || isFreeVar k i c
+                                              || isFreeVar k i d || isFreeVar k i e || isFreeVar k i f
 isFreeVar k i (Siso _ a b c d e f) = isFreeVar k i a || isFreeVar k i b || isFreeVar k i c
                                   || isFreeVar k i d || isFreeVar k i e || isFreeVar k i f
 
@@ -84,7 +98,12 @@ cmpTypes i (Ssigma x a b) (Ssigma _ a' b') = cmpTypes i a a' && cmpTypes (i + 1)
 cmpTypes i (Sid t a b) (Sid t' a' b') = cmpTypes i t t' && cmpValues i a a' t && cmpValues i b b' t
 cmpTypes _ Snat Snat = True
 cmpTypes _ (Stype k) (Stype k') = k <= k'
+cmpTypes i s@(Siso1 (SisoData a b c d e f _)) s'@(Siso1 (SisoData a' b' c' d' e' f' _)) =
+    -- TODO: Fix this.
+    cmpTypes i a a' && cmpTypes i b b' && cmpValues i c c' (a `sarr` b) && cmpValues i d d' (b `sarr` a)
+    && reifySiso5 i s == reifySiso5 i s' && reifySiso6 i s == reifySiso6 i s'
 cmpTypes i s@(Siso n a b c d e f) s'@(Siso n' a' b' c' d' e' f') =
+    -- TODO: Fix this.
     n == n' && cmpTypes i a a' && cmpTypes i b b' && cmpValues i c c' (a `sarr` b) && cmpValues i d d' (b `sarr` a)
     && reifySiso5 i s == reifySiso5 i s' && reifySiso6 i s == reifySiso6 i s'
 cmpTypes l (Swtype t) (Swtype t') = t l == t' l
@@ -112,6 +131,7 @@ app n (Slam _ f) a = f n [] a
 app _ _ _ = error "Value.app"
 
 coe :: Value -> Value
+coe (Siso1 s) = sisoLR s
 coe (Siso _ _ _ f _ _ _) = f
 coe _ = error "coe"
 
@@ -133,13 +153,15 @@ reflect e t | App Idp _ <- e 0 = case t of
     _ -> error "reflect.Idp.Id"
 reflect e t | (n,Stype _) <- getBase t = case t of
     Stype _ -> Swtype e
+    Sid (Stype _) a b -> Siso1 $ SisoData a b
+        (reflect (\l -> App Coe (e l)) $ a `sarr` b)
+        (reflect (\l -> App Inv $ App Coe (e l)) $ b `sarr` a)
+        (error "TODO: reflect.Siso1.1")
+        (error "TODO: reflect.Siso1.2")
+        (error "TODO: reflect.Siso1.3")
     Sid _ a b -> Siso n a b
         (reflect (\l -> App (iterate (App Pmap . App Idp) Coe `genericIndex` (n - 1)) (e l)) $ go t n)
-        (reflect
-            (\l -> if n == 1
-                    then App Inv $ App Coe (e l)
-                    else App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) (e l)
-            ) $ goRev t n)
+        (reflect (\l -> App (iterate (App Pmap . App Idp) term `genericIndex` (n - 2)) (e l)) $ goRev t n)
         (error "TODO: reflect.Siso.1")
         (error "TODO: reflect.Siso.2")
     _ -> error "reflect.Stype"
@@ -196,26 +218,32 @@ reflect e t = Ne (sidToList t) e
 
 inv :: Integer -> Value -> Value
 inv 0 r@(Sidp _) = r
-inv 0 (Siso 1 a b f g p q) = Siso 1 b a g f q p
+inv n (Sidp x) = Sidp $ inv (n - 1) x
+inv _ (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
+inv n (Ne t e) = Ne (invList n t) (invTerm n e)
+  where
+    invTerm n e i = genericIndex (iterate (App Pmap . App Idp) Inv) n `App` e i
+    invList _ [] = error "inv.Ne.invList"
+    invList 0 ((a,b):t) = (b,a):t
+    invList n ((a,b):t) = (invTerm (n - 1) a, invTerm (n - 1) b) : invList (n - 1) t
+inv n (Spair a b) = Spair (inv n a) (inv n b)
+inv _ Szero = Szero
+inv _ s@(Ssuc _) = s
+inv 0 (Siso1 (SisoData a b f g p q i)) = Siso1 (SisoData b a g f q p i)
+{-
 inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
     (Slam xf $ \k m v -> inv 0 $ ef k m v) -- TODO: ???
     (Slam xg $ \k m v -> inv 0 $ eg k m v) -- TODO: ???
     (error "TODO: inv.Siso.1") (error "TODO: inv.Siso.2")
-inv 0 (Slam x f) = Slam x $ \k m v -> inv k $ f k m (inv k v)
-inv 0 (Ne ((l,r):t) e) = Ne ((r,l):t) (App Inv . e)
-inv 0 (Spair _ _) = error "TODO: inv.Spair"
-inv _ Szero = Szero
-inv _ s@(Ssuc _) = s
-inv 1 r@(Sidp (Sidp _)) = r
-inv 1 (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (1,k)
-inv 1 (Sidp (Ne [(a,b)] e)) = Sidp $ Ne [(b,a)] (App Inv . e)
-inv 1 (Ne [(l,r),(a,b)] e) = Ne [(App Inv . l, App Inv . r), (b,a)] (App Pmap . App (Idp `App` Inv) . e)
-inv n _ = error $ "TODO: inv: " ++ show n
+-}
+inv n (Siso1 _) = error $ "TODO: inv.Siso1: " ++ show n
+inv n (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (n,k)
+inv n _ = error $ "inv: " ++ show n
 
 invIdp :: Integer -> Value -> Value
 invIdp 0 x@(Sidp _) = Sidp x
 invIdp _ (Slam x f) = Slam x $ \k _ -> invIdp k
-invIdp 0 (Siso 1 a b f g p q) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
+invIdp 0 (Siso1 (SisoData a b f g p q _)) = Siso 2 b b q q (error "TODO: invIdp.Siso.1") (error "TODO: invIdp.Siso.2")
 invIdp 0 (Ne [(l,r)] e) = Ne [(\i -> Comp `App` App Inv (e i) `App` e i, App Idp . r), (r,r)] (App InvIdp . e)
 invIdp n _ = error $ "TODO: invIdp: " ++ show n
 
@@ -240,9 +268,7 @@ comp 1 (Ne [(l1,r1),(a,_)] e1) (Ne [(l2,r2),(_,b)] e2) =
 comp n _ _ = error $ "TODO: comp: " ++ show n
 
 idp :: Integer -> Value -> Value
-idp 0 v = action [Ud] v
-idp 1 v = invIdp 0 v
-idp n _ = error $ "TODO: idp: " ++ show n
+idp _ = action [Ud]
 
 idf :: Value
 idf = Slam "x" $ \_ _ -> id
@@ -253,14 +279,18 @@ action m (Slam x f) = Slam x (\k n -> f k (n ++ m))
 action m (Spair e1 e2) = Spair (action m e1) (action m e2) -- TODO: This is incorrect.
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
-action (Ud:m) t@(Spi _ _ _) = action m (Siso 1 t t idf idf idf idf)
-action (Ud:m) t@(Ssigma _ _ _) = action m (Siso 1 t t idf idf idf idf)
-action (Ud:m) Snat = action m (Siso 1 Snat Snat idf idf idf idf)
-action (Ud:m) t@(Sid _ _ _) = action m (Siso 1 t t idf idf idf idf)
-action (Ud:m) t@(Stype _) = action m (Siso 1 t t idf idf idf idf)
-action (Ud:m) t@(Swtype _) = action m (Siso 1 t t idf idf idf idf)
-action (Ld:m) (Siso 1 a _ _ _ _ _) = action m a
-action (Rd:m) (Siso 1 _ b _ _ _ _) = action m b
+action (Ud:m) t@(Spi _ _ _) = action m $ Siso1 $ SisoData t t idf idf idf idf (error "TODO: action.Spi")
+action (Ud:m) t@(Ssigma _ _ _) = action m $ Siso1 $ SisoData t t idf idf idf idf (error "TODO: action.Ssigma")
+action (Ud:m) Snat = action m $ Siso1 $ SisoData Snat Snat idf idf idf idf (error "TODO: action.Snat")
+action (Ud:m) t@(Sid _ _ _) = action m $ Siso1 $ SisoData t t idf idf idf idf (error "TODO: action.Sid")
+action (Ud:m) t@(Stype _) = action m $ Siso1 $ SisoData t t idf idf idf idf (error "TODO: action.Stype")
+action (Ud:m) t@(Swtype _) = action m $ Siso1 $ SisoData t t idf idf idf idf (error "TODO: action.Swtype")
+action (Ld:m) (Siso1 s) = action m (sisoLeft s)
+action (Rd:m) (Siso1 s) = action m (sisoRight s)
+action (Ud:m) (Siso1 (SisoData a b f g p q _)) = action m $ Siso 2 a b (action [Ud] f) (action [Ud] g)
+    (error "TODO: action.Siso1.1") (error "TODO: action.Siso1.2")
+action (Ld:m) (Siso 2 a _ _ _ _ _) = action m a
+action (Rd:m) (Siso 2 _ b _ _ _ _) = action m b
 action (Ud:m) (Siso n a b f g p q) = action m $ Siso (n + 1) a b (action [Ud] f) (action [Ud] g)
     (error "TODO: action.Siso.1") (error "TODO: action.Siso.2")
 action ( d:m) (Siso n a b f g p q) = action m $ Siso (n - 1) a b (action [ d] f) (action [ d] g)
@@ -304,8 +334,9 @@ reify _ (Spair _ _) t | (n, Ssigma _ _ _) <- getBase t = error $ "TODO: reify.Sp
 reify _ (Spair _ _) _ = error "reify.Spair"
 reify i (Swtype e) (Stype _) = e i
 reify _ (Swtype _) _ = error "reify.Swtype"
-reify i s@(Siso 1 a b c d _ _) (Sid (Stype _) _ _) = Iso `App` reifyType i a `App` reifyType i b
+reify i s@(Siso1 (SisoData a b c d _ _ _)) (Sid (Stype _) _ _) = Iso `App` reifyType i a `App` reifyType i b
     `App` reify i c (a `sarr` b) `App` reify i d (b `sarr` a) `App` reifySiso5 i s `App` reifySiso6 i s
+reify _ (Siso1 _) _ = error "reify.Siso1"
 reify _ (Siso n a b c d e f) _ = error $ "TODO: reify.Siso: " ++ show n
 reify _ (Szero) t | (n, Snat) <- getBase t = iterate (App Idp) (NatConst 0) `genericIndex` n
 reify _ (Szero) _ = error "reify.Szero"
@@ -333,8 +364,10 @@ reifyType i t = reify i t (Stype maxBound)
 
 reifySiso5 :: DBIndex -> Value -> Term
 reifySiso5 i (Siso _ a b c d e f) = reify i e $ Spi "x" a $ \_ _ v -> Sid b (app 0 d $ app 0 c v) v
+reifySiso5 i (Siso1 (SisoData a b c d e f _)) = reify i e $ Spi "x" a $ \_ _ v -> Sid b (app 0 d $ app 0 c v) v
 reifySiso5 _ _ = error "reifySiso5"
 
 reifySiso6 :: DBIndex -> Value -> Term
 reifySiso6 i (Siso _ a b c d e f) = reify i f $ Spi "x" b $ \_ _ v -> Sid a (app 0 c $ app 0 d v) v
+reifySiso6 i (Siso1 (SisoData a b c d e f _)) = reify i f $ Spi "x" b $ \_ _ v -> Sid a (app 0 c $ app 0 d v) v
 reifySiso6 _ _ = error "reifySiso6"

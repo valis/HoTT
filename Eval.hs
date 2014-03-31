@@ -57,14 +57,14 @@ eval 0 (ctx,lctx) (Pi ((vs,t):ts) e) = go ctx lctx vs
     go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Pi ts e)
     go ctx lctx [v] = Spi v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
     go ctx lctx (v:vs) = Spi v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
-eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso 1
+eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso1 $ SisoData
     (eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e')
     (eval 0 (M.map (action [Rd]) ctx, map (action [Rd]) lctx) e')
     (Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx -> app kx (action (mx ++ mf) $ coe $ eval 1 (ctx,lctx) $ Pi ts e) $
                              app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) t) vx)
     (Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx -> app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) $ Pi ts e) $
                              app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ eval 1 (ctx,lctx) t) vx)
-    (error "TODO: eval.Pi.Siso.1") (error "TODO: eval.Pi.Siso.2")
+    (error "TODO: eval.Pi.Siso.1") (error "TODO: eval.Pi.Siso.2") (error "TODO: eval.Pi.Siso.3")
 eval n _ (Pi _ _) = error $ "TODO: eval.Pi: " ++ show n
 eval n ctx (Sigma [] e) = eval n ctx e
 eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
@@ -92,12 +92,14 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
     genConst k = Ssuc $ genConst (k - 1)
 eval n ctx (Typed e _) = eval n ctx e
 eval 0 _ Nat = Snat
+eval 1 _ Nat = Siso1 $ SisoData Snat Snat idf idf idf idf (error "TODO: eval.Nat")
 eval n _ Nat = Siso n Snat Snat idf idf idf idf
 eval 0 _ (Universe u) = Stype u
+eval 1 _ (Universe u) = Siso1 $ SisoData (Stype u) (Stype u) idf idf idf idf (error "TODO: eval.Universe")
 eval n _ (Universe u) = Siso n (Stype u) (Stype u) idf idf idf idf
 eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
-eval 1 (ctx,lctx) e@(Id t a b) = Siso 1 (eval 0 (ctxl,lctxl) e) (eval 0 (ctxr,lctxr) e)
-    (Slam "p" lr) (Slam "p" rl) (error "TODO: eval.Id.Iso.1") (error "TODO: eval.Id.Iso.2")
+eval 1 (ctx,lctx) e@(Id t a b) = Siso1 $ SisoData (eval 0 (ctxl,lctxl) e) (eval 0 (ctxr,lctxr) e)
+    (Slam "p" lr) (Slam "p" rl) (error "TODO: eval.Id.Iso.1") (error "TODO: eval.Id.Iso.2") (error "TODO: eval.Id.Iso.3")
   where
     lr k m v = comp k (action m $ inv 0 ap) $
                comp k (pmap k (action (Ud:m) $ coe tp) v)
