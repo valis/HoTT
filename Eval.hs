@@ -16,6 +16,7 @@ eval :: Integer -> CtxV -> Term -> Value
 --   : iso A1 B (\a -> f (coe (inv p) a)) (\b -> coe (inv p) (g b)) = iso A2 B (f : A2 -> B) (g : B -> A2)
 -- pmap (\A -> idp (iso A A (\x -> x) (\x -> x))) (p : A1 = A2)
 --   : iso A2 A2 (\x -> coe p (coe (inv p) x)) (\x -> coe p (coe (inv p) x)) = iso A2 A2 (\x -> x) (\x -> x)
+{-
 eval _ _ Iso = Slam "A" $ \_  _  va ->
                Slam "B" $ \_  mb vb ->
                Slam "f" $ \_  mf vf ->
@@ -24,6 +25,7 @@ eval _ _ Iso = Slam "A" $ \_  _  va ->
                Slam "q" $ \kq mq vq ->
     Siso kq (error "TODO: eval.Iso.1") (error "TODO: eval.Iso.2") (error "TODO: eval.Iso.3")
             (error "TODO: eval.Iso.4") (error "TODO: eval.Iso.5") (error "TODO: eval.Iso.6")
+-}
 eval _ _ Comp = Slam "p" $ \_ _ p -> Slam "q" $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" $ \k _ -> inv k
 eval _ _ InvIdp = Slam "p" $ \k _ -> invIdp k
@@ -51,12 +53,13 @@ eval n ctx (Lam args e) = go n ctx args
     go n ctx []     = eval n ctx e
     go n (ctx,lctx) s@(a:as) = Slam a $ \k m v -> go k (M.map (action m) ctx, v : map (action m) lctx) as
 eval n ctx (Pi [] e) = eval n ctx e
-eval 0 (ctx,lctx) (Pi ((vs,t):ts) e) = go ctx lctx vs
+eval n (ctx,lctx) (Pi ((vs,t):ts) e) = go ctx lctx vs
   where
-    tv = eval 0 (ctx,lctx) t
-    go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Pi ts e)
-    go ctx lctx [v] = Spi v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
-    go ctx lctx (v:vs) = Spi v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
+    tv = eval n (ctx,lctx) t
+    go ctx lctx [] = sarr n tv $ eval n (ctx,lctx) (Pi ts e)
+    go ctx lctx [v] = Spi n v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Pi ts e)
+    go ctx lctx (v:vs) = Spi n v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
+{-
 eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso1 $ SisoData
     { sisoLeft = eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e'
     , sisoRight = eval 0 (M.map (action [Rd]) ctx, map (action [Rd]) lctx) e'
@@ -71,15 +74,14 @@ eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso1 $ SisoData
     , sisoInv = error "TODO: eval.Pi.Siso.Inv"
     , sisoOver = error "TODO: eval.Pi.Siso.Over"
     }
-eval n _ (Pi _ _) = error $ "TODO: eval.Pi: " ++ show n
+-}
 eval n ctx (Sigma [] e) = eval n ctx e
-eval 0 (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
+eval n (ctx,lctx) (Sigma ((vs,t):ts) e) = go ctx lctx vs
   where
-    tv = eval 0 (ctx,lctx) t
-    go ctx lctx [] = tv `sarr` eval 0 (ctx,lctx) (Sigma ts e)
-    go ctx lctx [v] = Ssigma v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
-    go ctx lctx (v:vs) = Ssigma v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
-eval n _ (Sigma _ _) = error $ "TODO: eval.Sigma: " ++ show n
+    tv = eval n (ctx,lctx) t
+    go ctx lctx [] = sprod n tv $ eval n (ctx,lctx) (Sigma ts e)
+    go ctx lctx [v] = Ssigma n v tv $ \k m a -> eval k (M.map (action m) ctx, a : map (action m) lctx) (Sigma ts e)
+    go ctx lctx (v:vs) = Ssigma n v tv $ \k m a -> go (M.map (action m) ctx) (a : map (action m) lctx) vs
 eval n ctx (App e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
@@ -99,7 +101,8 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
 eval n ctx (Typed e _) = eval n ctx e
 eval n _ Nat = action (genericReplicate n Ud) Snat
 eval n _ (Universe u) = action (genericReplicate n Ud) (Stype u)
-eval 0 ctx (Id t a b) = Sid (eval 0 ctx t) (eval 0 ctx a) (eval 0 ctx b)
+eval n ctx (Id t a b) = Sid n (eval n ctx t) (eval n ctx a) (eval n ctx b)
+{-
 eval 1 (ctx,lctx) e@(Id t a b) = Siso1 $ SisoData
     { sisoLeft = eval 0 (ctxl,lctxl) e
     , sisoRight = eval 0 (ctxr,lctxr) e
@@ -147,7 +150,7 @@ eval 1 (ctx,lctx) e@(Id t a b) = Siso1 $ SisoData
     -- = coe (inv (eval 1 ctx t); eval 1 ctx t) b1
     -- < pmap 0 (idp $ \p -> coe p b1) (invIdp 0 $ eval 1 ctx t) >
     -- = b1
-eval n _ (Id _ _ _) = error $ "TODO: eval.Id: " ++ show n
+-}
 
 rec :: Integer -> Value -> Value -> Value -> Value -> Value
 rec 0 p z s = go
@@ -155,9 +158,10 @@ rec 0 p z s = go
     go Szero = z
     go (Ssuc x) = app 0 (app 0 s x) (go x)
     go t@(Ne [] e) =
-        let r l = Rec `App` reify l p (Snat `sarr` Stype maxBound)
+        let r l = Rec `App` reify l p (sarr 0 Snat $ Stype maxBound)
                       `App` reify l z (app 0 p Szero)
-                      `App` reify l s (Spi "x" Snat $ \k m x -> app k (action m p) x `sarr` app k (action m p) (Ssuc x))
+                      `App` reify l s (Spi 0 "x" Snat $ \k m x ->
+                            sarr 0 (app k (action m p) x) $ app k (action m p) (Ssuc x))
                       `App` e l
         in reflect r (app 0 p t)
     go _ = error "rec.0"
@@ -172,14 +176,14 @@ rec 1 p z s = go
     go (Sidp (Ne [] e)) = go $ Ne [(e,e)] (App Idp . e)
     go x@(Ne [(el,er)] e) =
         let r l = Pmap `App` (Pmap `App` (Pmap `App` (Pmap `App` (Idp `App` Rec)
-                `App` reify l p (Sid (Snat `sarr` Stype Omega) (action [Ld] p) (action [Rd] p)))
+                `App` reify l p (Sid 0 (sarr 0 Snat $ Stype Omega) (action [Ld] p) (action [Rd] p)))
                 `App` reify l z
-                    (Sid (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
+                    (Sid 0 (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
                 `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
                        in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
                         $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
                 `App` e l
-        in reflect r $ Sid (app 0 (action [Rd] p) $ Ne [] er)
+        in reflect r $ Sid 0 (app 0 (action [Rd] p) $ Ne [] er)
             (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
             (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))
     go _ = error "rec.1"
