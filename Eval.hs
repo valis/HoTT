@@ -30,7 +30,7 @@ eval _ _ Comp = Slam "p" $ \_ _ p -> Slam "q" $ \k m -> comp k (action m p)
 eval _ _ Inv = Slam "p" $ \k _ -> inv k
 eval _ _ InvIdp = Slam "p" $ \k _ -> invIdp k
 eval _ _ Idp = Slam "x" $ \k _ -> idp k
-eval _ _ Coe = Slam "p" $ \_ _ -> coe
+eval _ _ Coe = Slam "p" $ \k _ -> coe k
 -- pmap : {f g : (a : A) -> B a} -> f = g -> (p : a = a') -> transport B p (f a) = g a'
 eval _ _ Pmap = Slam "p" $ \_ _ p -> Slam "q" $ \k _ -> pmap k p
 -- ext : ((x : A) -> f x = g x) -> f = g
@@ -184,7 +184,7 @@ rec 1 p z s = go
                         $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
                 `App` e l
         in reflect r $ Sid 0 (app 0 (action [Rd] p) $ Ne [] er)
-            (app 0 (coe $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
+            (app 0 (coe 0 $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))
             (rec 0 (action [Rd] p) (action [Rd] z) (action [Rd] s) (Ne [] er))
     go _ = error "rec.1"
 rec n _ _ _ = error $ "TODO: rec: " ++ show n

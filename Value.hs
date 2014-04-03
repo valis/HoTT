@@ -45,8 +45,8 @@ data Value
     -- | SidOver Value Value ITerm
     | Sidp Value -- Constructor for Id
     | Ne [(ITerm,ITerm)] ITerm
+    | Swtype [(Value,Value)] ITerm -- Wrapper for types
     {-
-    | Swtype ITerm -- Wrapper for types
     | Siso1 SisoData -- 1-constructor for Type_k
     | Siso Integer Value Value Value Value Value Value -- Higher constructor for Type_k
     -}
@@ -97,8 +97,8 @@ isFreeVar k i (Sid _ t a b) = isFreeVar k i t || isFreeVar k i a || isFreeVar k 
 isFreeVar k i (Sidp v) = isFreeVar k i v
 isFreeVar k i (Ne ts t) =
     any (\(l,r) -> elem k (freeLVars $ l i) || elem k (freeLVars $ r i)) ts || elem k (freeLVars $ t i)
+isFreeVar k i (Swtype ts t) = any (\(l,r) -> isFreeVar k i l || isFreeVar k i r) ts || elem k (freeLVars $ t i)
 {-
-isFreeVar k i (Swtype t) = elem k $ freeLVars (t i)
 isFreeVar k i (Siso1 s) = isFreeVar k i (sisoLeft s) || isFreeVar k i (sisoRight s) || isFreeVar k i (sisoLR s)
                        || isFreeVar k i (sisoRL s)   || isFreeVar k i (sisoLI s)    || isFreeVar k i (sisoRI s)
 isFreeVar k i (Siso _ a b c d e f) = isFreeVar k i a || isFreeVar k i b || isFreeVar k i c
@@ -123,8 +123,8 @@ cmpTypes i s@(Siso n a b c d e f) s'@(Siso n' a' b' c' d' e' f') =
     -- TODO: Fix this.
     n == n' && cmpTypes i a a' && cmpTypes i b b' && cmpValues i c c' (a `sarr` b) && cmpValues i d d' (b `sarr` a)
     && reifySiso5 i s == reifySiso5 i s' && reifySiso6 i s == reifySiso6 i s'
-cmpTypes l (Swtype t) (Swtype t') = t l == t' l
 -}
+cmpTypes l (Swtype _ t) (Swtype _ t') = t l == t' l
 cmpTypes _ _ _ = False
 
 cmpValues :: DBIndex -> Value -> Value -> Value -> Bool
@@ -148,19 +148,38 @@ app :: Integer -> Value -> Value -> Value
 app n (Slam _ f) a = f n [] a
 app _ _ _ = error "Value.app"
 
-coe :: Value -> Value
+fibrLifting :: Integer -> Value -> Value -> Value
+fibrLifting n _ _ = error $ "TODO: fibrLifting: " ++ show n
+
+opfibrLifting :: Integer -> Value -> Value -> Value
+opfibrLifting n _ _ = error $ "TODO: opfibrLifting: " ++ show n
+
+coe :: Integer -> Value -> Value
 {-
 coe (Siso1 s) = sisoLR s
 coe (Siso _ _ _ f _ _ _) = f
 -}
-coe (Ne _ e) = Ne [] (App Coe . e)
-coe _ = error "coe"
+coe n (Spi _ _ a b) = Slam "f" $ \_ m' f -> Slam "x" $ \k m x ->
+    app k (coe k $ b k m $ fibrLifting k (action m a) x) $ app k (action m f) $ app k (action m $ coe n $ inv n a) x
+coe n (Ssigma _ _ a b) = Slam "p" $ \k m p -> Spair (app k (action m $ coe n a) $ proj1 p) $
+    app k (coe k $ b k m $ opfibrLifting k (action m a) $ proj1 p) (proj2 p)
+coe n (Sid k t a b) = error $ "TODO: coe.Sid: " ++ show (n,k)
+coe _ Snat = idf
+coe _ (Stype _) = idf
+coe 0 (Sidp _) = idf
+coe n (Sidp t) = action [Ud] $ coe (n - 1) t
+coe n (Swtype l e) = reflect (App (iterate (App Pmap . App Idp) Coe `genericIndex` n) . e) (go n l)
+  where
+    go 0 [(a,b)] = sarr 0 a b
+    go n ((a,b):t) = Sid 0 (go (n - 1) t) (coe (n - 1) a) (coe (n - 1) b)
+    go n _ = error $ "coe.Swtype: " ++ show n
+coe _ _ = error "coe"
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
 
 trans :: Integer -> Value -> Value -> Value -> Value
-trans n b p = app n (coe $ pmap n (idp n b) p)
+trans n b p = app n (coe n $ pmap n (idp n b) p)
 
 getBase :: Value -> (Integer,Value)
 getBase (Sid 0 t _ _) = let (n,r) = getBase t in (n + 1, r)
@@ -172,8 +191,10 @@ reflect e t | App Idp _ <- e 0 = case t of
         App Idp e -> e
         _ -> error "reflect.Idp"
     _ -> error "reflect.Idp.Id"
-reflect e t | (n,Stype _) <- getBase t = case t of
-    Stype _ -> Ne [] e
+reflect e t | (n,Stype _) <- getBase t = Swtype (go t) e
+  where
+    go (Sid _ t a b) = (a,b) : go t
+    go _ = []
 {-
     Sid (Stype _) a b -> Siso1 $ SisoData
         { sisoLeft = a
@@ -256,6 +277,12 @@ inv n (Ne t e) = Ne (invList n t) (invTerm n e)
 inv n (Spair a b) = Spair (inv n a) (inv n b)
 inv _ Szero = Szero
 inv _ s@(Ssuc _) = s
+inv n (Spi k _ a b) = error $ "TODO: inv.Spi: " ++ show (n,k)
+inv n (Ssigma k _ a b) = error $ "TODO: inv.Ssigma: " ++ show (n,k)
+inv n (Sid k _ a b) = error $ "TODO: inv.Sid: " ++ show (n,k)
+inv n Snat = error $ "TODO: inv.Snat: " ++ show n
+inv n (Stype _) = error $ "TODO: inv.Stype: " ++ show n
+inv n (Swtype _ _) = error $ "TODO: inv.Swtype: " ++ show n
 {-
 inv 0 (Siso1 s) = Siso1 $ s -- TODO: Fix this.
     { sisoLeft = sisoRight s
@@ -272,7 +299,6 @@ inv 0 (Siso k a b (Slam xf ef) (Slam xg eg) p q) = Siso k a b
 inv n (Siso1 _) = error $ "TODO: inv.Siso1: " ++ show n
 inv n (Siso k _ _ _ _ _ _) = error $ "TODO: inv.Siso: " ++ show (n,k)
 -}
-inv n _ = error $ "inv: " ++ show n
 
 invIdp :: Integer -> Value -> Value
 invIdp 0 x@(Sidp _) = Sidp x
@@ -327,8 +353,8 @@ action m t@(Ssigma _ _ _ _) = actionType m t
 action m Snat = actionType m Snat
 action m t@(Sid _ _ _ _) = actionType m t
 action m t@(Stype _) = actionType m t
+action m t@(Swtype _ _) = actionType m t
 {-
-action m t@(Swtype _) = actionType m t
 action m t@(Siso1 _) = actionType m t
 action m t@(Siso _ _ _ _ _ _ _) = actionType m t
 -}
@@ -341,6 +367,9 @@ actionType m (Ssigma n x a b) = Ssigma (n + lengthD m) x (action m a) (\k m' -> 
 actionType m (Sid n t a b)    = Sid    (n + lengthD m) t (action m a) (action m b)
 actionType _ Snat             = Snat
 actionType _ t@(Stype _)      = t
+actionType (Ld:m) (Swtype ((a,_):_) _) = action m a
+actionType (Rd:m) (Swtype ((_,b):_) _) = action m b
+actionType (Ud:m) t@(Swtype _ _) = action m (Sidp t)
 {-
 actionType (Ld:m) (Siso1 s) = action m (sisoLeft s)
 actionType (Rd:m) (Siso1 s) = action m (sisoRight s)
@@ -388,9 +417,9 @@ reify i (Spair e1 e2) (Sid 0 t@(Ssigma 0 _ a b) p q) = ExtSigma (reify i p t) (r
          (reify i e2 $ Sid 0 (b 0 [] $ action [Rd] e1) (action [Ld] e1) (action [Rd] e2))
 reify _ (Spair _ _) t | (n, Ssigma 0 _ _ _) <- getBase t = error $ "TODO: reify.Spair: " ++ show n
 reify _ (Spair _ _) _ = error "reify.Spair"
+reify i (Swtype _ e) (Stype _) = e i
+reify _ (Swtype _ _) _ = error "reify.Swtype"
 {-
-reify i (Swtype e) (Stype _) = e i
-reify _ (Swtype _) _ = error "reify.Swtype"
 reify i (Siso1 s@SisoData{ sisoLeft = a, sisoRight = b }) (Sid (Stype _) _ _) =
     Iso `App` reifyType i a `App` reifyType i b `App` reify i (sisoLR s) (a `sarr` b) `App`
     reify i (sisoRL s) (b `sarr` a) `App` reifySiso5 i (Siso1 s) `App` reifySiso6 i (Siso1 s)
