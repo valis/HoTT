@@ -60,31 +60,88 @@ processDefs (DefType _ t : Def (PIdent (_,name)) args e : defs) = (name,Just t,a
 processDefs (Def (PIdent (_,name)) args e : defs) = (name,Nothing,args,e) : processDefs defs
 processDefs _ = error "processDefs"
 
+evalRawTCM :: Expr -> Maybe Value -> TCM Value
+evalRawTCM e ty = do
+    (i,_,mctx,ctx) <- ask
+    return $ eval 0 (ctxToCtxV ctx) (rawExprToTerm i mctx ctx e ty)
+
 typeOf'depType :: [TypedVar] -> Expr -> TCM Value
 typeOf'depType [] e = typeOf e
+typeOf'depType (TypedVar _ vars t1 : list) e | Id (Implicit (PIdent (_,x1))) (Explicit e2) <- dropParens t1 = do
+    t <- typeOf e2
+    r <- case exprToVars vars of
+        Right l -> do
+            t1' <- evalRawTCM t1 Nothing
+            let upd i c mctx (ctx,lctx) = (i + 1, x1 : c, M.insert x1 i mctx, (ctx, (svar i t, t) : lctx))
+            local upd (updateCtx t1' l)
+        Left lc -> errorTCM $ emsgLC lc "Expected identifier" enull
+    local (\_ _ _ _ -> r) $ do
+        ev <- typeOf (Pi list e)
+        (i,_,_,ctx) <- ask
+        let te = reifyType i t
+        maxType t1 (Pi list e) (typeOfTerm i ctx te) ev
+typeOf'depType (TypedVar _ vars t1 : list) e | Id (Explicit e1) (Implicit (PIdent (_,x2))) <- dropParens t1 = do
+    t <- typeOf e1
+    r <- case exprToVars vars of
+        Right l -> do
+            t1' <- evalRawTCM t1 Nothing
+            let upd i c mctx (ctx,lctx) = (i + 1, x2 : c, M.insert x2 i mctx, (ctx, (svar i t, t) : lctx))
+            local upd (updateCtx t1' l)
+        Left lc -> errorTCM $ emsgLC lc "Expected identifier" enull
+    local (\_ _ _ _ -> r) $ do
+        ev <- typeOf (Pi list e)
+        (i,_,_,ctx) <- ask
+        let te = reifyType i t
+        maxType t1 (Pi list e) (typeOfTerm i ctx te) ev
+typeOf'depType (TypedVar _ vars t1 : list) e | Over t2 t <- dropParens t1, Id a b <- dropParens t2 = do
+    tv <- typeOf t
+    t1'@(Sid _ t' _ _) <- evalRawTCM t1 Nothing
+    r <- case (exprToVars vars, a, b) of
+        (Right l, Implicit (PIdent (_,x1)), Implicit (PIdent (_,x2))) ->
+            let updMctx i = M.insert x2 (i + 1) . M.insert x1 i
+                updLCtx i lctx = (svar (i + 1) t', t') : (svar i t', t') : lctx
+                upd i c mctx (gctx,lctx) = (i + 2, x2:x1:c, updMctx i mctx, (gctx, updLCtx i lctx))
+            in local upd (updateCtx t1' l)
+        (Right l, Implicit (PIdent (_,x1)), Explicit e2) -> do
+            typeOfH e2 (T t')
+            let upd i c mctx (gctx,lctx) = (i + 1, x1:c, M.insert x1 i mctx, (gctx, (svar i t', t') : lctx))
+            local upd (updateCtx t1' l)
+        (Right l, Explicit e1, Implicit (PIdent (_,x2))) -> do
+            typeOfH e1 (T t')
+            let upd i c mctx (gctx,lctx) = (i + 1, x2:c, M.insert x2 i mctx, (gctx, (svar i t', t') : lctx))
+            local upd (updateCtx t1' l)
+        (Right l, Explicit e1, Explicit e2) -> do
+            typeOfH e1 (T t')
+            typeOfH e2 (T t')
+            updateCtx t1' l
+        (Left lc, _, _) -> errorTCM $ emsgLC lc "Expected identifier" enull
+    local (\_ _ _ _ -> r) $ do
+        ev <- typeOf (Pi list e)
+        maxType t1 (Pi list e) tv ev
 typeOf'depType (TypedVar _ vars t : list) e = do
     tv <- typeOf t
     cmpTypesErr (Stype $ pred maxBound) tv t
-    (i,_,mctx,ctx) <- ask
     r <- case exprToVars vars of
-        Just l -> updateCtx (evalRaw i mctx ctx t Nothing) l
-        Nothing -> errorTCM $ emsgLC (getPos e) "Expected identifier" enull
+        Right l -> do
+            t' <- evalRawTCM t Nothing
+            updateCtx t' l
+        Left lc -> errorTCM $ emsgLC lc "Expected identifier" enull
     local (\_ _ _ _ -> r) $ do
         ev <- typeOf (Pi list e)
         maxType t (Pi list e) tv ev
+
+updateCtx _ [] = ask
+updateCtx tv (NoArg _ : as) =
+    local (\i c mctx (gctx,lctx) -> (i + 1, "_" : c, mctx, (gctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+updateCtx tv (Arg (PIdent (_,x)) : as) =
+    local (\i c mctx (gctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (gctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+
+exprToVars :: Expr -> Either (Int,Int) [Arg]
+exprToVars = fmap reverse . go
   where
-    updateCtx _ [] = ask
-    updateCtx tv (NoArg _ : as) =
-        local (\i c mctx (ctx,lctx) -> (i + 1, "_" : c, mctx, (ctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
-    updateCtx tv (Arg (PIdent (_,x)) : as) =
-        local (\i c mctx (ctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (ctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
-    
-    exprToVars :: Expr -> Maybe [Arg]
-    exprToVars = fmap reverse . go
-      where
-        go (Var a) = Just [a]
-        go (App as (Var a)) = fmap (a :) (go as)
-        go _ = Nothing
+    go (Var a) = Right [a]
+    go (App as (Var a)) = fmap (a :) (go as)
+    go e = Left (getPos e)
 
 data H = P Expr Value Value Value | T Value | N
 
@@ -109,7 +166,7 @@ typeOfH e1@(Lam (PLam (lc,_)) (x:xs) e) (P _ ty a b) = do
     let p = if null xs then getPos e else binderGetPos (head xs)
         e' = Lam (PLam (p,"\\")) xs e
         x' = unBinder x
-    s <- local (\i c mctx (ctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (ctx, (svar i ty,ty) : lctx))) (typeOf e')
+    s <- local (\i c mctx (gctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (gctx, (svar i ty,ty) : lctx))) (typeOf e')
     (i,_,mctx,ctx) <- ask
     if isFreeVar 0 (i + 1) s
         then inferErrorMsg lc "lambda expression"
@@ -117,8 +174,7 @@ typeOfH e1@(Lam (PLam (lc,_)) (x:xs) e) (P _ ty a b) = do
              in return $ Sid 0 s (app 0 v1 a) (app 0 v1 b)
 typeOfH e1 (P e2 act a b) = do
     t1 <- typeOf e1
-    (i,_,mctx,ctx) <- ask
-    let v1 = evalRaw i mctx ctx e1 Nothing
+    v1 <- evalRawTCM e1 Nothing
     typeOfPmap t1 v1 v1 (Sid 0 act a b) e1 e2
 
 typeOfH (Lam _ (x:xs) e) (T r@(Spi 0 z a b)) = do
@@ -126,7 +182,7 @@ typeOfH (Lam _ (x:xs) e) (T r@(Spi 0 z a b)) = do
     let p = if null xs then getPos e else binderGetPos (head xs)
         v = svar i a
         x' = unBinder x
-    local (\i c mctx (ctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (ctx, (v,a) : lctx))) $
+    local (\i c mctx (gctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (gctx, (v,a) : lctx))) $
         typeOfH (Lam (PLam (p,"\\")) xs e) $ T (b 0 [] v)
     return r
 typeOfH (Lam _ (Binder arg : _) _) (T ty) = do
@@ -151,9 +207,8 @@ typeOfH e@(Coe (PCoe (lc,_))) (T ty@(Spi 0 v a@(Sid 0 (Stype _) x y) b)) = do
         _ -> coeErrorMsg lc ty
 typeOfH (Coe (PCoe (lc,_))) (T ty) = coeErrorMsg lc ty
 typeOfH ea@(App e1 e) (T exp@(Sid 0 t a b)) | Idp _ <- dropParens e1 = do
-    (i,_,mctx,ctx) <- ask
     typeOfH e (T t)
-    let e' = evalRaw i mctx ctx e (Just t)
+    e' <- evalRawTCM e (Just t)
     cmpTypesErr exp (Sid 0 t e' e') ea
     return exp
 typeOfH (App e1 _) (T exp) | Idp (PIdp (lc,_)) <- dropParens e1 = do
@@ -232,9 +287,9 @@ typeOfH (App e1 e) (T exp) | Inv (PInv (lc,_)) <- dropParens e1 = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC lc "" $ expType i c (-1) exp $$ etext "But term inv _ has Id type"
 typeOfH (Pair e1 e2) (T r@(Ssigma 0 _ a b)) = do
-    (i,_,mctx,ctx) <- ask
     typeOfH e1 (T a)
-    typeOfH e2 $ T $ b 0 [] $ evalRaw i mctx ctx e1 (Just a)
+    e1' <- evalRawTCM e1 (Just a)
+    typeOfH e2 $ T (b 0 [] e1')
     return r
 typeOfH e@(Pair _ _) (T exp) = do
     (i,c,_,_) <- ask
@@ -291,8 +346,7 @@ typeOfH (Idp (PIdp (lc,_))) N = inferErrorMsg lc "idp"
 typeOfH (Coe (PCoe (lc,_))) N = inferErrorMsg lc "coe"
 typeOfH (App e1 e) N | Idp _ <- dropParens e1 = do
     t <- typeOf e
-    (i,_,mctx,ctx) <- ask
-    let v = evalRaw i mctx ctx e (Just t)
+    v <- evalRawTCM e (Just t)
     return (Sid 0 t v v)
 typeOfH (Pmap (Ppmap (lc,_))) N = inferErrorMsg lc "pmap"
 typeOfH (Ext (PExt (lc,_))) N = inferErrorMsg lc "ext"
@@ -306,9 +360,7 @@ typeOfH (App e1 e) N | Proj1 _ <- dropParens e1 = do
 typeOfH (App e1 e) N | Proj2 (PProjr p) <- dropParens e1 = do
     t <- typeOf e
     case t of
-        Ssigma 0 _ a b -> do
-            (i,_,mctx,ctx) <- ask
-            return $ b 0 [] $ evalRaw i mctx ctx (App (Proj1 $ PProjl p) e) (Just a)
+        Ssigma 0 _ a b -> fmap (b 0 []) $ evalRawTCM (App (Proj1 $ PProjl p) e) (Just a)
         _ -> expTypeBut "Sigma" e t
 typeOfH (App e1 _) N | Pmap (Ppmap (lc,_)) <- dropParens e1 = inferErrorMsg lc "ext"
 -- pmap (idp e1) e2
@@ -342,8 +394,7 @@ typeOfH (App e1 e) N | InvIdp _ <- dropParens e1 = do
     t <- typeOf e
     case t of
         Sid 0 _ _ _ -> do
-            (i,_,mctx,ctx) <- ask
-            let e' = evalRaw i mctx ctx e Nothing
+            e' <- evalRawTCM e Nothing
             return $ Sid 0 (Sid 0 t e' e') (comp 0 (inv 0 e') e') (idp 0 e')
         _ -> expTypeBut "Id" e t
 typeOfH (App e1' e2) N | App e3 e1 <- dropParens e1', Comp (PComp (lc,_)) <- dropParens e3 = do
@@ -379,13 +430,21 @@ typeOfH (Id (Explicit a) (Explicit b)) N = do
     return $ typeOfTerm i ctx (reifyType i a')
 typeOfH (Over t1 t) N | Id a b <- dropParens t1 = do
     r <- typeOf t
-    (i,_,mctx,ctx) <- ask
-    let tv = evalRaw i mctx ctx t Nothing
-        f c = case c of
-            Implicit _ -> return tv
-            Explicit e -> typeOfH e (T tv)
-    a' <- f a
-    b' <- f b
+    tv <- evalRawTCM t Nothing
+    case (a,b) of
+        (Implicit _, Implicit _) -> return ()
+        (Implicit (PIdent (_,x1)), Explicit e2) -> do
+            let upd i c mctx (gctx,lctx) = (i + 1, x1 : c, M.insert x1 i mctx, (gctx, (svar i tv, tv) : lctx))
+            local upd $ typeOfH e2 (T tv)
+            return ()
+        (Explicit e1, Implicit (PIdent (_,x2))) -> do
+            let upd i c mctx (gctx,lctx) = (i + 1, x2 : c, M.insert x2 i mctx, (gctx, (svar i tv, tv) : lctx))
+            local upd $ typeOfH e1 (T tv)
+            return ()
+        (Explicit e1, Explicit e2) -> do
+            typeOfH e1 (T tv)
+            typeOfH e2 (T tv)
+            return ()
     return r
 typeOfH (Over t _) N = errorTCM $ emsgLC (getPos t) "Expected term of the form _ = _" enull
 typeOfH (Nat _) N = return $ Stype (Finite 0)
@@ -395,13 +454,13 @@ typeOfH (App e1 e2) N = do
     case t1 of
         Spi 0 _ a b -> do
             typeOfH e2 (T a)
-            (i,_,mctx,ctx) <- ask
-            return $ b 0 [] $ evalRaw i mctx ctx e2 (Just a)
+            e2' <- evalRawTCM e2 (Just a)
+            return (b 0 [] e2')
         _ -> expTypeBut "pi" e1 t1
 typeOfH (Var (NoArg (Pus (lc,_)))) N = errorTCM $ emsgLC lc "Expected identifier" enull
 typeOfH (Var (Arg (PIdent (lc,x)))) N = do
-    (i,_,mctx,(ctx,lctx)) <- ask
-    case (M.lookup x mctx, M.lookup x ctx) of
+    (i,_,mctx,(gctx,lctx)) <- ask
+    case (M.lookup x mctx, M.lookup x gctx) of
         (Nothing, Nothing) -> errorTCM $ emsgLC lc ("Unknown identifier " ++ x) enull
         (Nothing, Just (_,t)) -> return t
         (Just l, _) -> return $ snd $ lctx `genericIndex` (i - l - 1)
@@ -413,8 +472,8 @@ typeOfH (Rec _) N = return $ eval 0 (M.empty,[]) $ T.Pi [(["P"], T.Pi [([],T.Nat
   where iht = T.Pi [(["x"],T.Nat)] $ T.Pi [([], T.App (T.LVar 1) (T.LVar 0))] $ T.App (T.LVar 1) $ T.App T.Suc (T.LVar 0)
 typeOfH (Typed e t) N = do
     typeOfH t $ T (Stype maxBound)
-    (i,_,mctx,ctx) <- ask
-    typeOfH e $ T $ evalRaw i mctx ctx t $ Just (Stype maxBound)
+    t' <- evalRawTCM t $ Just (Stype maxBound)
+    typeOfH e (T t')
 typeOfH (Iso _) N =
     let term = T.Pi [(["A"],T.Universe $ pred $ pred maxBound)] $
                T.Pi [(["B"],T.Universe $ pred $ pred maxBound)] $
@@ -446,16 +505,16 @@ isArr i t f =
 
 evalDecl :: String -> Expr -> Maybe Expr -> TCM (M.Map String T.DBIndex, Ctx, Value, Value)
 evalDecl name expr mty = do
-    (i,_,mctx,actx@(ctx,lctx)) <- ask
+    (i,_,mctx,ctx@(gctx,lctx)) <- ask
     tv <- case mty of
         Nothing -> typeOf expr
         Just ty -> do
             typeOfH ty $ T $ Stype (pred maxBound)
-            let tv = evalRaw i mctx actx ty $ Just $ Stype (pred maxBound)
+            let tv = evalRaw i mctx ctx ty $ Just $ Stype (pred maxBound)
             typeOfH expr (T tv)
             return tv
-    let ev = evalRaw i mctx actx expr (Just tv)
-    return (M.delete name mctx, (M.insert name (ev,tv) ctx, lctx), ev, tv)
+    let ev = evalRaw i mctx ctx expr (Just tv)
+    return (M.delete name mctx, (M.insert name (ev,tv) gctx, lctx), ev, tv)
 
 eprettyType :: T.DBIndex -> [String] -> Value -> EDoc
 eprettyType i c t = epretty c $ T.simplify (reifyType i t)
