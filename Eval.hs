@@ -101,7 +101,7 @@ eval n _ (NatConst c) = action (genericReplicate n Ud) (genConst c)
 eval n ctx (Typed e _) = eval n ctx e
 eval n _ Nat = action (genericReplicate n Ud) Snat
 eval n _ (Universe u) = action (genericReplicate n Ud) (Stype u)
-eval n ctx (Id t a b) = Sid n (eval n ctx t) (eval n ctx a) (eval n ctx b)
+eval n ctx (Id t (Right a) (Right b)) = Sid n (eval n ctx t) (eval n ctx a) (eval n ctx b)
 {-
 eval 1 (ctx,lctx) e@(Id t a b) = Siso1 $ SisoData
     { sisoLeft = eval 0 (ctxl,lctxl) e
@@ -181,7 +181,7 @@ rec 1 p z s = go
                     (Sid 0 (app 0 (app 0 (pmap 0 p Szero) $ action [Rd] p) Szero) (action [Ld] z) (action [Rd] z)))
                 `App` (let t = Pi [(["x"],Nat)] $ Pi [([],App (Var "P2") (Var "x"))] $ App (Var "P2") $ App Suc (Var "x")
                        in reify l s $ eval 0 (M.fromList [("P",p),("s1",action [Ld] s),("s2",action [Rd] s)],[])
-                        $ Id t (Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Var "s2")))
+                        $ Id t (Right $ Coe `App` (Pmap `App` Lam ["P2"] t `App` Var "P") `App` Var "s1") (Right $ Var "s2")))
                 `App` e l
         in reflect r $ Sid 0 (app 0 (action [Rd] p) $ Ne [] er)
             (app 0 (coe 0 $ pmap 0 p x) $ rec 0 (action [Ld] p) (action [Ld] z) (action [Ld] s) (Ne [] el))

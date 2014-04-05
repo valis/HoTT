@@ -116,8 +116,8 @@ The symbols used in Grammar are the following: \\
 \begin{tabular}{lll}
 {\symb{{$=$}}} &{\symb{:}} &{\symb{;}} \\
 {\symb{\{}} &{\symb{\}}} &{\symb{{$-$}{$>$}}} \\
-{\symb{::}} &{\symb{*}} &{\symb{,}} \\
-{\symb{)}} & & \\
+{\symb{::}} &{\symb{*}} &{\symb{{$|$}}} \\
+{\symb{,}} &{\symb{)}} & \\
 \end{tabular}\\
 
 \subsection*{Comments}
@@ -164,22 +164,27 @@ All other symbols are terminals.\\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr3}} & {\arrow}  &{\nonterminal{Expr4}} {\terminal{{$=$}}} {\nonterminal{Expr4}}  \\
+{\nonterminal{Expr3}} & {\arrow}  &{\nonterminal{Expr4}} {\terminal{{$|$}}} {\nonterminal{Expr3}}  \\
  & {\delimit}  &{\nonterminal{Expr4}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr4}} & {\arrow}  &{\nonterminal{Expr4}} {\terminal{,}} {\nonterminal{Expr5}}  \\
+{\nonterminal{Expr4}} & {\arrow}  &{\nonterminal{ImpExpr}} {\terminal{{$=$}}} {\nonterminal{ImpExpr}}  \\
  & {\delimit}  &{\nonterminal{Expr5}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr5}} & {\arrow}  &{\nonterminal{Expr5}} {\nonterminal{Expr6}}  \\
+{\nonterminal{Expr5}} & {\arrow}  &{\nonterminal{Expr5}} {\terminal{,}} {\nonterminal{Expr6}}  \\
  & {\delimit}  &{\nonterminal{Expr6}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr6}} & {\arrow}  &{\nonterminal{Arg}}  \\
+{\nonterminal{Expr6}} & {\arrow}  &{\nonterminal{Expr6}} {\nonterminal{Expr7}}  \\
+ & {\delimit}  &{\nonterminal{Expr7}}  \\
+\end{tabular}\\
+
+\begin{tabular}{lll}
+{\nonterminal{Expr7}} & {\arrow}  &{\nonterminal{Arg}}  \\
  & {\delimit}  &{\nonterminal{PNat}}  \\
  & {\delimit}  &{\nonterminal{PSuc}}  \\
  & {\delimit}  &{\nonterminal{PR}}  \\
@@ -196,6 +201,11 @@ All other symbols are terminals.\\
  & {\delimit}  &{\nonterminal{PInt}}  \\
  & {\delimit}  &{\nonterminal{U}}  \\
  & {\delimit}  &{\nonterminal{PPar}} {\nonterminal{Expr}} {\terminal{)}}  \\
+\end{tabular}\\
+
+\begin{tabular}{lll}
+{\nonterminal{ImpExpr}} & {\arrow}  &{\terminal{\{}} {\nonterminal{PIdent}} {\terminal{\}}}  \\
+ & {\delimit}  &{\nonterminal{Expr5}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}

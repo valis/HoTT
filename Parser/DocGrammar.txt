@@ -99,7 +99,7 @@ The reserved words used in Grammar are the following:
 The symbols used in Grammar are the following:
   | = | : | ; | {
   | } | -> | :: | *
-  | , | ) |  | 
+  | | | , | ) | 
 
 ===Comments===
 Single-line comments begin with --.Multiple-line comments are  enclosed with {- and -}.
@@ -126,13 +126,15 @@ All other symbols are terminals.
   | //Expr2// | -> | //Expr3// ``*`` //Expr2// 
   |  |  **|**  | //[TypedVar]// ``*`` //Expr2// 
   |  |  **|**  | //Expr3// 
-  | //Expr3// | -> | //Expr4// ``=`` //Expr4// 
+  | //Expr3// | -> | //Expr4// ``|`` //Expr3// 
   |  |  **|**  | //Expr4// 
-  | //Expr4// | -> | //Expr4// ``,`` //Expr5// 
+  | //Expr4// | -> | //ImpExpr// ``=`` //ImpExpr// 
   |  |  **|**  | //Expr5// 
-  | //Expr5// | -> | //Expr5// //Expr6// 
+  | //Expr5// | -> | //Expr5// ``,`` //Expr6// 
   |  |  **|**  | //Expr6// 
-  | //Expr6// | -> | //Arg// 
+  | //Expr6// | -> | //Expr6// //Expr7// 
+  |  |  **|**  | //Expr7// 
+  | //Expr7// | -> | //Arg// 
   |  |  **|**  | //PNat// 
   |  |  **|**  | //PSuc// 
   |  |  **|**  | //PR// 
@@ -149,6 +151,8 @@ All other symbols are terminals.
   |  |  **|**  | //PInt// 
   |  |  **|**  | //U// 
   |  |  **|**  | //PPar// //Expr// ``)`` 
+  | //ImpExpr// | -> | ``{`` //PIdent// ``}`` 
+  |  |  **|**  | //Expr5// 
   | //Arg// | -> | //PIdent// 
   |  |  **|**  | //Pus// 
   | //[Arg]// | -> | **eps**

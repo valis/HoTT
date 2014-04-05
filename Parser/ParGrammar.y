@@ -26,7 +26,8 @@ import Parser.ErrM
  'in' { PT _ (TS _ 9) }
  'let' { PT _ (TS _ 10) }
  '{' { PT _ (TS _ 11) }
- '}' { PT _ (TS _ 12) }
+ '|' { PT _ (TS _ 12) }
+ '}' { PT _ (TS _ 13) }
 
 L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
@@ -107,22 +108,27 @@ Expr2 : Expr3 '*' Expr2 { Prod $1 $3 }
 
 
 Expr3 :: { Expr }
-Expr3 : Expr4 '=' Expr4 { Id $1 $3 } 
+Expr3 : Expr4 '|' Expr3 { Over $1 $3 } 
   | Expr4 { $1 }
 
 
 Expr4 :: { Expr }
-Expr4 : Expr4 ',' Expr5 { Pair $1 $3 } 
+Expr4 : ImpExpr '=' ImpExpr { Id $1 $3 } 
   | Expr5 { $1 }
 
 
 Expr5 :: { Expr }
-Expr5 : Expr5 Expr6 { App $1 $2 } 
+Expr5 : Expr5 ',' Expr6 { Pair $1 $3 } 
   | Expr6 { $1 }
 
 
 Expr6 :: { Expr }
-Expr6 : Arg { Var $1 } 
+Expr6 : Expr6 Expr7 { App $1 $2 } 
+  | Expr7 { $1 }
+
+
+Expr7 :: { Expr }
+Expr7 : Arg { Var $1 } 
   | PNat { Nat $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
@@ -139,6 +145,11 @@ Expr6 : Arg { Var $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }
+
+
+ImpExpr :: { ImpExpr }
+ImpExpr : '{' PIdent '}' { Implicit $2 } 
+  | Expr5 { Explicit $1 }
 
 
 Arg :: { Arg }

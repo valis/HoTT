@@ -39,12 +39,12 @@ exprToVars = reverse . go
 
 updateCtxVar :: DBIndex -> M.Map String DBIndex -> Ctx -> [Def] -> (M.Map String DBIndex, Ctx)
 updateCtxVar _ mctx ctx [] = (mctx, ctx)
-updateCtxVar i mctx actx@(ctx,lctx) (Def name Nothing expr : ds) =
-    let t = typeOfTerm i actx expr
-    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
-updateCtxVar i mctx actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
-    let t = eval 0 (ctxToCtxV actx) ty
-    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) ctx, lctx) ds
+updateCtxVar i mctx ctx@(gctx,lctx) (Def name Nothing expr : ds) =
+    let t = typeOfTerm i ctx expr
+    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) gctx, lctx) ds
+updateCtxVar i mctx ctx@(gctx,lctx) (Def name (Just (ty,args)) expr : ds) =
+    let t = eval 0 (ctxToCtxV ctx) ty
+    in updateCtxVar i (M.delete name mctx) (M.insert name (gvar name t, t) gctx, lctx) ds
 
 updateCtx :: DBIndex -> Ctx -> [Def] -> Ctx
 updateCtx _ ctx [] = ctx
@@ -55,21 +55,67 @@ updateCtx i actx@(ctx,lctx) (Def name (Just (ty,args)) expr : ds) =
 
 rawExprToTerm'depType :: ([([String],Term)] -> Term -> Term) -> DBIndex
     -> M.Map String DBIndex -> Ctx -> E.TypedVar -> E.Expr -> Maybe Value -> Term
-rawExprToTerm'depType dt i mctx (ctx,lctx) (E.TypedVar _ vars t) e ty =
+rawExprToTerm'depType dt i mctx ctx@(gctx,lctx) (E.TypedVar _ vars t) e ty
+    | E.Id (E.Explicit a) (E.Implicit (E.PIdent (_,b))) <- R.dropParens t =
     let vars' = exprToVars vars
         l = genericLength vars'
-    in dt [(vars', rawExprToTerm i mctx (ctx,lctx) t ty)] $
-        rawExprToTerm (i + l) (updateCtx mctx i vars') (ctx, updateLCtx lctx i l) e ty
-  where
-    tv = evalRaw i mctx (ctx,lctx) t ty
-    updateCtx mctx i [] = mctx
-    updateCtx mctx i (v:vs) = updateCtx (M.insert v i mctx) (i + 1) vs
-    updateLCtx lctx _ 0 = lctx
-    updateLCtx lctx i n = updateLCtx ((svar i tv, tv) : lctx) (i + 1) (n - 1)
+        a' = rawExprToTerm i mctx ctx a Nothing
+        tv = typeOfTerm i ctx a'
+        te = Id (reifyType i tv) (Right $ liftTermDB 1 a') (Left b)
+        tev = eval 0 (ctxToCtxV ctx) te
+    in dt [(vars', te)] $ rawExprToTerm (i + l + 1)
+        (updateMCtx (M.insert b i mctx) (i + 1) vars') (gctx, updateLCtx tev ((svar i tv, tv) : lctx) (i + 1) l) e ty
+rawExprToTerm'depType dt i mctx ctx@(gctx,lctx) (E.TypedVar _ vars t) e ty
+    | E.Id (E.Implicit (E.PIdent (_,a))) (E.Explicit b) <- R.dropParens t =
+    let vars' = exprToVars vars
+        l = genericLength vars'
+        b' = rawExprToTerm i mctx ctx b Nothing
+        tv = typeOfTerm i ctx b'
+        te = Id (reifyType i tv) (Left a) (Right $ liftTermDB 1 b')
+        tev = eval 0 (ctxToCtxV ctx) te
+    in dt [(vars', te)] $ rawExprToTerm (i + l + 1)
+        (updateMCtx (M.insert a i mctx) (i + 1) vars') (gctx, updateLCtx tev ((svar i tv, tv) : lctx) (i + 1) l) e ty
+rawExprToTerm'depType dt i mctx ctx@(gctx,lctx) (E.TypedVar _ vars t1) e ty
+    | E.Over t2 t <- R.dropParens t1, E.Id a b <- R.dropParens t2 =
+    let vars' = exprToVars vars
+        l = genericLength vars'
+        t' = rawExprToTerm i mctx ctx t Nothing
+        tv = eval 0 (ctxToCtxV ctx) t'
+    in case (a,b) of
+        (E.Implicit (E.PIdent (_,x1)), E.Implicit (E.PIdent (_,x2))) ->
+            let te = Id t' (Left x1) (Left x2)
+                tev = eval 0 (ctxToCtxV ctx) te
+            in dt [(vars', te)] $ rawExprToTerm (i + l + 2)
+                (updateMCtx (M.insert x2 (i + 1) $ M.insert x1 i mctx) (i + 2) vars')
+                (gctx, updateLCtx tev ((svar (i + 1) tv, tv) : (svar i tv, tv) : lctx) (i + 2) l) e ty
+        (E.Implicit (E.PIdent (_,x1)), E.Explicit e2) ->
+            let te = Id t' (Left x1) (Right $ rawExprToTerm i mctx ctx e2 $ Just tv)
+                tev = eval 0 (ctxToCtxV ctx) te
+            in dt [(vars', te)] $ rawExprToTerm (i + l + 1) (updateMCtx (M.insert x1 i mctx) (i + 1) vars')
+                (gctx, updateLCtx tev ((svar i tv, tv) : lctx) (i + 1) l) e ty
+        (E.Explicit e1, E.Implicit (E.PIdent (_,x2))) ->
+            let te = Id t' (Right $ rawExprToTerm i mctx ctx e1 $ Just tv) (Left x2)
+                tev = eval 0 (ctxToCtxV ctx) te
+            in dt [(vars', te)] $ rawExprToTerm (i + l + 1) (updateMCtx (M.insert x2 i mctx) (i + 1) vars')
+                (gctx, updateLCtx tev ((svar i tv, tv) : lctx) (i + 1) l) e ty
+        (E.Explicit e1, E.Explicit e2) ->
+            let te = Id t' (Right $ rawExprToTerm i mctx ctx e1 $ Just tv) (Right $ rawExprToTerm i mctx ctx e2 $ Just tv)
+                tev = eval 0 (ctxToCtxV ctx) te
+            in dt [(vars', te)] $ rawExprToTerm (i + l) (updateMCtx mctx i vars') (gctx, updateLCtx tev lctx i l) e ty
+rawExprToTerm'depType dt i mctx ctx@(gctx,lctx) (E.TypedVar _ vars t) e ty =
+    let vars' = exprToVars vars
+        l = genericLength vars'
+        t' = rawExprToTerm i mctx ctx t ty
+        tv = eval 0 (ctxToCtxV ctx) t'
+    in dt [(vars',t')] $ rawExprToTerm (i + l) (updateMCtx mctx i vars') (gctx, updateLCtx tv lctx i l) e ty
 
-dropParens :: E.Expr -> E.Expr
-dropParens (E.Paren _ e) = dropParens e
-dropParens e = e
+updateMCtx :: M.Map String DBIndex -> DBIndex -> [String] -> M.Map String DBIndex
+updateMCtx mctx i [] = mctx
+updateMCtx mctx i (v:vs) = updateMCtx (M.insert v i mctx) (i + 1) vs
+
+updateLCtx :: Value -> [(Value,Value)] -> DBIndex -> DBIndex -> [(Value,Value)]
+updateLCtx _ lctx _ 0 = lctx
+updateLCtx tv lctx i n = updateLCtx tv ((svar i tv, tv) : lctx) (i + 1) (n - 1)
 
 rawExprToTerm :: DBIndex -> M.Map String DBIndex -> Ctx -> E.Expr -> Maybe Value -> Term
 rawExprToTerm i mctx ctx e (Just (Ne _ t)) | NoVar <- t 0 = rawExprToTerm i mctx ctx e Nothing
@@ -96,59 +142,80 @@ rawExprToTerm i mctx ctx (E.Pair e1 e2) (Just (Ssigma 0 _ a b)) =
          (rawExprToTerm i mctx ctx e2 $ Just $ b 0 [] $ evalRaw i mctx ctx e1 $ Just a)
 rawExprToTerm i _ _ (E.Pair e1 e2) (Just _) = error "rawExprToTerm.Pair"
 rawExprToTerm i _ _ (E.Proj1 _) _ = Proj1
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj1 _ <- dropParens e1 = App Proj1 (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj1 _ <- R.dropParens e1 = App Proj1 (rawExprToTerm i mctx ctx e Nothing)
 rawExprToTerm i _ _ (E.Proj2 _) _ = Proj2
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj2 _ <- dropParens e1 = App Proj2 (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Proj2 _ <- R.dropParens e1 = App Proj2 (rawExprToTerm i mctx ctx e Nothing)
 rawExprToTerm i mctx ctx (E.Pair e1 e2) Nothing =
     Pair (rawExprToTerm i mctx ctx e1 Nothing) (rawExprToTerm i mctx ctx e2 Nothing)
-rawExprToTerm i mctx ctx (E.Id e1 e2) _ =
+rawExprToTerm i mctx ctx (E.Id (E.Explicit e1) (E.Implicit (E.PIdent (_,x2)))) _ =
     let e1' = rawExprToTerm i mctx ctx e1 Nothing
         t1 = typeOfTerm i ctx e1'
-    in Id (reifyType i t1) e1' $ rawExprToTerm i mctx ctx e2 (Just t1)
+    in Id (reifyType i t1) (Right $ liftTermDB 1 e1') (Left x2)
+rawExprToTerm i mctx ctx (E.Id (E.Implicit (E.PIdent (_,x1))) (E.Explicit e2)) _ =
+    let e2' = rawExprToTerm i mctx ctx e2 Nothing
+        t2 = typeOfTerm i ctx e2'
+    in Id (reifyType i t2) (Left x1) (Right $ liftTermDB 1 e2')
+rawExprToTerm i mctx ctx (E.Id (E.Explicit e1) (E.Explicit e2)) _ =
+    let e1' = rawExprToTerm i mctx ctx e1 Nothing
+        t1 = typeOfTerm i ctx e1'
+    in Id (reifyType i t1) (Right e1') $ Right $ rawExprToTerm i mctx ctx e2 (Just t1)
+rawExprToTerm i mctx ctx (E.Id _ _) _ = error "rawExprToTerm.Id"
+rawExprToTerm i mctx ctx@(gctx,lctx) (E.Over e1 t) _ | E.Id a b <- R.dropParens e1 =
+    let t' = rawExprToTerm i mctx ctx t Nothing
+        tv = typeOfTerm i ctx t'
+    in case (a,b) of
+        (E.Implicit (E.PIdent (_,x1)), E.Implicit (E.PIdent (_,x2))) -> Id t' (Left x1) (Left x2)
+        (E.Implicit (E.PIdent (_,x1)), E.Explicit e2) ->
+            Id t' (Left x1) (Right $ rawExprToTerm (i + 1) (M.insert x1 i mctx) (gctx, (svar i tv, tv):lctx) e2 $ Just tv)
+        (E.Explicit e1, E.Implicit (E.PIdent (_,x2))) ->
+            Id t' (Right $ rawExprToTerm (i + 1) (M.insert x2 i mctx) (gctx, (svar i tv, tv):lctx) e1 $ Just tv) (Left x2)
+        (E.Explicit e1, E.Explicit e2) -> Id t' (Right $ rawExprToTerm i mctx ctx e1 $ Just tv)
+                                                (Right $ rawExprToTerm i mctx ctx e2 $ Just tv)
+rawExprToTerm i mctx ctx (E.Over _ _) _ = error "rawExprToTerm.Over"
 rawExprToTerm i mctx ctx (E.Pmap _) _ = Pmap
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- dropParens e1 = App Pmap (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Pmap _ <- R.dropParens e1 = App Pmap (rawExprToTerm i mctx ctx e Nothing)
 rawExprToTerm i mctx ctx (E.App e1' e2) _
-    | E.App e3 e4 <- dropParens e1'
-    , E.Pmap _ <- dropParens e3
-    , E.App e5 e1 <- dropParens e4
-    , E.Idp _ <- dropParens e5 =
+    | E.App e3 e4 <- R.dropParens e1'
+    , E.Pmap _ <- R.dropParens e3
+    , E.App e5 e1 <- R.dropParens e4
+    , E.Idp _ <- R.dropParens e5 =
         let e2' = rawExprToTerm i mctx ctx e2 Nothing
         in case typeOfTerm i ctx e2' of
             Sid 0 t _ _ -> let e' = rawExprToTerm i mctx ctx e1 $ Just $ sarr 0 t $ Ne [] (const NoVar)
                          in App (App Pmap (App Idp e')) e2'
             _ -> error "rawExprToTerm.App.App.Idp"
-rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Pmap _ <- dropParens e3 =
+rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- R.dropParens e1', E.Pmap _ <- R.dropParens e3 =
     App (App Pmap (rawExprToTerm i mctx ctx e1 Nothing)) (rawExprToTerm i mctx ctx e2 Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t _ _)) | E.Idp _ <- dropParens e1 =
+rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t _ _)) | E.Idp _ <- R.dropParens e1 =
     App Idp $ rawExprToTerm i mctx ctx e (Just t)
-rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Idp _ <- dropParens e1 = error "rawExprToTerm.App.Idp"
-rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Idp _ <- dropParens e1 = App Idp (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Coe _ <- dropParens e1 = App Coe (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t@(Spi 0 x a b) f g)) | E.Ext _ <- dropParens e1 =
+rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Idp _ <- R.dropParens e1 = error "rawExprToTerm.App.Idp"
+rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Idp _ <- R.dropParens e1 = App Idp (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.Coe _ <- R.dropParens e1 = App Coe (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t@(Spi 0 x a b) f g)) | E.Ext _ <- R.dropParens e1 =
     App (Ext (reify i f t) (reify i g t)) $ rawExprToTerm i mctx ctx e $ Just $
     Spi 0 x a $ \k m v ->
         let r1 = b k m v
             r2 = app k (action m f) v 
             r3 = app k (action m g) v
-        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
-rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t@(Ssigma 0 x a b) p q)) | E.Ext _ <- dropParens e1 =
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Right $ Var "r2") (Right $ Var "r3")
+rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t@(Ssigma 0 x a b) p q)) | E.Ext _ <- R.dropParens e1 =
     App (ExtSigma (reify i p t) (reify i q t)) $ rawExprToTerm i mctx ctx e $ Just $
     Ssigma 0 x (Sid 0 a (proj1 p) (proj1 q)) $ \k m v ->
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x b) v (action m $ proj2 p)
             r3 = proj2 q
-        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Var "r2") (Var "r3")
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ Id (Var "r1") (Right $ Var "r2") (Right $ Var "r3")
 rawExprToTerm i _ _ (E.Ext _) (Just (Spi 0 _ a b)) = case b 0 [] (error "rawExprToTerm.Ext.Var") of
     Sid 0 t@(Spi 0 _ _ _) f g -> Ext (reify i f t) (reify i g t)
     Sid 0 t@(Ssigma 0 _ _ _) p q -> ExtSigma (reify i p t) (reify i q t)
     _ -> error "rawExprToTerm.Ext.Pi"
 rawExprToTerm i _ _ (E.Ext _) _ = error "rawExprToTerm.Ext"
-rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t x y)) | E.Inv _ <- dropParens e1 =
+rawExprToTerm i mctx ctx (E.App e1 e) (Just (Sid 0 t x y)) | E.Inv _ <- R.dropParens e1 =
     App Inv $ rawExprToTerm i mctx ctx e $ Just (Sid 0 t y x)
-rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Inv _ <- dropParens e1 = error "rawExprToTerm.App.Inv"
-rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Inv _ <- dropParens e1 = App Inv (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1 e) _ | E.InvIdp _ <- dropParens e1 = App InvIdp (rawExprToTerm i mctx ctx e Nothing)
-rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- dropParens e1', E.Comp _ <- dropParens e3 =
+rawExprToTerm i _ _ (E.App e1 e) (Just _) | E.Inv _ <- R.dropParens e1 = error "rawExprToTerm.App.Inv"
+rawExprToTerm i mctx ctx (E.App e1 e) Nothing | E.Inv _ <- R.dropParens e1 = App Inv (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1 e) _ | E.InvIdp _ <- R.dropParens e1 = App InvIdp (rawExprToTerm i mctx ctx e Nothing)
+rawExprToTerm i mctx ctx (E.App e1' e2) _ | E.App e3 e1 <- R.dropParens e1', E.Comp _ <- R.dropParens e3 =
     Comp `App` rawExprToTerm i mctx ctx e1 Nothing `App` rawExprToTerm i mctx ctx e2 Nothing
 rawExprToTerm i mctx ctx (E.App e1 e2) _ =
     let e1' = rawExprToTerm i mctx ctx e1 Nothing
@@ -175,23 +242,21 @@ rawExprToTerm i mctx ctx (E.Typed e1 e2) _ =
     let e2' = rawExprToTerm i mctx ctx e2 $ Just (Stype maxBound)
     in Typed (rawExprToTerm i mctx ctx e1 $ Just $ eval 0 (ctxToCtxV ctx) e2') e2'
 
-updateLCtx :: DBIndex -> Value -> [(Value,Value)] -> [String] -> [(Value,Value)]
-updateLCtx _ tv lctx [] = lctx
-updateLCtx i tv lctx (_:vs) = updateLCtx (i + 1) tv ((svar i tv, tv) : lctx) vs
-
 typeOfTerm :: DBIndex -> Ctx -> Term -> Value
 typeOfTerm i ctx (Let defs e) = typeOfTerm i (updateCtx i ctx defs) e
 typeOfTerm i ctx (Lam [] e) = typeOfTerm i ctx e
 typeOfTerm _ _ (Lam _ _) = error "typeOfTerm.Lam"
 typeOfTerm i ctx (Pi [] e) = typeOfTerm i ctx e
 typeOfTerm i (ctx,lctx) (Pi ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx vars) (Pi vs e)
+    let r = typeOfTerm (i + genericLength vars)
+            (ctx, updateLCtx (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx i $ genericLength vars) (Pi vs e)
     in case (typeOfTerm i (ctx,lctx) t, r) of
         (Stype k1, Stype k2) -> Stype (max k1 k2)
         _ -> error "typeOfTerm.Pi"
 typeOfTerm i ctx (Sigma [] e) = typeOfTerm i ctx e
 typeOfTerm i (ctx,lctx) (Sigma ((vars,t):vs) e) =
-    let r = typeOfTerm (i + genericLength vars) (ctx, updateLCtx i (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx vars) (Sigma vs e)
+    let r = typeOfTerm (i + genericLength vars)
+            (ctx, updateLCtx (eval 0 (ctxToCtxV (ctx,lctx)) t) lctx i $ genericLength vars) (Sigma vs e)
     in case (typeOfTerm i (ctx,lctx) t, r) of
         (Stype k1, Stype k2) -> Stype (max k1 k2)
         _ -> error "typeOfTerm.Sigma"
@@ -265,9 +330,9 @@ typeOfTerm _ _ Iso =
                Pi [(["B"],Universe $ pred $ pred maxBound)] $
                Pi [(["f"],Pi [([],LVar 1)] $ LVar 0)] $
                Pi [(["g"],Pi [([],LVar 1)] $ LVar 2)] $
-               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (LVar 1 `App` (LVar 2 `App` LVar 0)) (LVar 0))] $
-               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (LVar 2 `App` (LVar 1 `App` LVar 0)) (LVar 0))] $
-               Id (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
+               Pi [([],Pi [(["a"],LVar 3)] $ Id (LVar 4) (Right $ LVar 1 `App` (LVar 2 `App` LVar 0)) (Right $ LVar 0))] $
+               Pi [([],Pi [(["b"],LVar 2)] $ Id (LVar 3) (Right $ LVar 2 `App` (LVar 1 `App` LVar 0)) (Right $ LVar 0))] $
+               Id (Universe $ pred $ pred maxBound) (Right $ Var "A") (Right $ Var "B")
     in eval 0 (M.empty,[]) term
 
 typeOfLam :: DBIndex -> Ctx -> Term -> Value -> Value -> Value -> Value -> Value

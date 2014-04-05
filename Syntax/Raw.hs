@@ -1,17 +1,19 @@
 module Syntax.Raw
     ( unArg, unBinder
     , getPos, argGetPos, binderGetPos
+{-
     , freeVars, renameExpr
+-}
+    , dropParens
     , preprocessDefs
     , eprettyExpr
     ) where
 
-import Data.List
 import Text.PrettyPrint
 
 import Parser.AbsGrammar
 import ErrorDoc hiding ((<+>),(<>),($$))
-import Syntax.Common
+import Syntax.Common()
 
 getPos :: Expr -> (Int,Int)
 getPos (Let [] e) = getPos e
@@ -24,7 +26,9 @@ getPos (Pi [] e) = getPos e
 getPos (Pi (TypedVar (PPar (p,_)) _ _ : _) _) = p
 getPos (Sigma [] e) = getPos e
 getPos (Sigma (TypedVar (PPar (p,_)) _ _ : _) _) = p
-getPos (Id e _) = getPos e
+getPos (Id (Implicit (PIdent (p,_))) _) = p
+getPos (Id (Explicit e) _) = getPos e
+getPos (Over e _) = getPos e
 getPos (App e _) = getPos e
 getPos (Var (NoArg (Pus (p,_)))) = p
 getPos (Var (Arg (PIdent (p,_)))) = p
@@ -47,6 +51,10 @@ getPos (Comp (PComp (lc,_))) = lc
 getPos (Inv (PInv (lc,_))) = lc
 getPos (InvIdp (PInvIdp (lc,_))) = lc
 
+dropParens :: Expr -> Expr
+dropParens (Paren _ e) = dropParens e
+dropParens e = e
+
 unArg :: Arg -> String
 unArg (NoArg _) = "_"
 unArg (Arg (PIdent (_,x))) = x
@@ -61,6 +69,7 @@ unBinder (Binder b) = unArg b
 binderGetPos :: Binder -> (Int,Int)
 binderGetPos (Binder b) = argGetPos b
 
+{-
 freeVarsDef :: [Def] -> Expr -> [String]
 freeVarsDef [] e = freeVars e
 freeVarsDef (DefType _ t : ds) e = freeVars t `union` freeVarsDef ds e
@@ -69,13 +78,41 @@ freeVarsDef (Def (PIdent (_,x)) as t : ds) e = (freeVars t \\ map unArg as) `uni
 freeVars :: Expr -> [String]
 freeVars (Let defs e) = freeVarsDef defs e
 freeVars (Lam _ bnds e) = freeVars e \\ map unBinder bnds
+freeVars (Arr e1 e2) | Id (Implicit (PIdent (_,x1))) (Implicit (PIdent (_,x2))) <- dropParens e1 =
+    freeVars e2 \\ ([x1] `union` [x2])
+freeVars (Arr e1 e2) | Id (Explicit e) (Implicit (PIdent (_,x2))) <- dropParens e1 =
+    (freeVars e `uinon` freeVars e2) `delete` x2
+freeVars (Arr e1 e2) | Id (Implicit (PIdent (_,x1))) (Explicit e) <- dropParens e1 =
+    (freeVars e `uinon` freeVars e1) `delete` x1
 freeVars (Arr e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Pi [] e) = freeVars e
+freeVars (Pi (TypedVar _ vars t : xs) e) | Id (Implicit (PIdent (_,x1))) (Implicit (PIdent (_,x2))) <- dropParens t =
+    freeVars (Pi xs e) \\ ([x1] `union` [x2] `union` freeVars vars)
+freeVars (Pi (TypedVar _ vars t : xs) e) | Id (Implicit (PIdent (_,x1))) (Explicit e2) <- dropParens t =
+    (freeVars e2 `union` (freeVars (Pi xs e) \\ freeVars vars)) `delete` x1
+freeVars (Pi (TypedVar _ vars t : xs) e) | Id (Explicit e1) (Implicit (PIdent (_,x2))) <- dropParens t =
+    (freeVars e1 `union` (freeVars (Pi xs e) \\ freeVars vars)) `delete` x2
 freeVars (Pi (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Pi xs e) \\ freeVars vars)
+freeVars (Prod e1 e2) | Id (Implicit (PIdent (_,x1))) (Implicit (PIdent (_,x2))) <- dropParens e1 =
+    freeVars e2 \\ ([x1] `union` [x2])
+freeVars (Prod e1 e2) | Id (Explicit e) (Implicit (PIdent (_,x2))) <- dropParens e1 =
+    (freeVars e `uinon` freeVars e2) `delete` x2
+freeVars (Prod e1 e2) | Id (Implicit (PIdent (_,x1))) (Explicit e) <- dropParens e1 =
+    (freeVars e `uinon` freeVars e1) `delete` x1
 freeVars (Prod e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Sigma [] e) = freeVars e
+freeVars (Sigma (TypedVar _ vars t : xs) e) | Id (Implicit (PIdent (_,x1))) (Implicit (PIdent (_,x2))) <- dropParens t =
+    freeVars (Sigma xs e) \\ ([x1] `union` [x2] `union` freeVars vars)
+freeVars (Sigma (TypedVar _ vars t : xs) e) | Id (Implicit (PIdent (_,x1))) (Explicit e2) <- dropParens t =
+    (freeVars e2 `union` (freeVars (Sigma xs e) \\ freeVars vars)) `delete` x1
+freeVars (Sigma (TypedVar _ vars t : xs) e) | Id (Explicit e1) (Implicit (PIdent (_,x2))) <- dropParens t =
+    (freeVars e1 `union` (freeVars (Sigma xs e) \\ freeVars vars)) `delete` x2
 freeVars (Sigma (TypedVar _ vars t : xs) e) = freeVars t `union` (freeVars (Sigma xs e) \\ freeVars vars)
-freeVars (Id e1 e2) = freeVars e1 `union` freeVars e2
+freeVars (Id (Implicit _) (Implicit _)) = []
+freeVars (Id (Explicit e) (Implicit (PIdent (_,x))))) = freeVars e `delete` x
+freeVars (Id (Implicit (PIdent (_,x))) (Explicit e))) = freeVars e `delete` x
+freeVars (Id (Explicit e1) (Explicit e2)) = freeVars e1 `union` freeVars e2
+freeVars (Over e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (App e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Pair e1 e2) = freeVars e1 `union` freeVars e2
 freeVars (Var (Arg (PIdent (_,x)))) = [x]
@@ -152,7 +189,19 @@ rename (Sigma [] e) x y = rename e x y
 rename (Sigma (TypedVar p (Var (Arg (PIdent (i,z)))) t : bs) e) x y | x == z
     = Sigma [TypedVar p (Var (Arg (PIdent (i,z)))) (rename t x y)] (Sigma bs e)
 rename (Sigma (TypedVar p v t : bs) e) x y = Sigma [TypedVar p v (rename t x y)] $ rename (Sigma bs e) x y
-rename (Id e1 e2) x y = Id (rename e1 x y) (rename e2 x y)
+rename e@(Id (Implicit _) (Implicit _)) _ _ = e
+rename e@(Id (Implicit t1@(PIdent (p1,x1))) (Explicit e2)) x y
+    | x == x1 = e
+    | y == x1 = let (y',e') = renameExpr [x,x1] y e2
+                in Id (Implicit $ PIdent (p1,y')) (Explicit $ rename e' x y)
+    | otherwise = Id (Implicit t1) $ Explicit (rename e2 x y)
+rename e@(Id (Explicit e1) (Implicit t2@(PIdent (p2,x2)))) x y
+    | x == x2 = e
+    | y == x2 = let (y',e') = renameExpr [x,x2] y e1
+                in Id (Explicit $ rename e' x y) (Implicit $ PIdent (p2,y'))
+    | otherwise = Id (Explicit $ rename e1 x y) (Implicit t2)
+rename (Id (Explicit e1) (Explicit e2)) x y = Id (Explicit $ rename e1 x y) (Explicit $ rename e2 x y)
+rename (Over e1 e2) x y = Over (rename e1 x y) (rename e2 x y)
 rename (App e1 e2) x y = App (rename e1 x y) (rename e2 x y)
 rename (Pair e1 e2) x y = Pair (rename e1 x y) (rename e2 x y)
 rename (Var (Arg (PIdent (i,z)))) x y | x == z = Var $ Arg $ PIdent (i,y)
@@ -174,6 +223,7 @@ rename e@(NatConst _) _ _ = e
 rename e@(Universe _) _ _ = e
 rename (Paren i e) x y = Paren i (rename e x y)
 rename (Typed e1 e2) x y = Typed (rename e1 x y) (rename e2 x y)
+-}
 
 eprettyExpr :: Expr -> EDoc
 eprettyExpr = edoc . ppExpr Nothing
@@ -240,7 +290,12 @@ ppExpr = go False
         in ppArrow l' e1 <+> char '×' <+> ppArrow l' e2
     go False l (Id e1 e2) =
         let l' = fmap pred l
-        in go False l' e1 <+> equals <+> go False l' e2
+            go' (Implicit (PIdent (_,x))) = braces (text x)
+            go' (Explicit e) = go False l' e
+        in go' e1 <+> equals <+> go' e2
+    go False l (Over e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> char '|' <+> go False l' e2
     go False l (App e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2

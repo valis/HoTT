@@ -39,7 +39,8 @@ data Expr =
  | Typed Expr Expr
  | Prod Expr Expr
  | Sigma [TypedVar] Expr
- | Id Expr Expr
+ | Over Expr Expr
+ | Id ImpExpr ImpExpr
  | Pair Expr Expr
  | App Expr Expr
  | Var Arg
@@ -59,6 +60,11 @@ data Expr =
  | NatConst PInt
  | Universe U
  | Paren PPar Expr
+  deriving (Eq,Ord,Show)
+
+data ImpExpr =
+   Implicit PIdent
+ | Explicit Expr
   deriving (Eq,Ord,Show)
 
 data Arg =

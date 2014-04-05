@@ -86,10 +86,6 @@ typeOf'depType (TypedVar _ vars t : list) e = do
         go (App as (Var a)) = fmap (a :) (go as)
         go _ = Nothing
 
-dropParens :: Expr -> Expr
-dropParens (Paren _ e) = dropParens e
-dropParens e = e
-
 data H = P Expr Value Value Value | T Value | N
 
 typeOf :: Expr -> TCM Value
@@ -141,7 +137,7 @@ typeOfH (Lam _ (Binder arg : _) _) (T ty) = do
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But lambda expression has pi type"
 typeOfH j@(Idp _) (T exp@(Spi 0 x a _)) = do
     let ctx = (M.singleton (freshName "a" [x]) a, [])
-    cmpTypesErr exp (eval 0 ctx $ T.Pi [([x],T.Var "a")] $ T.Id (T.Var "a") (T.LVar 0) (T.LVar 0)) j
+    cmpTypesErr exp (eval 0 ctx $ T.Pi [([x],T.Var "a")] $ T.Id (T.Var "a") (Right $ T.LVar 0) (Right $ T.LVar 0)) j
     return exp
 typeOfH (Idp (PIdp (lc,_))) (T ty) = do
     (i,c,_,_) <- ask
@@ -169,10 +165,10 @@ typeOfH e@(Pmap (Ppmap (lc,_))) (T exp@(Spi 0 v a@(Sid 0 (Spi 0 v' a' b') f g) b
     case isArr i a b of
         Just (Spi 0 v2 a2'@(Sid 0 a2 x y) b2') | cmpTypes i a2 a' -> do
             let ctx' = [("a",a),("a'",a'),("x",x),("y",y),("B",Slam v' b'),("f'",app 0 f x),("g'",app 0 g y)]
-                term = T.Pi [([],T.Var "a")] $ T.Pi [(["p"],T.Id (T.Var "a'") (T.Var "x") (T.Var "y"))] $
+                term = T.Pi [([],T.Var "a")] $ T.Pi [(["p"],T.Id (T.Var "a'") (Right $ T.Var "x") (Right $ T.Var "y"))] $
                     T.Id (T.Var "B" `T.App` T.Var "y")
-                         (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
-                         (T.Var "g'")
+                         (Right $ T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
+                         (Right $ T.Var "g'")
             cmpTypesErr exp (eval 0 (M.fromList ctx', []) term) e
             return exp
         _ -> pmapErrorMsg lc exp
@@ -184,12 +180,12 @@ typeOfH ea@(App e1 e) (T ty@(Spi 0 v a'@(Sid 0 a x y) b')) | Pmap _ <- dropParen
         Sid 0 (Spi 0 v1 a1 b1) f g | cmpTypes i a a1 -> do
             let ctx' = [("a'",a'),("B",Slam v1 b1),("y",y),("f'",app 0 f x),("g'",app 0 g y)]
                 term = T.Pi [(["p"],T.Var "a'")] $ T.Id (T.Var "B" `T.App` T.Var "y")
-                    (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
-                    (T.Var "g'")
+                    (Right $ T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
+                    (Right $ T.Var "g'")
             cmpTypesErr ty (eval 0 (M.fromList ctx', []) term) ea
             return ty
         _ -> errorTCM $ emsgLC (getPos e) "" $
-            etext "Expected type: Id(" <+> epretty c (T.Pi [([],reifyType i a)] $ T.Var "_") <+> etext ") _ _" $$
+            etext "Expected type: _ = _ |" <+> epretty c (T.Pi [([],reifyType i a)] $ T.Var "_") $$
             etext "But term" <+> eprettyExpr e <+> etext "has type" <+> epretty c (reifyType i t)
 typeOfH (App e1 e) (T ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = pmap1ErrorMsg lc ty
 typeOfH (Ext (PExt (lc,_))) (T ty@(Spi 0 x' s@(Spi 0 _ a' b') t)) = do
@@ -223,7 +219,7 @@ typeOfH (App e1 e) (T r@(Sid 0 (Ssigma 0 x a b) p q)) | Ext _ <- dropParens e1 =
         let r1 = action m $ b 0 [] (proj1 q)
             r2 = trans k (action m $ Slam x b) s $ action m (proj2 p)
             r3 = action m (proj2 q)
-        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ T.Id (T.Var "r1") (T.Var "r2") (T.Var "r3")
+        in eval k (M.fromList [("r1",r1),("r2",r2),("r3",r3)], []) $ T.Id (T.Var "r1") (Right $ T.Var "r2") (Right $ T.Var "r3")
     return r
 typeOfH (App e1 e) (T exp) | Ext (PExt (lc,_)) <- dropParens e1 = do
     (i,c,_,_) <- ask
@@ -276,9 +272,9 @@ typeOfH (Inv (PInv (lc,_))) (T exp) = do
 typeOfH e@(InvIdp _) (T exp@(Spi 0 v a@(Sid 0 t x y) b)) = do
     let ctx' = (M.fromList [("a",a)], [])
         term = T.Pi [(["p"],T.Var "a")] $ T.Id
-            (T.Id (T.Var "a") (T.LVar 0) (T.LVar 0))
-            (T.Comp `T.App` (T.Inv `T.App` T.LVar 0) `T.App` T.LVar 0)
-            (T.Idp `T.App` T.LVar 0)
+            (T.Id (T.Var "a") (Right $ T.LVar 0) (Right $ T.LVar 0))
+            (Right $ T.Comp `T.App` (T.Inv `T.App` T.LVar 0) `T.App` T.LVar 0)
+            (Right $ T.Idp `T.App` T.LVar 0)
     cmpTypesErr exp (eval 0 ctx' term) e
     return exp
 typeOfH (InvIdp (PInvIdp (lc,_))) (T exp) = do
@@ -367,11 +363,31 @@ typeOfH (Arr e1 e2) N = liftTCM2 (maxType e1 e2) (typeOf e1) (typeOf e2)
 typeOfH (Prod e1 e2) N = typeOf (Arr e1 e2)
 typeOfH (Pi tv e) N = typeOf'depType tv e
 typeOfH (Sigma tv e) N = typeOf'depType tv e
-typeOfH (Id a b) N = do
+typeOfH (Id (Implicit (PIdent (lc,a))) (Implicit _)) N = inferErrorMsg lc a
+typeOfH (Id (Implicit (PIdent (_,a))) (Explicit b)) N = do
+    b' <- typeOf b
+    (i,_,_,ctx) <- ask
+    return $ typeOfTerm i ctx (reifyType i b')
+typeOfH (Id (Explicit a) (Implicit (PIdent (_,b)))) N = do
+    a' <- typeOf a
+    (i,_,_,ctx) <- ask
+    return $ typeOfTerm i ctx (reifyType i a')
+typeOfH (Id (Explicit a) (Explicit b)) N = do
     a' <- typeOf a
     typeOfH b (T a')
     (i,_,_,ctx) <- ask
     return $ typeOfTerm i ctx (reifyType i a')
+typeOfH (Over t1 t) N | Id a b <- dropParens t1 = do
+    r <- typeOf t
+    (i,_,mctx,ctx) <- ask
+    let tv = evalRaw i mctx ctx t Nothing
+        f c = case c of
+            Implicit _ -> return tv
+            Explicit e -> typeOfH e (T tv)
+    a' <- f a
+    b' <- f b
+    return r
+typeOfH (Over t _) N = errorTCM $ emsgLC (getPos t) "Expected term of the form _ = _" enull
 typeOfH (Nat _) N = return $ Stype (Finite 0)
 typeOfH (Universe (U (_,t))) N = return $ Stype $ succ (parseLevel t)
 typeOfH (App e1 e2) N = do
@@ -405,10 +421,10 @@ typeOfH (Iso _) N =
                T.Pi [(["f"],T.Pi [([],T.LVar 1)] $ T.LVar 0)] $
                T.Pi [(["g"],T.Pi [([],T.LVar 1)] $ T.LVar 2)] $
                T.Pi [([],T.Pi [(["a"],T.LVar 3)] $
-                    T.Id (T.LVar 4) (T.LVar 1 `T.App` (T.LVar 2 `T.App` T.LVar 0)) (T.LVar 0))] $
+                    T.Id (T.LVar 4) (Right $ T.LVar 1 `T.App` (T.LVar 2 `T.App` T.LVar 0)) (Right $ T.LVar 0))] $
                T.Pi [([],T.Pi [(["b"],T.LVar 2)] $
-                    T.Id (T.LVar 3) (T.LVar 2 `T.App` (T.LVar 1 `T.App` T.LVar 0)) (T.LVar 0))] $
-               T.Id (T.Universe $ pred $ pred maxBound) (T.LVar 3) (T.LVar 2)
+                    T.Id (T.LVar 3) (Right $ T.LVar 2 `T.App` (T.LVar 1 `T.App` T.LVar 0)) (Right $ T.LVar 0))] $
+               T.Id (T.Universe $ pred $ pred maxBound) (Right $ T.LVar 3) (Right $ T.LVar 2)
     in return (eval 0 (M.empty,[]) term)
 typeOfH (Comp (PComp (lc,_))) N = inferErrorMsg lc "comp"
 typeOfH (Inv (PInv (lc,_))) N = inferErrorMsg lc "inv"
@@ -450,8 +466,8 @@ inferErrorMsg lc s = errorTCM $ emsgLC lc ("Cannot infer type of " ++ s) enull
 pmapErrMsg :: Expr -> Value -> EDoc -> TCM a
 pmapErrMsg expr ty j = do
     (i,c,_,_) <- ask
-    errorTCM $ emsgLC (getPos expr) "" $ etext "Expected type of the form Id(" <> j <> etext ") _ _" $$
-        etext "But term" <+> eprettyExpr expr <+> etext "has type Id(" <> eprettyType i c ty <> etext ") _ _"
+    errorTCM $ emsgLC (getPos expr) "" $ etext "Expected type of the form _ = _ |" <+> j $$
+        etext "But term" <+> eprettyExpr expr <+> etext "has type _ = _ |" <+> eprettyType i c ty
 
 coeErrorMsg :: (Int,Int) -> Value -> TCM a
 coeErrorMsg lc ty = do
