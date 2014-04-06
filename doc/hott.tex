@@ -34,7 +34,7 @@
 \newref{remark}{remark}{Remark}
 
 \newcommand{\cat}[1]{\mathbf{#1}}
-\newcommand{\C}{\cat{C}}
+\newcommand{\D}{\mathsf{D}}
 \newcommand{\bbG}{\mathbb{G}}
 \newcommand{\Set}{\cat{Set}}
 \newcommand{\PSh}[1]{\Set^{#1^{op}}}
@@ -42,10 +42,8 @@
 \newcommand{\Z}{\mathbb{Z}}
 \newcommand{\glob}{\PSh{\bbG}}
 \newcommand{\ocat}{\omega \cat{Cat}}
-\newcommand{\D}[1]{\mathrm{D}^{#1}}
-\newcommand{\Dn}{\D{n}}
-\newcommand{\dD}[1]{\mathrm{\partial D}^{#1}}
-\newcommand{\dDn}{\dD{n}}
+\newcommand{\Dn}[1][n]{\mathrm{D}^{#1}}
+\newcommand{\dDn}[1][n]{\mathrm{\partial D}^{#1}}
 
 \newcommand{\pb}[1][dr]{\save*!/#1-1.2pc/#1:(-1,1)@^{|-}\restore}
 \newcommand{\po}[1][dr]{\save*!/#1+1.2pc/#1:(1,-1)@^{|-}\restore}
@@ -87,8 +85,8 @@ $x$ is an $(n+1)$-cell, $s_n(x) = a$, and $t_n(x) = b$.
 
 For each $n \in \nats$, the globular set $\bbG(-,n)$ is denoted by $\Dn$.
 The globular sets $\dDn$ together with the maps $\dDn \to \Dn$ are defined by induction on $n$.
-$\dD{0}$ is the initial object, and $\dD{0} \to \D{0}$ is the unique morphism.
-$\dD{n+1}$ is the pushout $\Dn \amalg_{\dDn} \Dn$, and $\dD{n+1} \to \D{n+1}$
+$\dDn[0]$ is the initial object, and $\dDn[0] \to \Dn[0]$ is the unique morphism.
+$\dDn[n+1]$ is the pushout $\Dn \amalg_{\dDn} \Dn$, and $\dDn[n+1] \to \Dn[n+1]$
 is induced by the maps $(\sigma_n \circ -)$ and $(\tau_n \circ -)$.
 
 \begin{defn}
@@ -146,7 +144,7 @@ Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
 
 The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
 Note that we do not use reduction rules, instead we define terms to be computationally equal if their interpretations coincide.
-Thus inference rules depend on the evaluation function that will be defined in section \ref{sec:eval}.
+Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$ that will be defined in section \ref{sec:eval}.
 
 \centerAlignProof
 
@@ -237,6 +235,60 @@ Thus inference rules depend on the evaluation function that will be defined in s
 
 \section{Evaluation}
 \label{sec:eval}
+
+We work in a suitable category of domains (see, for example, \cite{domains} for more information on the topic).
+Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\Theta)$ the set of objects, and $Hom(\Theta)$ the set of morphisms of the category $\Theta$.
+Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
+\[ \D = [Hom(\Theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus \nats_\bot \oplus \D \]
+\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\Theta)_\bot \times \D \times \D \times \D \]
+\[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
+\[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
+
+The meaning of the components in this equaltion should be clear from the names of the constructors:
+\begin{itemize}
+\item[] $\mathsf{Lam} : [Hom(\Theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Pair} : \D \times \D \to \D$
+\item[] $\mathsf{U} : \nats_\bot \to \D$
+\item[] $\mathsf{Idp} : \D \to \D$
+\item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \to \D$
+\item[] $\mathsf{Id} : Ob(\Theta)_\bot \times \D \times \D \times \D \to \D$
+\item[] $\mathsf{Pi} : Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Sigma} : Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \to \D$
+\end{itemize}
+
+Let $Env$ be the domain $[\nats_\bot \to \D]$.
+If $\rho \in Env$ and $x \in \D$, then we define $\rho[x] \in Env$ to be the function defined by the following rules: $\rho[x](0) = x$ and $\rho[x](i+1) = \rho(i)$.
+Now, we define the evaluation function $\llbracket - \rrbracket : Tm_\bot \to [Env \to [Ob(\Theta)_\bot \to \D]]$:
+\begin{itemize}
+\item[] $\llbracket v_i \rrbracket^\rho_\pi = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
+\item[] $\llbracket U_\alpha \rrbracket^\rho_\pi = \mathsf{U}(\alpha)$
+\item[] $\llbracket \Pi A B \rrbracket^\rho_\pi = \mathsf{Pi}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
+\item[] $\llbracket \Sigma A B \rrbracket^\rho_\pi = \mathsf{Sigma}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
+\item[] $\llbracket a = a' | A \rrbracket^\rho_\pi = \mathsf{Id}(\pi, \llbracket A \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi, \llbracket a' \rrbracket^\rho_\pi)$
+\item[] $\llbracket \lambda b \rrbracket^\rho_\pi = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
+\item[] $\llbracket b a \rrbracket^\rho_\pi = \mathsf{app}(\pi, \llbracket b \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi)$
+\item[] $\llbracket a, b \rrbracket^\rho_\pi = \mathsf{Pair}(\llbracket a \rrbracket^\rho_\pi, \llbracket b \rrbracket^\rho_\pi)$
+\item[] $\llbracket proj_1\,p \rrbracket^\rho_\pi = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_\pi)$
+\item[] $\llbracket proj_2\,p \rrbracket^\rho_\pi = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_\pi)$
+\item[] $\llbracket idp\,a \rrbracket^\rho_\pi = \mathsf{action}(TODO,\llbracket a \rrbracket^\rho_\pi)$
+\end{itemize}
+
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, and $\mathsf{proj_2}$ are defined as follows:
+\begin{itemize}
+\item[] $\mathsf{app} : Ob(\Theta)_\bot \times \D \times \D \to \D$
+\item[] $\mathsf{app}(\pi,Lam(f),a) = f(id_\pi,a)$
+\item[] $\mathsf{app}(\pi,e,a) = \bot$, otherwise
+\item[]
+\item[] $\mathsf{proj_1} : \D \to \D$
+\item[] $\mathsf{proj_1}(Pair(a,b)) = a$
+\item[] $\mathsf{proj_1}(x) = \bot$, otherwise
+\item[]
+\item[] $\mathsf{proj_2} : \D \to \D$
+\item[] $\mathsf{proj_2}(Pair(a,b)) = b$
+\item[] $\mathsf{proj_2}(x) = \bot$, otherwise
+\end{itemize}
+
+Functions $\mathsf{action}$ and $\mathsf{actionEnv}$ will be defined later. % TODO
 
 \bibliographystyle{amsplain}
 \bibliography{ref}
