@@ -5,6 +5,8 @@
 \usepackage{verbatim}
 \usepackage{ifthen}
 \usepackage{xargs}
+\usepackage{bussproofs}
+\usepackage{stmaryrd}
 
 \providecommand\WarningsAreErrors{false}
 \ifthenelse{\equal{\WarningsAreErrors}{true}}{\renewcommand{\GenericWarning}[2]{\GenericError{#1}{#2}{}{This warning has been turned into a fatal error.}}}{}
@@ -37,6 +39,7 @@
 \newcommand{\Set}{\cat{Set}}
 \newcommand{\PSh}[1]{\Set^{#1^{op}}}
 \newcommand{\nats}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
 \newcommand{\glob}{\PSh{\bbG}}
 \newcommand{\ocat}{\omega \cat{Cat}}
 \newcommand{\D}[1]{\mathrm{D}^{#1}}
@@ -47,7 +50,7 @@
 \newcommand{\pb}[1][dr]{\save*!/#1-1.2pc/#1:(-1,1)@^{|-}\restore}
 \newcommand{\po}[1][dr]{\save*!/#1+1.2pc/#1:(1,-1)@^{|-}\restore}
 
-\numberwithin{figure}{section}
+\numberwithin{table}{section}
 
 \begin{document}
 
@@ -132,6 +135,108 @@ and for each $x \in \widehat{\pi^i}$, we define $s_0(x) = i - 1$ and $t_0(x) = i
 The category $\Theta$ is the full subcategory of $\ocat$ on strict $\omega$-categories of the form $T(\widehat{\pi})$ for each pasting diagram $\pi$.
 A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morphism of presheaves.
 \end{defn}
+
+\section{Syntax and Inference Rules}
+
+First, let us define the sets of raw terms and contexts:
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\,p\ |\ proj_2\,p\ |\ (a = a'\,|\,A)\ |\ idp\,a, \]
+\[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
+where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, A, B \in Tm$.
+Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
+
+The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
+Note that we do not use reduction rules, instead we define terms to be computationally equal if their interpretations coincide.
+Thus inference rules depend on the evaluation function that will be defined in section \ref{sec:eval}.
+
+\centerAlignProof
+
+\begin{table}
+\begin{center}
+\AxiomC{}
+\UnaryInfC{$\epsilon \vdash$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash A : U_\alpha$}
+\UnaryInfC{$\Gamma, A \vdash$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash$}
+\RightLabel{, $0 \leq i < | \Gamma |$}
+\UnaryInfC{$\Gamma \vdash v_i : \Gamma(i)$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : U_\alpha$}
+\AxiomC{$\Gamma, A \vdash B : U_\beta$}
+\BinaryInfC{$\Gamma \vdash \Pi A B : U_{max(\alpha,\beta)}$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma, A \vdash b : B$}
+\UnaryInfC{$\Gamma \vdash \lambda b : \Pi A B$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash b : \Pi A B$}
+\AxiomC{$\Gamma \vdash a : A$}
+\BinaryInfC{$\Gamma \vdash b a : B[a]$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : U_\alpha$}
+\AxiomC{$\Gamma, A \vdash B : U_\beta$}
+\BinaryInfC{$\Gamma \vdash \Sigma A B : U_{max(\alpha,\beta)}$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash a : A$}
+\AxiomC{$\Gamma \vdash b : B[a]$}
+\AxiomC{$\Gamma, A \vdash B : U_\beta$}
+\TrinaryInfC{$\Gamma \vdash a, b : \Sigma A B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash p : \Sigma A B$}
+\UnaryInfC{$\Gamma \vdash proj_1\,p : \Sigma A B$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash p : \Sigma A B$}
+\UnaryInfC{$\Gamma \vdash proj_2\,p : B[proj_1\,p]$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\,U_\alpha$}
+\AxiomC{$\Gamma \vdash a : A$}
+\AxiomC{$\Gamma \vdash b : B$}
+\TrinaryInfC{$\Gamma \vdash a = b\,|\,p : U_\alpha$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash a : A$}
+\UnaryInfC{$\Gamma \vdash idp\,a : a = a\,|\,idp\,A$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash a : A$}
+\AxiomC{$\Gamma \vdash B : U_\beta$}
+\RightLabel{, $\llbracket A \rrbracket^\rho = \llbracket B \rrbracket^\rho, \forall \rho \in \llbracket \Gamma \rrbracket$}
+\BinaryInfC{$\Gamma \vdash a : B$}
+\DisplayProof
+\end{center}
+
+\bigskip
+\caption{Inference rules.}
+\label{table:inf-rules}
+\end{table}
+
+\section{Evaluation}
+\label{sec:eval}
 
 \bibliographystyle{amsplain}
 \bibliography{ref}
