@@ -119,7 +119,7 @@ Let us denote by $(T : \glob \to \glob, \eta_X : X \to T(X), \mu_X : T T(X) \to 
 and by $\dDn_T$ and $\Dn_T$ the $\omega$-categories $T(\dDn)$ and $T(\Dn)$.
 
 An \emph{$n$-dimensional pasting diagram} is defined by induction on $n$.
-There is exactly one $0$-dimensional pasting diagram, which is denoted by $\bullet$.
+There is exactly one $0$-dimensional pasting diagram, which is denoted by $\diamond$.
 An $(n+1)$-dimensional pasting diagram is a finite sequence of $n$-dimensional pasting diagrams.
 
 With each $n$-dimensional pasting diagram $\pi$ we associate an $n$-dimensional globular set $\widehat{\pi}$.
@@ -130,14 +130,16 @@ For each $k > 0$, the source and the target are defined in the evident way,
 and for each $x \in \widehat{\pi^i}$, we define $s_0(x) = i - 1$ and $t_0(x) = i$.
 
 \begin{defn}
-The category $\Theta$ is the full subcategory of $\ocat$ on strict $\omega$-categories of the form $T(\widehat{\pi})$ for each pasting diagram $\pi$.
+The category $\Theta$ has pasting diagrams as objects, and the set of morphisms between $\pi_1$ and $\pi_2$
+is the set of morphisms between strict $\omega$-categories $T(\widehat{\pi_1})$ and $T(\widehat{\pi_2})$.
+That is, $\Theta$ is a full subcategory of $\ocat$.
 A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morphism of presheaves.
 \end{defn}
 
 \section{Syntax and Inference Rules}
 
 First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\,p\ |\ proj_2\,p\ |\ (a = a'\,|\,A)\ |\ idp\,a, \]
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b\,a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\,p\ |\ proj_2\,p\ |\ (a = a'\,|\,A)\ |\ idp\,a, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
 where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
@@ -177,7 +179,7 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \quad
 \AxiomC{$\Gamma \vdash b : \Pi A B$}
 \AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash b a : B[a]$}
+\BinaryInfC{$\Gamma \vdash b\,a : B[a]$}
 \DisplayProof
 \end{center}
 
@@ -223,7 +225,7 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \begin{center}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash B : U_\beta$}
-\RightLabel{, $\llbracket A \rrbracket^\rho = \llbracket B \rrbracket^\rho, \forall \rho \in \llbracket \Gamma \rrbracket$}
+\RightLabel{, $\mathsf{reify}(|\Gamma|, \llbracket A \rrbracket, \mathsf{U}(\omega)) = \mathsf{reify}(|\Gamma|, \llbracket B \rrbracket, \mathsf{U}(\omega))$}
 \BinaryInfC{$\Gamma \vdash a : B$}
 \DisplayProof
 \end{center}
@@ -239,16 +241,17 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 We work in a suitable category of domains (see, for example, \cite{domains} for more information on the topic).
 Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\Theta)$ the set of objects, and $Hom(\Theta)$ the set of morphisms of the category $\Theta$.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\Theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus \nats_\bot \oplus \D \]
+\[ \D = [Hom(\Theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \]
 \[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\Theta)_\bot \times \D \times \D \times \D \]
 \[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
 \[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
 
+Here, $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$.
 The meaning of the components in this equaltion should be clear from the names of the constructors:
 \begin{itemize}
 \item[] $\mathsf{Lam} : [Hom(\Theta)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
-\item[] $\mathsf{U} : \nats_\bot \to \D$
+\item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
 \item[] $\mathsf{Idp} : \D \to \D$
 \item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \to \D$
 \item[] $\mathsf{Id} : Ob(\Theta)_\bot \times \D \times \D \times \D \to \D$
@@ -261,34 +264,67 @@ If $\rho \in Env$ and $x \in \D$, then we define $\rho[x] \in Env$ to be the fun
 Now, we define the evaluation function $\llbracket - \rrbracket : Tm_\bot \to [Env \to [Ob(\Theta)_\bot \to \D]]$:
 \begin{itemize}
 \item[] $\llbracket v_i \rrbracket^\rho_\pi = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
-\item[] $\llbracket U_\alpha \rrbracket^\rho_\pi = \mathsf{U}(\alpha)$
-\item[] $\llbracket \Pi A B \rrbracket^\rho_\pi = \mathsf{Pi}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
-\item[] $\llbracket \Sigma A B \rrbracket^\rho_\pi = \mathsf{Sigma}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
+\item[] $\llbracket U_\alpha \rrbracket^\rho_\pi = \mathsf{U}(\alpha)$, if $\alpha \in \nats$, and $\bot$, otherwise.
+\item[] $\llbracket \Pi A B \rrbracket^\rho_\pi = \mathsf{Pi}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket \Sigma A B \rrbracket^\rho_\pi = \mathsf{Sigma}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
 \item[] $\llbracket a = a' | A \rrbracket^\rho_\pi = \mathsf{Id}(\pi, \llbracket A \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi, \llbracket a' \rrbracket^\rho_\pi)$
-\item[] $\llbracket \lambda b \rrbracket^\rho_\pi = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{\mathsf{actionEnv}(m,\rho)[a]}_{dom(m)})$
-\item[] $\llbracket b a \rrbracket^\rho_\pi = \mathsf{app}(\pi, \llbracket b \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi)$
+\item[] $\llbracket \lambda b \rrbracket^\rho_\pi = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket b\,a \rrbracket^\rho_\pi = \mathsf{app}(\pi, \llbracket b \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi)$
 \item[] $\llbracket a, b \rrbracket^\rho_\pi = \mathsf{Pair}(\llbracket a \rrbracket^\rho_\pi, \llbracket b \rrbracket^\rho_\pi)$
 \item[] $\llbracket proj_1\,p \rrbracket^\rho_\pi = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_\pi)$
 \item[] $\llbracket proj_2\,p \rrbracket^\rho_\pi = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_\pi)$
 \item[] $\llbracket idp\,a \rrbracket^\rho_\pi = \mathsf{action}(TODO,\llbracket a \rrbracket^\rho_\pi)$
 \end{itemize}
 
-Functions $\mathsf{app}$, $\mathsf{proj_1}$, and $\mathsf{proj_2}$ are defined as follows:
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{action}$ are defined as follows:
 \begin{itemize}
 \item[] $\mathsf{app} : Ob(\Theta)_\bot \times \D \times \D \to \D$
-\item[] $\mathsf{app}(\pi,Lam(f),a) = f(id_\pi,a)$
+\item[] $\mathsf{app}(\pi,\mathsf{Lam}(f),a) = f(id_\pi,a)$
 \item[] $\mathsf{app}(\pi,e,a) = \bot$, otherwise
 \item[]
 \item[] $\mathsf{proj_1} : \D \to \D$
-\item[] $\mathsf{proj_1}(Pair(a,b)) = a$
+\item[] $\mathsf{proj_1}(\mathsf{Pair}(a,b)) = a$
 \item[] $\mathsf{proj_1}(x) = \bot$, otherwise
 \item[]
 \item[] $\mathsf{proj_2} : \D \to \D$
-\item[] $\mathsf{proj_2}(Pair(a,b)) = b$
+\item[] $\mathsf{proj_2}(\mathsf{Pair}(a,b)) = b$
 \item[] $\mathsf{proj_2}(x) = \bot$, otherwise
+\item[]
+\item[] $\mathsf{action} : Hom(\Theta)_\bot \times \D \to \D$
+\item[] $\mathsf{action}(m, \mathsf{Lam}(f)) = \mathsf{Lam}((m',x) \mapsto f(m \circ m', x))$
+\item[] $\mathsf{action}(m, \mathsf{Pair}(a, b)) = \mathsf{Pair}(\mathsf{action}(m, a), \mathsf{action}(m, b))$
+\item[] $\mathsf{action}(m, \mathsf{U}(\alpha)) = \mathsf{U}(\alpha)$
+\item[] $\mathsf{action}(m, \mathsf{Idp}(a)) = TODO$
+\item[] $\mathsf{action}(m, \mathsf{Ne}(l, t)) = TODO$
+\item[] $\mathsf{action}(m, \mathsf{Id}(\pi, A, a, a')) = \mathsf{Id}(dom(m), \mathsf{action}(m, A), \mathsf{action}(m, a), \mathsf{action}(m, a'))$
+\item[] $\mathsf{action}(m, \mathsf{Pi}(\pi, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
+\item[] $\mathsf{action}(m, \mathsf{Sigma}(\pi, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
 \end{itemize}
 
-Functions $\mathsf{action}$ and $\mathsf{actionEnv}$ will be defined later. % TODO
+Now, let us show how to reify elements of $\D$ into terms.
+\begin{itemize}
+\item[] $\mathsf{reify} : \nats_\bot \times \D \times \D \to Tm_\bot$
+\item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(\diamond, A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_\diamond, x), B(id_\diamond, x))$, \\
+        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+\item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(\diamond, A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, B(id_\diamond, a))$
+\item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
+\item[] $\mathsf{reify}(i, \mathsf{Idp}(a), \mathsf{Id}(\diamond, t, a', a'')) = idp\,\mathsf{reify}(i, a, t)$
+\item[] $\mathsf{reify}(i, \mathsf{Ne}(l, e), t) = e(i)$
+\item[] $\mathsf{reify}(i, \mathsf{Id}(\diamond, A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
+\item[] $\mathsf{reify}(i, \mathsf{Pi}(\diamond, A, B), \mathsf{U}(\alpha)) =$
+        $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_\diamond, x), \mathsf{U}(\alpha))$, \\
+        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+\item[] $\mathsf{reify}(i, \mathsf{Sigma}(\diamond, A, B), \mathsf{U}(\alpha)) = $
+        $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_\diamond, x), \mathsf{U}(\alpha))$, \\
+        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+\item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise.
+\item[]
+\item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
+\item[] $\mathsf{reflect}(e,\mathsf{Pi}(\diamond, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(l \mapsto e(l)\,\mathsf{reify}(0, a, A), B(id_\diamond, a)))$
+\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(\diamond, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(l \mapsto proj_2\,e(l), B(id_\diamond, a)))$, \\
+        \indent where $a = \mathsf{reflect}(l \mapsto proj_1\,e(l), A)$
+\item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e)$, otherwise
+\end{itemize}
 
 \bibliographystyle{amsplain}
 \bibliography{ref}
