@@ -7,6 +7,7 @@
 \usepackage{xargs}
 \usepackage{bussproofs}
 \usepackage{stmaryrd}
+\usepackage{mathrsfs}
 
 \providecommand\WarningsAreErrors{false}
 \ifthenelse{\equal{\WarningsAreErrors}{true}}{\renewcommand{\GenericWarning}[2]{\GenericError{#1}{#2}{}{This warning has been turned into a fatal error.}}}{}
@@ -300,6 +301,94 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{act
 \item[] $\mathsf{action}(m, \mathsf{Pi}(\pi, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
 \item[] $\mathsf{action}(m, \mathsf{Sigma}(\pi, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
 \end{itemize}
+
+Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
+If $A \in \mathscr{P}(\D)$ and $B : \D \to \mathscr{P}(\D)$, then define $\mathcal{S}igma A B, \mathcal{P}i A B, \mathcal{N}\!e, \mathcal{I}d\,A \in \mathscr{P}(\D)$ as follows:
+\[ \mathcal{S}igma A B = \{ e \in \D\,|\,\mathsf{proj_1}(e) \in A, \mathsf{proj_2}(e) \in B(\mathsf{proj_1}(e)) \}, \]
+\[ \mathcal{P}i A B = \{ e \in \D\,|\,\mathsf{app}(\diamond,e,d) \in B(d) \text{ for all } d \in A \}, \]
+\[ \mathcal{N}\!e = \{ \mathsf{Ne(l,e)}\,|\,l : \nats_\bot \to \D \times \D, e \in TM \}, \]
+\[ \mathcal{I}d\,A = \mathcal{N}\!e \cup \{ Idp(d)\,|\,d \in A \}. \]
+
+Now, for each $\alpha \leq \omega$, we define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ and a partial function $[ - ]_\alpha : \D \to \mathscr{P}(\D)$ by induction on $\alpha$.
+The graph $G_\alpha \subseteq \D \times \mathscr{P}(\D)$ of $[ - ]_\alpha$ is defined inductively by the following rules:
+\medskip
+\begin{center}
+\AxiomC{$(a, A) \in G_\alpha$}
+\AxiomC{$(b(id_\diamond, d), B(d)) \in G_\alpha \text{ for all } d \in A$}
+\BinaryInfC{$(\mathsf{Sigma}(\diamond, a, b), \mathcal{S}igma A B) \in G_\alpha$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$(a, A) \in G_\alpha$}
+\AxiomC{$(b(id_\diamond, d), B(d)) \in G_\alpha \text{ for all } d \in A$}
+\BinaryInfC{$(\mathsf{Pi}(\diamond, a, b), \mathcal{P}i A B) \in G_\alpha$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{}
+\UnaryInfC{$(\mathsf{Ne}(l, e), \mathcal{N}\!e) \in G_\alpha$}
+\DisplayProof
+\quad
+\AxiomC{}
+\RightLabel{, $\beta < \alpha$}
+\UnaryInfC{$(\mathsf{U}(\beta), \mathcal{U}_\beta) \in G_\alpha$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$(a, A) \in G_\alpha$}
+\UnaryInfC{$(\mathsf{Id}(\diamond, a, x, y), \mathcal{I}d\,A) \in G_\alpha$}
+\DisplayProof
+\end{center}
+\medskip
+
+We inductively define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ by the following rules:
+\medskip
+\begin{center}
+\AxiomC{$a \in \mathcal{U}_\alpha$}
+\AxiomC{$b(id_\diamond, d) \in \mathcal{U}_\alpha \text{ for all } d \in [a]_\alpha$}
+\BinaryInfC{$\mathsf{Sigma}(\diamond, a, b) \in \mathcal{U}_\alpha$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$a \in \mathcal{U}_\alpha$}
+\AxiomC{$b(id_\diamond, d) \in \mathcal{U}_\alpha \text{ for all } d \in [a]_\alpha$}
+\BinaryInfC{$\mathsf{Pi}(\diamond, a, b) \in \mathcal{U}_\alpha$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{}
+\UnaryInfC{$\mathsf{Ne}(l,e) \in \mathcal{U}_\alpha$}
+\DisplayProof
+\quad
+\AxiomC{}
+\RightLabel{, $\beta < \alpha$}
+\UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}_\alpha$}
+\DisplayProof
+\quad
+\AxiomC{$a \in \mathcal{U}_\alpha$}
+\UnaryInfC{$\mathsf{Id}(\diamond, a, x, y) \in \mathcal{U}_\alpha$}
+\DisplayProof
+\quad
+\end{center}
+% We write simply $\mathcal{U}$ and $[ - ]$ for $\mathcal{U}_\omega$ and $[ - ]_\omega$.
+
+\begin{lem}
+For each $\alpha \leq \omega$, the graph $G_\alpha$ defines a partial function, that is $(a, A), (a, A') \in G_\alpha$ implies $A = A'$.
+For each $\alpha \leq \omega$, the partial function $[ - ]_\alpha : \D \to \mathscr{P}(\D)$ is defined on $\mathcal{U}_\alpha \subseteq \D$.
+\end{lem}
+\begin{proof}
+The first statement is proved by induction on generation of $G_\alpha$ and the second by induction on generation of $\mathcal{U}_\alpha$.
+\end{proof}
 
 Now, let us show how to reify elements of $\D$ into terms.
 \begin{itemize}
