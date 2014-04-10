@@ -226,7 +226,7 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \begin{center}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash B : U_\beta$}
-\RightLabel{, $\mathsf{reify}(|\Gamma|, \llbracket A \rrbracket, \mathsf{U}(\omega)) = \mathsf{reify}(|\Gamma|, \llbracket B \rrbracket, \mathsf{U}(\omega))$}
+\RightLabel{, $\llbracket A \rrbracket^{\rho_\Gamma}_\diamond = \llbracket B \rrbracket^{\rho_\Gamma}_\diamond$}
 \BinaryInfC{$\Gamma \vdash a : B$}
 \DisplayProof
 \end{center}
@@ -240,48 +240,50 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \label{sec:eval}
 
 We work in a suitable category of domains (see, for example, \cite{domains} for more information on the topic).
-Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\Theta)$ the set of objects, and $Hom(\Theta)$ the set of morphisms of the category $\Theta$.
+Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\bbG)$ the set of objects,
+and $Hom(\bbG)$ the set of morphisms of the category $\bbG$, thus $Ob(\bbG)$ is simply the set of natural numbers.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\Theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \]
-\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\Theta)_\bot \times \D \times \D \times \D \]
-\[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
-\[ \oplus Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \]
+\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \]
+\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
+\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
+\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
 
 Here, $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$.
 The meaning of the components in this equaltion should be clear from the names of the constructors:
 \begin{itemize}
-\item[] $\mathsf{Lam} : [Hom(\Theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Lam} : [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
 \item[] $\mathsf{Idp} : \D \to \D$
 \item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \to \D$
-\item[] $\mathsf{Id} : Ob(\Theta)_\bot \times \D \times \D \times \D \to \D$
-\item[] $\mathsf{Pi} : Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \to \D$
-\item[] $\mathsf{Sigma} : Ob(\Theta)_\bot \times \D \times [Hom(\Theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Id} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
+\item[] $\mathsf{Pi} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Sigma} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \end{itemize}
 
 Let $Env$ be the domain $[\nats_\bot \to \D]$.
 If $\rho \in Env$ and $x \in \D$, then we define $\rho[x] \in Env$ to be the function defined by the following rules: $\rho[x](0) = x$ and $\rho[x](i+1) = \rho(i)$.
-Now, we define the evaluation function $\llbracket - \rrbracket : Tm_\bot \to [Env \to [Ob(\Theta)_\bot \to \D]]$:
+Now, we define the evaluation function:
 \begin{itemize}
-\item[] $\llbracket v_i \rrbracket^\rho_\pi = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
-\item[] $\llbracket U_\alpha \rrbracket^\rho_\pi = \mathsf{U}(\alpha)$, if $\alpha \in \nats$, and $\bot$, otherwise.
-\item[] $\llbracket \Pi A B \rrbracket^\rho_\pi = \mathsf{Pi}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
-\item[] $\llbracket \Sigma A B \rrbracket^\rho_\pi = \mathsf{Sigma}(\pi, \llbracket A \rrbracket^\rho_\pi, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
-\item[] $\llbracket a = a' | A \rrbracket^\rho_\pi = \mathsf{Id}(\pi, \llbracket A \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi, \llbracket a' \rrbracket^\rho_\pi)$
-\item[] $\llbracket \lambda b \rrbracket^\rho_\pi = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
-\item[] $\llbracket b\,a \rrbracket^\rho_\pi = \mathsf{app}(\pi, \llbracket b \rrbracket^\rho_\pi, \llbracket a \rrbracket^\rho_\pi)$
-\item[] $\llbracket a, b \rrbracket^\rho_\pi = \mathsf{Pair}(\llbracket a \rrbracket^\rho_\pi, \llbracket b \rrbracket^\rho_\pi)$
-\item[] $\llbracket proj_1\,p \rrbracket^\rho_\pi = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_\pi)$
-\item[] $\llbracket proj_2\,p \rrbracket^\rho_\pi = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_\pi)$
-\item[] $\llbracket idp\,a \rrbracket^\rho_\pi = \mathsf{action}(TODO,\llbracket a \rrbracket^\rho_\pi)$
+\item[] $\llbracket - \rrbracket : Tm_\bot \times Env \times Ob(\bbG)_\bot \to \D$
+\item[] $\llbracket v_i \rrbracket^\rho_n = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
+\item[] $\llbracket U_\alpha \rrbracket^\rho_n = \mathsf{U}(\alpha)$, if $\alpha \in \nats$, and $\bot$, otherwise.
+\item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{IdOver}(n, \llbracket A \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
+\item[] $\llbracket \lambda b \rrbracket^\rho_n = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket b\,a \rrbracket^\rho_n = \mathsf{app}(n, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
+\item[] $\llbracket a, b \rrbracket^\rho_n = \mathsf{Pair}(\llbracket a \rrbracket^\rho_n, \llbracket b \rrbracket^\rho_n)$
+\item[] $\llbracket proj_1\,p \rrbracket^\rho_n = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_n)$
+\item[] $\llbracket proj_2\,p \rrbracket^\rho_n = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_n)$
+\item[] $\llbracket idp\,a \rrbracket^\rho_n = \mathsf{action}(\delta_n,\llbracket a \rrbracket^\rho_n)$
 \end{itemize}
 
-Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{action}$ are defined as follows:
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{action}$, and $\mathsf{IdOver}$ are defined as follows:
 \begin{itemize}
-\item[] $\mathsf{app} : Ob(\Theta)_\bot \times \D \times \D \to \D$
-\item[] $\mathsf{app}(\pi,\mathsf{Lam}(f),a) = f(id_\pi,a)$
-\item[] $\mathsf{app}(\pi,e,a) = \bot$, otherwise
+\item[] $\mathsf{app} : Ob(\bbG)_\bot \times \D \times \D \to \D$
+\item[] $\mathsf{app}(n,\mathsf{Lam}(f),a) = f(id_n,a)$
+\item[] $\mathsf{app}(n,e,a) = \bot$, otherwise
 \item[]
 \item[] $\mathsf{proj_1} : \D \to \D$
 \item[] $\mathsf{proj_1}(\mathsf{Pair}(a,b)) = a$
@@ -291,16 +293,43 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{act
 \item[] $\mathsf{proj_2}(\mathsf{Pair}(a,b)) = b$
 \item[] $\mathsf{proj_2}(x) = \bot$, otherwise
 \item[]
-\item[] $\mathsf{action} : Hom(\Theta)_\bot \times \D \to \D$
+\item[] $\mathsf{action} : Hom(\bbG)_\bot \times \D \to \D$
 \item[] $\mathsf{action}(m, \mathsf{Lam}(f)) = \mathsf{Lam}((m',x) \mapsto f(m \circ m', x))$
 \item[] $\mathsf{action}(m, \mathsf{Pair}(a, b)) = \mathsf{Pair}(\mathsf{action}(m, a), \mathsf{action}(m, b))$
 \item[] $\mathsf{action}(m, \mathsf{U}(\alpha)) = \mathsf{U}(\alpha)$
-\item[] $\mathsf{action}(m, \mathsf{Idp}(a)) = TODO$
-\item[] $\mathsf{action}(m, \mathsf{Ne}(l, t)) = TODO$
-\item[] $\mathsf{action}(m, \mathsf{Id}(\pi, A, a, a')) = \mathsf{Id}(dom(m), \mathsf{action}(m, A), \mathsf{action}(m, a), \mathsf{action}(m, a'))$
-\item[] $\mathsf{action}(m, \mathsf{Pi}(\pi, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
-\item[] $\mathsf{action}(m, \mathsf{Sigma}(\pi, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
+\item[] $\mathsf{action}(\delta_n, \mathsf{Idp}(a)) = \mathsf{Idp}(\mathsf{Idp}(a))$
+\item[] $\mathsf{action}(\delta_n, \mathsf{Ne}(l, t)) = \mathsf{Idp}(\mathsf{Ne}(l, t))$
+\item[] $\mathsf{action}(m, \mathsf{Id}(n, A, a, a')) = \mathsf{Id}(dom(m), \mathsf{action}(m, A), \mathsf{action}(m, a), \mathsf{action}(m, a'))$
+\item[] $\mathsf{action}(m, \mathsf{Pi}(n, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
+\item[] $\mathsf{action}(m, \mathsf{Sigma}(n, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
+\item[]
+\item[] $\mathsf{IdOver} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
+\item[] $\mathsf{IdOver}(n, \mathsf{Sigma}(n', A, B), p, p') =$ \\
+    \indent $\mathsf{Sigma}(n, \mathsf{IdOver}(n, A, \mathsf{proj_1}(p), \mathsf{proj_1}(p')), (m,a) \mapsto$ \\
+    \indent $\mathsf{IdOver}(dom(m), B(m,a), \mathsf{action}(m, \mathsf{proj_2}(p)), \mathsf{action}(m, \mathsf{proj_2}(p'))))$
+\item[] $\mathsf{IdOver}(n, \mathsf{Pi}(n', A, B), f, f') = \mathsf{Pi}(n, \mathsf{action}(\sigma_n, A), (m,a) \mapsto$ \\
+    \indent $\mathsf{Pi}(dom(m), \mathsf{action}(\tau_n \circ m, A), (m',a') \mapsto$ \\
+    \indent $\mathsf{Pi}(dom(m'), \mathsf{IdOver}(dom(m'), \mathsf{action}(m \circ m', A), \mathsf{action}(m', a), a'), (m'',p) \mapsto$ \\
+    \indent $\mathsf{IdOver}(dom(m''), \mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', B), p),$ \\
+    \indent \indent $\mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', f), \mathsf{action}(m' \circ m'', a)),$ \\
+    \indent \indent $\mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', f'), \mathsf{action}(m'', a'))))))$
+\item[] $\mathsf{IdOver}(n, \mathsf{Id}(n', A, a, a'), p, p') =$ \\
+    \indent $\mathsf{IdOver}(n, \mathsf{idp}(n, \mathsf{IdOver}(n, A, \mathsf{action}(\sigma_n, a), \mathsf{action}(\tau_n. a'))), \mathsf{comp}(n, p, a'), \mathsf{comp}(n, a, p'))$
+\item[] $\mathsf{IdOver}(n, \mathsf{Idp}(A), a, a') = \mathsf{Id}(n, A, a, a')$
+\item[] $\mathsf{IdOver}(n, \mathsf{Ne}(l, e), a, a') = \mathsf{Ne}(TODO)$
+\item[] $\mathsf{IdOver}(n, A, a, a') = \bot$, otherwise
 \end{itemize}
+
+\begin{comment}
+The rest of the functions we used in the definition of $\llbracket - \rrbracket$ will be defined later in this section.
+
+If $A$ is a term, then let $P^{(n)} A$ denote a term defined as follows: $P^{(0)} A = A$ and
+$P^{(n + 1)} A = \Sigma A (\Sigma (\Uparrow^1\hspace{-.5em} A) (P^{(n)}(v_1 = v_0\,|\,idp\,(\Uparrow^2\hspace{-.5em} A))))$.
+If $A \in \D$, then let $\mathsf{P}^{(n)} A = \llbracket P^{(n)} v_0 \rrbracket^{[0 \mapsto A, n \mapsto \bot]}_\diamond$.
+For each $n \in \nats$, define $\mathsf{s}_n,\mathsf{t}_n,\mathsf{c}_n : \D \to \D$ as follows:
+$\mathsf{c}_0(x) = x$, $\mathsf{c}_{n + 1} = \mathsf{c}_n \circ \mathsf{proj_2} \circ \mathsf{proj_2}$,
+$\mathsf{s}_n = \mathsf{proj_1} \circ \mathsf{c}_n$, and $\mathsf{t}_n = \mathsf{proj_1} \circ \mathsf{proj_2} \circ \mathsf{c}_n$.
+\end{comment}
 
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
 If $A \in \mathscr{P}(\D)$ and $B : \D \to \mathscr{P}(\D)$, then define $\mathcal{S}igma A B, \mathcal{P}i A B, \mathcal{N}\!e, \mathcal{I}d\,A \in \mathscr{P}(\D)$ as follows:
@@ -380,7 +409,7 @@ We inductively define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ by the following 
 \DisplayProof
 \quad
 \end{center}
-% We write simply $\mathcal{U}$ and $[ - ]$ for $\mathcal{U}_\omega$ and $[ - ]_\omega$.
+We write simply $\mathcal{U}$ and $[ - ]$ for $\mathcal{U}_\omega$ and $[ - ]_\omega$.
 
 \begin{lem}
 For each $\alpha \leq \omega$, the graph $G_\alpha$ defines a partial function, that is $(a, A), (a, A') \in G_\alpha$ implies $A = A'$.
@@ -388,6 +417,45 @@ For each $\alpha \leq \omega$, the partial function $[ - ]_\alpha : \D \to \math
 \end{lem}
 \begin{proof}
 The first statement is proved by induction on generation of $G_\alpha$ and the second by induction on generation of $\mathcal{U}_\alpha$.
+\end{proof}
+
+For each context $\Gamma$ (that is, finite sequence of terms), we define its interpretation $[ \Gamma ] \subseteq Env$ as follows:
+$\rho \in \Gamma$ if and only if $\rho(i) \in [\llbracket \Gamma(i) \rrbracket^\rho_\diamond]$ for each $0 \leq i < |\Gamma|$.
+We define a predicate on contexts $\Gamma \models$ inductively as follows:
+
+\centerAlignProof
+
+\medskip
+\begin{center}
+\AxiomC{}
+\UnaryInfC{$\epsilon \models$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \models$}
+\AxiomC{$\llbracket A \rrbracket^\rho_\diamond \in \mathcal{U} \text{ for all } \rho \in [\Gamma]$}
+\BinaryInfC{$\Gamma, A \models$}
+\DisplayProof
+\end{center}
+\medskip
+
+We write $\Gamma \models a : A$ if and only if $\Gamma \models$,
+$\forall \rho \in [\Gamma], \llbracket A \rrbracket^\rho_\diamond \in \mathcal{U}$,
+and $\forall \rho \in [\Gamma], \llbracket a \rrbracket^\rho_\diamond \in [\llbracket A \rrbracket^\rho_\diamond]$.
+
+\begin{prop}
+If $\Gamma \vdash$, then $\Gamma \models$.
+If $\Gamma \vdash a : A$, then $\Gamma \models a : A$.
+\end{prop}
+\begin{proof}
+By induction on derivation.
+Most of the cases is straightforward, let us prove some of them:
+\begin{itemize}
+\item Case
+\AxiomC{$\Gamma, A \vdash b : B$}
+\UnaryInfC{$\Gamma \vdash \lambda b : \Pi A B$}
+\DisplayProof
+
+\end{itemize}
 \end{proof}
 
 Now, let us show how to reify elements of $\D$ into terms.
