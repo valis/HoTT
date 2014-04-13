@@ -140,7 +140,7 @@ A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morph
 \section{Syntax and Inference Rules}
 
 First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b\,a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\,p\ |\ proj_2\,p\ |\ (a = a'\,|\,A)\ |\ idp\,a, \]
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b\ a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ |\ (a = a'\,|\,A)\ |\ idp\ a, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
 where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
@@ -185,7 +185,7 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \quad
 \AxiomC{$\Gamma \vdash b : \Pi A B$}
 \AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash b\,a : B[a]$}
+\BinaryInfC{$\Gamma \vdash b\ a : B[a]$}
 \DisplayProof
 \end{center}
 
@@ -206,24 +206,40 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \medskip
 \begin{center}
 \AxiomC{$\Gamma \vdash p : \Sigma A B$}
-\UnaryInfC{$\Gamma \vdash proj_1\,p : \Sigma A B$}
+\UnaryInfC{$\Gamma \vdash proj_1\ p : \Sigma A B$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \vdash p : \Sigma A B$}
-\UnaryInfC{$\Gamma \vdash proj_2\,p : B[proj_1\,p]$}
+\UnaryInfC{$\Gamma \vdash proj_2\ p : B[proj_1\ p]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\,U_\alpha$}
+\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\ U_\alpha$}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash b : B$}
 \TrinaryInfC{$\Gamma \vdash a = b\,|\,p : U_\alpha$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \vdash a : A$}
-\UnaryInfC{$\Gamma \vdash idp\,a : a = a\,|\,idp\,A$}
+\UnaryInfC{$\Gamma \vdash idp\ a : a = a\,|\,idp\ A$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : A_0 = A_1\,|\,idp\ U_\alpha$}
+\AxiomC{$\Gamma, A, A, v_1 = v_0\,|\,idp\ A \vdash\ \Uparrow^2_1\hspace{-.4em} B :\ \Uparrow^2\hspace{-.5em} B_0 =\ \Uparrow^1_1 \Uparrow^1\hspace{-.5em} B_1\,|\,idp\ U_\delta$}
+\BinaryInfC{$\Gamma \vdash \Pi_1 A B : \Pi A_0 B_0 = \Pi A_1 B_1\,|\,idp\ U_{max(\alpha, \beta, \gamma, \delta)}$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash b : b_0 = b_1\,|\,\Pi_1 A B$}
+\AxiomC{$\Gamma \vdash a : a_0 = a_1\,|\,A$}
+\BinaryInfC{$\Gamma \vdash pmap\ b\ a : b_0\ a_0 = b_1\ a_1\,|\,B[a]$}
 \DisplayProof
 \end{center}
 
@@ -279,11 +295,13 @@ Now, we define the evaluation function:
 \item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
 \item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \llbracket A \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
 \item[] $\llbracket \lambda b \rrbracket^\rho_n = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
-\item[] $\llbracket b\,a \rrbracket^\rho_n = \mathsf{app}(n, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
+\item[] $\llbracket b\ a \rrbracket^\rho_n = \mathsf{app}(n, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \item[] $\llbracket a, b \rrbracket^\rho_n = \mathsf{Pair}(\llbracket a \rrbracket^\rho_n, \llbracket b \rrbracket^\rho_n)$
-\item[] $\llbracket proj_1\,p \rrbracket^\rho_n = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_n)$
-\item[] $\llbracket proj_2\,p \rrbracket^\rho_n = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_n)$
-\item[] $\llbracket idp\,a \rrbracket^\rho_n = \mathsf{action}(\delta_n, \llbracket a \rrbracket^\rho_n)$
+\item[] $\llbracket proj_1\ p \rrbracket^\rho_n = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_n)$
+\item[] $\llbracket proj_2\ p \rrbracket^\rho_n = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_n)$
+\item[] $\llbracket idp\ a \rrbracket^\rho_n = \mathsf{action}(\delta_n, \llbracket a \rrbracket^\rho_n)$
+\item[] $\llbracket \Pi_1 A B \rrbracket^\rho_n = \mathsf{Pi}(n + 1, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(\mathsf{action}(m,-) \circ \rho)[a]}_{dom(m)})$
+\item[] $\llbracket pmap\ b\ a \rrbracket^\rho_n = \mathsf{app}(n + 1, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \end{itemize}
 
 Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{action}$, $\mathsf{IdOver}$, and $\mathsf{idp}$ are defined as follows:
@@ -338,7 +356,7 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{action}
 The rest of the functions we used in the definition of $\llbracket - \rrbracket$ will be defined later in this section.
 
 If $A$ is a term, then let $P^{(n)} A$ denote a term defined as follows: $P^{(0)} A = A$ and
-$P^{(n + 1)} A = \Sigma A (\Sigma (\Uparrow^1\hspace{-.5em} A) (P^{(n)}(v_1 = v_0\,|\,idp\,(\Uparrow^2\hspace{-.5em} A))))$.
+$P^{(n + 1)} A = \Sigma A (\Sigma (\Uparrow^1\hspace{-.5em} A) (P^{(n)}(v_1 = v_0\,|\,idp\ (\Uparrow^2\hspace{-.5em} A))))$.
 If $A \in \D$, then let $\mathsf{P}^{(n)} A = \llbracket P^{(n)} v_0 \rrbracket^{[0 \mapsto A, n \mapsto \bot]}_0$.
 For each $n \in \nats$, define $\mathsf{s}_n,\mathsf{t}_n,\mathsf{c}_n : \D \to \D$ as follows:
 $\mathsf{c}_0(x) = x$, $\mathsf{c}_{n + 1} = \mathsf{c}_n \circ \mathsf{proj_2} \circ \mathsf{proj_2}$,
@@ -346,11 +364,11 @@ $\mathsf{s}_n = \mathsf{proj_1} \circ \mathsf{c}_n$, and $\mathsf{t}_n = \mathsf
 \end{comment}
 
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
-If $A \in \mathscr{P}(\D)$ and $B : \D \to \mathscr{P}(\D)$, then define $\mathcal{S}igma A B, \mathcal{P}i A B, \mathcal{N}\!e, \mathcal{I}d\,A \in \mathscr{P}(\D)$ as follows:
+If $A \in \mathscr{P}(\D)$ and $B : \D \to \mathscr{P}(\D)$, then define $\mathcal{S}igma A B, \mathcal{P}i A B, \mathcal{N}\!e, \mathcal{I}d\ A \in \mathscr{P}(\D)$ as follows:
 \[ \mathcal{S}igma A B = \{ e \in \D\,|\,\mathsf{proj_1}(e) \in A, \mathsf{proj_2}(e) \in B(\mathsf{proj_1}(e)) \}, \]
 \[ \mathcal{P}i A B = \{ e \in \D\,|\,\mathsf{app}(0,e,d) \in B(d) \text{ for all } d \in A \}, \]
 \[ \mathcal{N}\!e = \{ \mathsf{Ne(l,e)}\,|\,l : \nats_\bot \to \D \times \D, e \in TM \}, \]
-\[ \mathcal{I}d\,A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
+\[ \mathcal{I}d\ A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
 
 Now, for each $\alpha \leq \omega$, we define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ and a partial function $[ - ]_\alpha : \D \to \mathscr{P}(\D)$ by induction on $\alpha$.
 The graph $G_\alpha \subseteq \D \times \mathscr{P}(\D)$ of $[ - ]_\alpha$ is defined inductively by the following rules:
@@ -405,7 +423,7 @@ The graph $G_\alpha \subseteq \D \times \mathscr{P}(\D)$ of $[ - ]_\alpha$ is de
 \DisplayProof
 \quad
 \AxiomC{$(a, A) \in G_\alpha$}
-\UnaryInfC{$(\mathsf{Id}(0, \mathsf{Idp}(a), x, y), \mathcal{I}d\,A) \in G_\alpha$}
+\UnaryInfC{$(\mathsf{Id}(0, \mathsf{Idp}(a), x, y), \mathcal{I}d\ A) \in G_\alpha$}
 \DisplayProof
 \end{center}
 \medskip
@@ -499,11 +517,11 @@ Most of the cases are straightforward, let us prove some of them:
 \item Case
 \AxiomC{$\Gamma \vdash b : \Pi A B$}
 \AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash b\,a : B[a]$}
+\BinaryInfC{$\Gamma \vdash b\ a : B[a]$}
 \DisplayProof \\
 
 \item Case
-\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\,U_\alpha$}
+\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\ U_\alpha$}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash b : B$}
 \TrinaryInfC{$\Gamma \vdash a = b\,|\,p : U_\alpha$}
@@ -511,7 +529,7 @@ Most of the cases are straightforward, let us prove some of them:
 
 \item Case
 \AxiomC{$\Gamma \vdash a : A$}
-\UnaryInfC{$\Gamma \vdash idp\,a : a = a\,|\,idp\,A$}
+\UnaryInfC{$\Gamma \vdash idp\ a : a = a\,|\,idp\ A$}
 \DisplayProof \\
 
 \item Case
@@ -530,7 +548,7 @@ Now, let us show how to reify elements of $\D$ into terms.
         \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
 \item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(0, A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, B(id_0, a))$
 \item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
-\item[] $\mathsf{reify}(i, \mathsf{Idp}(a), \mathsf{Id}(0, t, a', a'')) = idp\,\mathsf{reify}(i, a, t)$
+\item[] $\mathsf{reify}(i, \mathsf{Idp}(a), \mathsf{Id}(0, t, a', a'')) = idp\ \mathsf{reify}(i, a, t)$
 \item[] $\mathsf{reify}(i, \mathsf{Ne}(l, e), t) = e(i)$
 \item[] $\mathsf{reify}(i, \mathsf{Id}(0, A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
 \item[] $\mathsf{reify}(i, \mathsf{Pi}(0, A, B), \mathsf{U}(\alpha)) =$
@@ -542,9 +560,9 @@ Now, let us show how to reify elements of $\D$ into terms.
 \item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise.
 \item[]
 \item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
-\item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(l \mapsto e(l)\,\mathsf{reify}(0, a, A), B(id_0, a)))$
-\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(l \mapsto proj_2\,e(l), B(id_0, a)))$, \\
-        \indent where $a = \mathsf{reflect}(l \mapsto proj_1\,e(l), A)$
+\item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(l \mapsto e(l)\ \mathsf{reify}(0, a, A), B(id_0, a)))$
+\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(l \mapsto proj_2\ e(l), B(id_0, a)))$, \\
+        \indent where $a = \mathsf{reflect}(l \mapsto proj_1\ e(l), A)$
 \item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e)$, otherwise
 \end{itemize}
 
