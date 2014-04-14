@@ -264,8 +264,8 @@ We work in a suitable category of domains (see, for example, \cite{domains} for 
 Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\bbG)$ the set of objects,
 and $Hom(\bbG)$ the set of morphisms of the category $\bbG$, thus $Ob(\bbG)$ is simply the set of natural numbers.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \times \D \times \D \]
-\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
+\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \]
+\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \times \nats_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
 \[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
 \[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
 
@@ -275,8 +275,7 @@ The meaning of the components in this equaltion should be clear from the names o
 \item[] $\mathsf{Lam} : [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
-\item[] $\mathsf{Idp} : \D \times \D \times \D \to \D$
-\item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \to \D$
+\item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \times \nats_\bot \to \D$
 \item[] $\mathsf{Id} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
 \item[] $\mathsf{Pi} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Sigma} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
@@ -320,10 +319,10 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{act
 \item[] $\mathsf{action}(m, \mathsf{Lam}(f)) = \mathsf{Lam}((m',x) \mapsto f(m \circ m', x))$
 \item[] $\mathsf{action}(m, \mathsf{Pair}(a, b)) = \mathsf{Pair}(\mathsf{action}(m, a), \mathsf{action}(m, b))$
 \item[] $\mathsf{action}(m, \mathsf{U}(\alpha)) = \mathsf{U}(\alpha)$
+\item[] $\mathsf{action}(m, \mathsf{Ne}(s,e,c)) = TODO$
 \item[] $\mathsf{action}(m, \mathsf{Id}(n, A, a, a')) = \mathsf{Id}(dom(m), \mathsf{action}(m, A), \mathsf{action}(m, a), \mathsf{action}(m, a'))$
 \item[] $\mathsf{action}(m, \mathsf{Pi}(n, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
 \item[] $\mathsf{action}(m, \mathsf{Sigma}(n, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
-\item[] $\mathsf{action}(\delta_n, e) = \mathsf{Idp}(e, e, e)$
 \item[]
 \item[] $\mathsf{comp} : Ob(\bbG)_\bot \times \D \times \D \to \D$
 % \item[] $\mathsf{comp}(n, \mathsf{Idp}(x, y, d), \mathsf{Idp}(x', y', e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
@@ -344,7 +343,8 @@ be equal to the subset of $\D$ of the form $\mathsf{Lam}(f)$ such that
 for all $a_1,a'_1 \in R_0, a_2,a'_2 \in R_1(a_1,a'_1), \ldots a_n,a'_n \in R_{n-1}(a_1,a'_1) \ldots (a_{n-1},a'_{n-1})$, and $a \in R_n((a_1,a'_1), \ldots (a_n,a'_n))$.
 Let $\mathcal{P}i_n R\,Q(f_1, \ldots f_n)$ be empty if arguments do not have the form as above.
 
-% \[ \mathcal{N}\!e = \{ \mathsf{Ne(s,e)}\,|\,s : \nats_\bot \to \D \times \D, e \in TM \}, \]
+Define $\mathcal{N}\!e_n \in \mathscr{M}_n$ as follows:
+\[ \mathcal{N}\!e_n(x_1, \ldots x_n) = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \text{ and } s(i) = x_{i+1} \text{ for all } 0 \leq i < n \}. \]
 % \[ \mathcal{I}d\ A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
 
 Now, for each $\alpha \leq \omega$ and $n \in \nats$,
@@ -376,7 +376,7 @@ First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{M}_n$ induc
 
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$(\mathsf{Ne}(s, e), \mathcal{N}\!e\,s) \in G^\alpha_n$}
+\UnaryInfC{$(\mathsf{Ne}(s,e,c), \mathcal{N}\!e_n) \in G^\alpha_n$}
 \DisplayProof
 \quad
 \AxiomC{}
@@ -405,15 +405,19 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ by the following 
 
 \medskip
 \begin{center}
-\AxiomC{}
-\UnaryInfC{$\mathsf{Ne}(s,e) \in \mathcal{U}^\alpha$}
+\AxiomC{$s(i) \in \mathcal{U}^\alpha_i \times \mathcal{U}^\alpha_i$ for all $0 \leq i < n$}
+\UnaryInfC{$\mathsf{Ne}(s,e,c) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \quad
+\centerAlignProof
 \AxiomC{}
 \RightLabel{, $\beta < \alpha$}
-\UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}^\alpha$}
+\UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
-\quad
+\end{center}
+
+\medskip
+\begin{center}
 \AxiomC{}
 \UnaryInfC{$\mathsf{Id}(0, a, x, y) \in \mathcal{U}^\alpha$}
 \DisplayProof
@@ -499,8 +503,7 @@ Now, let us show how to reify elements of $\D$ into terms.
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(0, A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, B(id_0, a))$
 \item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
-\item[] $\mathsf{reify}(i, \mathsf{Idp}(x, y, a), \mathsf{Id}(0, t, a', a'')) = idp\ \mathsf{reify}(i, a, t)$
-\item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e), t) = e(i)$
+\item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e, c), t) = e(i)$
 \item[] $\mathsf{reify}(i, \mathsf{Id}(0, A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
 \item[] $\mathsf{reify}(i, \mathsf{Pi}(0, A, B), \mathsf{U}(\alpha)) =$
         $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_0, x), \mathsf{U}(\alpha))$, \\
@@ -514,7 +517,7 @@ Now, let us show how to reify elements of $\D$ into terms.
 \item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), B(id_0, a)))$
 \item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(k \mapsto proj_2\ e(k), B(id_0, a)))$, \\
         \indent where $a = \mathsf{reflect}(k \mapsto proj_1\ e(k), A)$
-\item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e)$, otherwise
+\item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e, 0)$, otherwise
 \end{itemize}
 
 \bibliographystyle{amsplain}
