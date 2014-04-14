@@ -230,8 +230,8 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \medskip
 \begin{center}
 \AxiomC{$\Gamma \vdash A : A_0 = A_1\,|\,idp\ U_\alpha$}
-\AxiomC{$\Gamma, A, A, v_1 = v_0\,|\,idp\ A \vdash\ \Uparrow^2_1\hspace{-.4em} B :\ \Uparrow^2\hspace{-.5em} B_0 =\ \Uparrow^1_1 \Uparrow^1\hspace{-.5em} B_1\,|\,idp\ U_\delta$}
-\BinaryInfC{$\Gamma \vdash \Pi_1 A B : \Pi A_0 B_0 = \Pi A_1 B_1\,|\,idp\ U_{max(\alpha, \beta, \gamma, \delta)}$}
+\AxiomC{$\Gamma, A, A, v_1 = v_0\,|\,idp\ A \vdash\ \Uparrow^2_1\hspace{-.4em} B :\ \Uparrow^2\hspace{-.5em} B_0 =\ \Uparrow^1_1 \Uparrow^1\hspace{-.5em} B_1\,|\,idp\ U_\beta$}
+\BinaryInfC{$\Gamma \vdash \Pi_1 A B : \Pi A_0 B_0 = \Pi A_1 B_1\,|\,idp\ U_{max(\alpha, \beta)}$}
 \DisplayProof
 \end{center}
 
@@ -264,9 +264,8 @@ We work in a suitable category of domains (see, for example, \cite{domains} for 
 Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\bbG)$ the set of objects,
 and $Hom(\bbG)$ the set of morphisms of the category $\bbG$, thus $Ob(\bbG)$ is simply the set of natural numbers.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \]
+\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \times \D \times \D \]
 \[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
-% \oplus \D \times \D \times \D \]
 \[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
 \[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
 
@@ -276,10 +275,9 @@ The meaning of the components in this equaltion should be clear from the names o
 \item[] $\mathsf{Lam} : [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
-\item[] $\mathsf{Idp} : \D \to \D$
+\item[] $\mathsf{Idp} : \D \times \D \times \D \to \D$
 \item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \to \D$
 \item[] $\mathsf{Id} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
-% \item[] $\mathsf{Path} : \D \times \D \times \D \to \D$
 \item[] $\mathsf{Pi} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Sigma} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \end{itemize}
@@ -304,7 +302,7 @@ Now, we define the evaluation function:
 \item[] $\llbracket pmap\ b\ a \rrbracket^\rho_n = \mathsf{app}(n + 1, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \end{itemize}
 
-Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{action}$, $\mathsf{IdOver}$, and $\mathsf{idp}$ are defined as follows:
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{action}$ are defined as follows:
 \begin{itemize}
 \item[] $\mathsf{app} : Ob(\bbG)_\bot \times \D \times \D \to \D$
 \item[] $\mathsf{app}(n,\mathsf{Lam}(f),a) = f(id_n,a)$
@@ -325,161 +323,114 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{action}
 \item[] $\mathsf{action}(m, \mathsf{Id}(n, A, a, a')) = \mathsf{Id}(dom(m), \mathsf{action}(m, A), \mathsf{action}(m, a), \mathsf{action}(m, a'))$
 \item[] $\mathsf{action}(m, \mathsf{Pi}(n, A, B)) = \mathsf{Pi}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
 \item[] $\mathsf{action}(m, \mathsf{Sigma}(n, A, B)) = \mathsf{Sigma}(dom(m), \mathsf{action}(m, A), (m', x) \mapsto B(m \circ m', x))$
-% \item[] $\mathsf{action}(\delta_n, \mathsf{Path}(l, r, a)) = TODO$
-\item[] $\mathsf{action}(\delta_n, e) = \mathsf{Idp}(e)$
+\item[] $\mathsf{action}(\delta_n, e) = \mathsf{Idp}(e, e, e)$
 \item[]
 \item[] $\mathsf{comp} : Ob(\bbG)_\bot \times \D \times \D \to \D$
-\item[] $\mathsf{comp}(n, \mathsf{Idp}(d), \mathsf{Idp}(e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
+% \item[] $\mathsf{comp}(n, \mathsf{Idp}(x, y, d), \mathsf{Idp}(x', y', e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
 \item[] $\mathsf{comp}(n, d, e) = TODO$
 \end{itemize}
 
-\begin{comment}
-\item[] $\mathsf{IdOver} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
-\item[] $\mathsf{IdOver}(n, \mathsf{Sigma}(n', A, B), p, p') =$ \\
-    \indent $\mathsf{Sigma}(n, \mathsf{IdOver}(n, A, \mathsf{proj_1}(p), \mathsf{proj_1}(p')), (m,a) \mapsto$ \\
-    \indent $\mathsf{IdOver}(dom(m), B(m,a), \mathsf{action}(m, \mathsf{proj_2}(p)), \mathsf{action}(m, \mathsf{proj_2}(p'))))$
-\item[] $\mathsf{IdOver}(n, \mathsf{Pi}(n', A, B), f, f') = \mathsf{Pi}(n, \mathsf{action}(\sigma_0\ \circ\ !_n, A), (m,a) \mapsto$ \\
-    \indent $\mathsf{Pi}(dom(m), \mathsf{action}(\tau_0\ \circ\ !_n \circ m, A), (m',a') \mapsto$ \\
-    \indent $\mathsf{Pi}(dom(m'), \mathsf{IdOver}(dom(m'), \mathsf{action}(m \circ m', A), \mathsf{action}(m', a), a'), (m'',p) \mapsto$ \\
-    \indent $\mathsf{IdOver}(dom(m''), \mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', B), p),$ \\
-    \indent \indent $\mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', f), \mathsf{action}(m' \circ m'', a)),$ \\
-    \indent \indent $\mathsf{app}(dom(m''), \mathsf{action}(m \circ m' \circ m'', f'), \mathsf{action}(m'', a'))))))$, \\
-    \indent where $!_n : n \to 0$ is the unique morphism into $0$ in $\Theta$
-\item[] $\mathsf{IdOver}(n, \mathsf{Id}(n', A, a, a'), p, p') =$ \\
-    \indent $\mathsf{IdOver}(n, \mathsf{idp}(n, \mathsf{IdOver}(n, A, \mathsf{action}(\sigma_0\ \circ\ !_n, a), \mathsf{action}(\tau_0\ \circ\ !_n. a'))),$ \\
-    \indent $\mathsf{comp}(n, p, a'), \mathsf{comp}(n, a, p'))$
-\item[] $\mathsf{IdOver}(n, \mathsf{Idp}(A), a, a') = \mathsf{Id}(n, A, a, a')$
-\item[] $\mathsf{IdOver}(n, \mathsf{U}(\alpha), a, a') = \mathsf{Id}(n, \mathsf{U}(\alpha), a, a')$
-\item[] $\mathsf{IdOver}(n, \mathsf{Ne}(l, e), a, a') = \mathsf{Ne}(TODO)$
-\item[] $\mathsf{IdOver}(n, A, a, a') = \bot$, otherwise
-
-The rest of the functions we used in the definition of $\llbracket - \rrbracket$ will be defined later in this section.
-
-If $A$ is a term, then let $P^{(n)} A$ denote a term defined as follows: $P^{(0)} A = A$ and
-$P^{(n + 1)} A = \Sigma A (\Sigma (\Uparrow^1\hspace{-.5em} A) (P^{(n)}(v_1 = v_0\,|\,idp\ (\Uparrow^2\hspace{-.5em} A))))$.
-If $A \in \D$, then let $\mathsf{P}^{(n)} A = \llbracket P^{(n)} v_0 \rrbracket^{[0 \mapsto A, n \mapsto \bot]}_0$.
-For each $n \in \nats$, define $\mathsf{s}_n,\mathsf{t}_n,\mathsf{c}_n : \D \to \D$ as follows:
-$\mathsf{c}_0(x) = x$, $\mathsf{c}_{n + 1} = \mathsf{c}_n \circ \mathsf{proj_2} \circ \mathsf{proj_2}$,
-$\mathsf{s}_n = \mathsf{proj_1} \circ \mathsf{c}_n$, and $\mathsf{t}_n = \mathsf{proj_1} \circ \mathsf{proj_2} \circ \mathsf{c}_n$.
-\end{comment}
-
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
-If $A \in \mathscr{P}(\D)$ and $B : \D \to \mathscr{P}(\D)$, then define $\mathcal{S}igma A B, \mathcal{P}i A B, \mathcal{N}\!e, \mathcal{I}d\ A \in \mathscr{P}(\D)$ as follows:
-\[ \mathcal{S}igma A B = \{ e \in \D\,|\,\mathsf{proj_1}(e) \in A, \mathsf{proj_2}(e) \in B(\mathsf{proj_1}(e)) \}, \]
-\[ \mathcal{P}i A B = \{ e \in \D\,|\,\mathsf{app}(0,e,d) \in B(d) \text{ for all } d \in A \}, \]
-\[ \mathcal{N}\!e = \{ \mathsf{Ne(l,e)}\,|\,l : \nats_\bot \to \D \times \D, e \in TM \}, \]
-\[ \mathcal{I}d\ A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
+Let $\mathscr{M}_n$ denote the set of functions $(\D \times \D)^n \to \mathscr{P}(\D)$.
+If $n \in \nats$, $R \in \mathscr{M}_n$, and $Q : \D \to \mathscr{M}_n$, then define $\mathcal{S}igma_n R\,Q \in \mathscr{M}_n$ as follows:
+\[ \mathcal{S}igma_n R\,Q((\mathsf{Pair}(a_1,b_1), \mathsf{Pair}(a'_1,b'_1)), \ldots (\mathsf{Pair}(a_n,b_n), \mathsf{Pair}(a'_n,b'_n))) = \]
+\[ \{ \mathsf{Pair}(a,b)\,|\,a \in R((a_1,a'_1), \ldots (a_n,a'_n)), b \in Q(a)((b_1,b'_1), \ldots (b_n,b'_n)) \}. \]
+Let $\mathcal{S}igma_n R\,Q(p_1, \ldots p_n)$ be empty if arguments do not have the form as above.
 
-Now, for each $\alpha \leq \omega$, we define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ and a partial function $[ - ]_\alpha : \D \to \mathscr{P}(\D)$ by induction on $\alpha$.
-The graph $G_\alpha \subseteq \D \times \mathscr{P}(\D)$ of $[ - ]_\alpha$ is defined inductively by the following rules:
+Suppose that $n \in \nats$, $Q : \D \to \mathscr{M}_n$, and $R = (R_0, \ldots R_n)$ is a sequence such that $R_i \in \mathscr{M}_i$.
+Then let $\mathcal{P}i_n R\,Q((\mathsf{Lam}(f_1),\mathsf{Lam}(f'_1)), \ldots (\mathsf{Lam}(f_n),\mathsf{Lam}(f'_n)))$
+be equal to the subset of $\D$ of the form $\mathsf{Lam}(f)$ such that
+\[ f(id_n,a) \in Q(a)((f_1(id_0,a_1), f'_1(id_0,a'_1)), \ldots (f_n(id_{n-1},a_n), f'_n(id_{n-1},a'_n))) \]
+for all $a_1,a'_1 \in R_0, a_2,a'_2 \in R_1(a_1,a'_1), \ldots a_n,a'_n \in R_{n-1}(a_1,a'_1) \ldots (a_{n-1},a'_{n-1})$, and $a \in R_n((a_1,a'_1), \ldots (a_n,a'_n))$.
+Let $\mathcal{P}i_n R\,Q(f_1, \ldots f_n)$ be empty if arguments do not have the form as above.
+
+% \[ \mathcal{N}\!e = \{ \mathsf{Ne(s,e)}\,|\,s : \nats_\bot \to \D \times \D, e \in TM \}, \]
+% \[ \mathcal{I}d\ A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
+
+Now, for each $\alpha \leq \omega$ and $n \in \nats$,
+we define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ and a function $[-]^\alpha_n : \mathcal{U}^\alpha_n \to \mathscr{M}_n$ by induction on $\alpha$.
+First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{M}_n$ inductively by the following rules:
 \medskip
 \begin{center}
-\AxiomC{$(a, A) \in G_\alpha$}
-\AxiomC{$(b(id_0, d), B(d)) \in G_\alpha \text{ for all } d \in A$}
-\BinaryInfC{$(\mathsf{Sigma}(0, a, b), \mathcal{S}igma A B) \in G_\alpha$}
+\AxiomC{$(A, R) \in G^\alpha_n$}
+\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$}
+\BinaryInfC{$(\mathsf{Sigma}(n, A, B), \mathcal{S}igma_n R\,Q) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
-\AxiomC{$(a, A) \in G_\alpha$}
-\AxiomC{$(b(id_0, d), B(d)) \in G_\alpha \text{ for all } d \in A$}
-\BinaryInfC{$(\mathsf{Pi}(0, a, b), \mathcal{P}i A B) \in G_\alpha$}
+\AxiomC{$(A, R_i) \in G^\alpha_i$}
+\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R_n$}
+\BinaryInfC{$(\mathsf{Pi}(n, A, B), \mathcal{P}i_n (R_0, \ldots R_n)\,Q) \in G^\alpha_n$}
+\DisplayProof
+\end{center}
+\medskip
+
+\begin{center}
+\AxiomC{$(A,R) \in G^\alpha_{n+1}$}
+\UnaryInfC{$(\mathsf{Id}(n, A, a, a'), \mathcal{I}d_n R\,a\,a') \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$(\mathsf{Ne}(l, e), \mathcal{N}\!e) \in G_\alpha$}
+\UnaryInfC{$(\mathsf{Ne}(s, e), \mathcal{N}\!e\,s) \in G^\alpha_n$}
 \DisplayProof
 \quad
 \AxiomC{}
 \RightLabel{, $\beta < \alpha$}
-\UnaryInfC{$(\mathsf{U}(\beta), \mathcal{U}_\beta) \in G_\alpha$}
+\UnaryInfC{$(\mathsf{U}(\beta), \mathcal{U}^\beta_n) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
-\begin{comment}
-\begin{center}
-\AxiomC{$(\mathsf{Sigma}(0, \mathsf{Id}(0, A, \bot, \bot), (m,a) \mapsto \mathsf{Id}(dom(m), B(m, a), \bot, \bot)), X) \in G_\alpha$}
-\UnaryInfC{$(\mathsf{Id}(0, \mathsf{Sigma}(1, A, B), x, y), X) \in G_\alpha$}
-\DisplayProof
-\end{center}
-\medskip
-
-\begin{center}
-\AxiomC{$(\mathsf{Pi}(0, \mathsf{Id}(0, A, \bot, \bot), (m,a) \mapsto \mathsf{Id}(dom(m), B(m, a), \bot, \bot)), X) \in G_\alpha$}
-\UnaryInfC{$(\mathsf{Id}(0, \mathsf{Pi}(1, A, B), x, y), X) \in G_\alpha$}
-\DisplayProof
-\end{center}
-\medskip
-\end{comment}
-
-\begin{center}
-\AxiomC{$(\mathsf{IdOver}(0, a, x, y), A) \in G_\alpha$}
-\UnaryInfC{$(\mathsf{Id}(0, a, x, y), A) \in G_\alpha$}
-\DisplayProof
-\quad
-\AxiomC{$(a, A) \in G_\alpha$}
-\UnaryInfC{$(\mathsf{Id}(0, \mathsf{Idp}(a), x, y), \mathcal{I}d\ A) \in G_\alpha$}
-\DisplayProof
-\end{center}
-\medskip
-
-\begin{center}
-\AxiomC{}
-\UnaryInfC{$(\mathsf{Id}(0, \mathsf{U}(\alpha), x, y), \mathcal{IU}) \in G_\alpha$}
-\DisplayProof
-\end{center}
-\medskip
-
-We inductively define $\mathcal{U}_\alpha \in \mathscr{P}(\D)$ by the following rules:
+We inductively define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ by the following rules:
 \medskip
 \begin{center}
-\AxiomC{$a \in \mathcal{U}_\alpha$}
-\AxiomC{$b(id_0, d) \in \mathcal{U}_\alpha \text{ for all } d \in [a]_\alpha$}
-\BinaryInfC{$\mathsf{Sigma}(0, a, b) \in \mathcal{U}_\alpha$}
+\AxiomC{$A \in \mathcal{U}^\alpha_n$}
+\AxiomC{$B(id_n, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
+\BinaryInfC{$\mathsf{Sigma}(n, A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$a \in \mathcal{U}_\alpha$}
-\AxiomC{$b(id_0, d) \in \mathcal{U}_\alpha \text{ for all } d \in [a]_\alpha$}
-\BinaryInfC{$\mathsf{Pi}(0, a, b) \in \mathcal{U}_\alpha$}
+\AxiomC{$A \in \mathcal{U}^\alpha_n$}
+\AxiomC{$B(id_n, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
+\BinaryInfC{$\mathsf{Pi}(n, A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$\mathsf{Ne}(l,e) \in \mathcal{U}_\alpha$}
+\UnaryInfC{$\mathsf{Ne}(s,e) \in \mathcal{U}^\alpha$}
 \DisplayProof
 \quad
 \AxiomC{}
 \RightLabel{, $\beta < \alpha$}
-\UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}_\alpha$}
+\UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}^\alpha$}
 \DisplayProof
 \quad
 \AxiomC{}
-\UnaryInfC{$\mathsf{Id}(0, a, x, y) \in \mathcal{U}_\alpha$}
+\UnaryInfC{$\mathsf{Id}(0, a, x, y) \in \mathcal{U}^\alpha$}
 \DisplayProof
 \quad
 \end{center}
-We write simply $\mathcal{U}$ and $[ - ]$ for $\mathcal{U}_\omega$ and $[ - ]_\omega$.
+We write simply $\mathcal{U}_n$ and $[-]_n$ for $\mathcal{U}^\omega_n$ and $[-]^\omega_n$.
 
 \begin{lem}
-For each $\alpha \leq \omega$, the graph $G_\alpha$ defines a partial function, that is $(a, A), (a, A') \in G_\alpha$ implies $A = A'$.
-For each $\alpha \leq \omega$, the partial function $[ - ]_\alpha : \D \to \mathscr{P}(\D)$ is defined on $\mathcal{U}_\alpha \subseteq \D$.
+For each $\alpha \leq \omega$, the graph $G^\alpha$ defines a partial function, that is $(a, A), (a, A') \in G^\alpha$ implies $A = A'$.
+For each $\alpha \leq \omega$, the partial function $[-]^\alpha : \D \to \mathscr{P}(\D)$ is defined on $\mathcal{U}^\alpha \subseteq \D$.
 \end{lem}
 \begin{proof}
-The first statement is proved by induction on generation of $G_\alpha$ and the second by induction on generation of $\mathcal{U}_\alpha$.
+The first statement is proved by induction on generation of $G^\alpha$ and the second by induction on generation of $\mathcal{U}^\alpha$.
 \end{proof}
 
-For each context $\Gamma$ (that is, finite sequence of terms), we define its interpretation $[ \Gamma ] \subseteq Env$ as follows:
-$\rho \in \Gamma$ if and only if $\rho(i) \in [\llbracket \Gamma(i) \rrbracket^\rho_0]$ for each $0 \leq i < |\Gamma|$.
+For each $n \in \nats$ and context $\Gamma$ (that is, finite sequence of terms), we define its interpretation $[\Gamma]_n \subseteq Env$ as follows:
+$\rho \in [\Gamma]_n$ if and only if $\rho(i) \in [\llbracket \Gamma(i) \rrbracket^\rho_n]_n$ for each $0 \leq i < |\Gamma|$ and $n \in \nats$.
 We define a predicate on contexts $\Gamma \models$ inductively as follows:
 
 \centerAlignProof
@@ -491,15 +442,15 @@ We define a predicate on contexts $\Gamma \models$ inductively as follows:
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \models$}
-\AxiomC{$\llbracket A \rrbracket^\rho_0 \in \mathcal{U} \text{ for all } \rho \in [\Gamma]$}
+\AxiomC{$\llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$ for all $n \in \nats$ and $\rho \in [\Gamma]_n$}
 \BinaryInfC{$\Gamma, A \models$}
 \DisplayProof
 \end{center}
 \medskip
 
 We write $\Gamma \models a : A$ if and only if $\Gamma \models$,
-$\forall \rho \in [\Gamma], \llbracket A \rrbracket^\rho_0 \in \mathcal{U}$,
-and $\forall \rho \in [\Gamma], \llbracket a \rrbracket^\rho_0 \in [\llbracket A \rrbracket^\rho_0]$.
+$\forall \rho \in [\Gamma]_n, \llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$,
+and $\forall \rho \in [\Gamma]_n, \llbracket a \rrbracket^\rho_n \in [\llbracket A \rrbracket^\rho_n]_n$.
 
 \begin{prop}
 If $\Gamma \vdash$, then $\Gamma \models$.
@@ -545,24 +496,24 @@ Now, let us show how to reify elements of $\D$ into terms.
 \begin{itemize}
 \item[] $\mathsf{reify} : \nats_\bot \times \D \times \D \to Tm_\bot$
 \item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(0, A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_0, x), B(id_0, x))$, \\
-        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(0, A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, B(id_0, a))$
 \item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
-\item[] $\mathsf{reify}(i, \mathsf{Idp}(a), \mathsf{Id}(0, t, a', a'')) = idp\ \mathsf{reify}(i, a, t)$
-\item[] $\mathsf{reify}(i, \mathsf{Ne}(l, e), t) = e(i)$
+\item[] $\mathsf{reify}(i, \mathsf{Idp}(x, y, a), \mathsf{Id}(0, t, a', a'')) = idp\ \mathsf{reify}(i, a, t)$
+\item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e), t) = e(i)$
 \item[] $\mathsf{reify}(i, \mathsf{Id}(0, A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
 \item[] $\mathsf{reify}(i, \mathsf{Pi}(0, A, B), \mathsf{U}(\alpha)) =$
         $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_0, x), \mathsf{U}(\alpha))$, \\
-        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, \mathsf{Sigma}(0, A, B), \mathsf{U}(\alpha)) = $
         $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_0, x), \mathsf{U}(\alpha))$, \\
-        \indent where $x = \mathsf{reflect}(l \mapsto v_{l - i - 1}, A)$
+        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise.
 \item[]
 \item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
-\item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(l \mapsto e(l)\ \mathsf{reify}(0, a, A), B(id_0, a)))$
-\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(l \mapsto proj_2\ e(l), B(id_0, a)))$, \\
-        \indent where $a = \mathsf{reflect}(l \mapsto proj_1\ e(l), A)$
+\item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), B(id_0, a)))$
+\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(k \mapsto proj_2\ e(k), B(id_0, a)))$, \\
+        \indent where $a = \mathsf{reflect}(k \mapsto proj_1\ e(k), A)$
 \item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e)$, otherwise
 \end{itemize}
 
