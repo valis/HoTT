@@ -140,14 +140,17 @@ A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morph
 \section{Syntax and Inference Rules}
 
 First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi A B\ |\ \lambda b\ |\ b\ a\ |\ \Sigma A B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ |\ (a = a'\,|\,A)\ |\ idp\ a, \]
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi\,A\,B\ |\ \lambda b\ |\ b\ a\ |\ \Sigma\,A\,B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ | \]
+\[ (a = a'\,|\,A)\ |\ idp\ a\ |\ pmap\ b\ a\ |\ inv\ p\ |\ comp\ p\ q\ |\ coe\ p\ |\ pcon\ t\ |\ pdec\ t, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
-where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, A, B \in Tm$.
+where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, q, t, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
 
 The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
 Note that we do not use reduction rules, instead we define terms to be computationally equal if their interpretations coincide.
 Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$ that will be defined in section \ref{sec:eval}.
+
+We write $\Pi_1 A\,B$ for $pmap\,(pmap\,(\lambda \lambda \Pi\,v_1\,(v_1\,v_0))\,A)\,(\lambda B)$.
 
 \centerAlignProof
 
@@ -193,53 +196,83 @@ Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$
 \begin{center}
 \AxiomC{$\Gamma \vdash A : U_\alpha$}
 \AxiomC{$\Gamma, A \vdash B : U_\beta$}
-\BinaryInfC{$\Gamma \vdash \Sigma A B : U_{max(\alpha,\beta)}$}
+\BinaryInfC{$\Gamma \vdash \Sigma\,A\,B : U_{max(\alpha,\beta)}$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash b : B[a]$}
 \AxiomC{$\Gamma, A \vdash B : U_\beta$}
-\TrinaryInfC{$\Gamma \vdash a, b : \Sigma A B$}
+\TrinaryInfC{$\Gamma \vdash a, b : \Sigma\,A\,B$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash p : \Sigma A B$}
-\UnaryInfC{$\Gamma \vdash proj_1\ p : \Sigma A B$}
+\AxiomC{$\Gamma \vdash p : \Sigma\,A\,B$}
+\UnaryInfC{$\Gamma \vdash proj_1\ p : A$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash p : \Sigma A B$}
+\AxiomC{$\Gamma \vdash p : \Sigma\,A\,B$}
 \UnaryInfC{$\Gamma \vdash proj_2\ p : B[proj_1\ p]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash p : A = B\,|\,idp\ U_\alpha$}
+\AxiomC{$\Gamma \vdash p : A = B \,|\, idp\ U_\alpha$}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash b : B$}
-\TrinaryInfC{$\Gamma \vdash a = b\,|\,p : U_\alpha$}
+\TrinaryInfC{$\Gamma \vdash a = b \,|\, p : U_\alpha$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \vdash a : A$}
-\UnaryInfC{$\Gamma \vdash idp\ a : a = a\,|\,idp\ A$}
+\UnaryInfC{$\Gamma \vdash idp\ a : a = a\,|\, idp\ A$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash A : A_0 = A_1\,|\,idp\ U_\alpha$}
-\AxiomC{$\Gamma, A, A, v_1 = v_0\,|\,idp\ A \vdash\ \Uparrow^2_1\hspace{-.4em} B :\ \Uparrow^2\hspace{-.5em} B_0 =\ \Uparrow^1_1 \Uparrow^1\hspace{-.5em} B_1\,|\,idp\ U_\beta$}
-\BinaryInfC{$\Gamma \vdash \Pi_1 A B : \Pi A_0 B_0 = \Pi A_1 B_1\,|\,idp\ U_{max(\alpha, \beta)}$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash b : b_0 = b_1\,|\,\Pi_1 A B$}
+\AxiomC{$\Gamma \vdash b : b_0 = b_1\,|\,\Pi_1\,A\,B$}
 \AxiomC{$\Gamma \vdash a : a_0 = a_1\,|\,A$}
 \BinaryInfC{$\Gamma \vdash pmap\ b\ a : b_0\ a_0 = b_1\ a_1\,|\,B[a]$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash P : A = B \,|\, U_\alpha$}
+\noLine
+\UnaryInfC{$\Gamma \vdash Q : B = C \,|\, U_\alpha$}
+\AxiomC{$\Gamma \vdash p : a = b \,|\, P$}
+\noLine
+\UnaryInfC{$\Gamma \vdash q : b = c \,|\, Q$}
+\BinaryInfC{$\Gamma \vdash comp\ p\ q : a = c \,|\, comp\ P\ Q$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash p : a = b \,|\, P$}
+\UnaryInfC{$\Gamma \vdash inv\ p : b = a \,|\, inv\ P$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash p : A = B \,|\, idp\ U_\alpha$}
+\AxiomC{$\Gamma \vdash a : A$}
+\BinaryInfC{$\Gamma \vdash coe\ p\ a : B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
+\UnaryInfC{$\Gamma \vdash pcon\ t : p = p' \,|\, Id_1 A\,a\,a'$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash t : p = p' \,|\, Id_1 A\,a\,a'$}
+\UnaryInfC{$\Gamma \vdash pdec\ t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
 \DisplayProof
 \end{center}
 
@@ -330,39 +363,29 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\mathsf{act
 \end{itemize}
 
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
-Let $\mathscr{M}_n$ denote the set of functions $(\D \times \D)^n \to \mathscr{P}(\D)$.
-If $n \in \nats$, $R \in \mathscr{M}_n$, and $Q : \D \to \mathscr{M}_n$, then define $\mathcal{S}igma_n R\,Q \in \mathscr{M}_n$ as follows:
-\[ \mathcal{S}igma_n R\,Q((\mathsf{Pair}(a_1,b_1), \mathsf{Pair}(a'_1,b'_1)), \ldots (\mathsf{Pair}(a_n,b_n), \mathsf{Pair}(a'_n,b'_n))) = \]
-\[ \{ \mathsf{Pair}(a,b)\,|\,a \in R((a_1,a'_1), \ldots (a_n,a'_n)), b \in Q(a)((b_1,b'_1), \ldots (b_n,b'_n)) \}. \]
-Let $\mathcal{S}igma_n R\,Q(p_1, \ldots p_n)$ be empty if arguments do not have the form as above.
-
-Suppose that $n \in \nats$, $Q : \D \to \mathscr{M}_n$, and $R = (R_0, \ldots R_n)$ is a sequence such that $R_i \in \mathscr{M}_i$.
-Then let $\mathcal{P}i_n R\,Q((\mathsf{Lam}(f_1),\mathsf{Lam}(f'_1)), \ldots (\mathsf{Lam}(f_n),\mathsf{Lam}(f'_n)))$
-be equal to the subset of $\D$ of the form $\mathsf{Lam}(f)$ such that
-\[ f(id_n,a) \in Q(a)((f_1(id_0,a_1), f'_1(id_0,a'_1)), \ldots (f_n(id_{n-1},a_n), f'_n(id_{n-1},a'_n))) \]
-for all $a_1,a'_1 \in R_0, a_2,a'_2 \in R_1(a_1,a'_1), \ldots a_n,a'_n \in R_{n-1}(a_1,a'_1) \ldots (a_{n-1},a'_{n-1})$, and $a \in R_n((a_1,a'_1), \ldots (a_n,a'_n))$.
-Let $\mathcal{P}i_n R\,Q(f_1, \ldots f_n)$ be empty if arguments do not have the form as above.
-
-Define $\mathcal{N}\!e_n \in \mathscr{M}_n$ as follows:
-\[ \mathcal{N}\!e_n(x_1, \ldots x_n) = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \text{ and } s(i) = x_{i+1} \text{ for all } 0 \leq i < n \}. \]
+If $n \in \nats$, $R \in \mathscr{P}(\D)$, and $Q : \D \to \mathscr{P}(\D)$,
+then define $\mathcal{S}igma\,R\,Q, \mathcal{P}i_n R\,Q, \mathcal{N}\!e \in \mathscr{P}(\D)$ as follows:
+\[ \mathcal{S}igma\,R\,Q = \{ \mathsf{Pair}(a,b) \in \D\,|\,a \in R, b \in R(a) \}, \]
+\[ \mathcal{P}i_n R\,Q = \{ \mathsf{Lam}(f) \in \D\,|\,f(id_n,a) \in Q(a) \text{ for all } a \in R \}, \]
+\[ \mathcal{N}\!e = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \}, \]
 % \[ \mathcal{I}d\ A = \mathcal{N}\!e \cup \{ \mathsf{Idp}(d)\,|\,d \in A \}. \]
 
 Now, for each $\alpha \leq \omega$ and $n \in \nats$,
-we define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ and a function $[-]^\alpha_n : \mathcal{U}^\alpha_n \to \mathscr{M}_n$ by induction on $\alpha$.
-First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{M}_n$ inductively by the following rules:
+we define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ and a function $[-]^\alpha_n : \mathcal{U}^\alpha_n \to \mathscr{P}(\D)$ by induction on $\alpha$.
+First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{P}(\D)$ inductively by the following rules:
 \medskip
 \begin{center}
 \AxiomC{$(A, R) \in G^\alpha_n$}
-\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$}
-\BinaryInfC{$(\mathsf{Sigma}(n, A, B), \mathcal{S}igma_n R\,Q) \in G^\alpha_n$}
+\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
+\BinaryInfC{$(\mathsf{Sigma}(n, A, B), \mathcal{S}igma\,R\,Q) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
-\AxiomC{$(A, R_i) \in G^\alpha_i$}
-\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R_n$}
-\BinaryInfC{$(\mathsf{Pi}(n, A, B), \mathcal{P}i_n (R_0, \ldots R_n)\,Q) \in G^\alpha_n$}
+\AxiomC{$(A, R) \in G^\alpha_n$}
+\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
+\BinaryInfC{$(\mathsf{Pi}(n, A, B), \mathcal{P}i_n R\,Q) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
@@ -376,7 +399,7 @@ First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{M}_n$ induc
 
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$(\mathsf{Ne}(s,e,c), \mathcal{N}\!e_n) \in G^\alpha_n$}
+\UnaryInfC{$(\mathsf{Ne}(s,e,c), \mathcal{N}\!e) \in G^\alpha_n$}
 \DisplayProof
 \quad
 \AxiomC{}
@@ -386,7 +409,7 @@ First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{M}_n$ induc
 \end{center}
 \medskip
 
-We inductively define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ by the following rules:
+We inductively define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ by the following rules:
 \medskip
 \begin{center}
 \AxiomC{$A \in \mathcal{U}^\alpha_n$}
@@ -394,16 +417,25 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ by the following 
 \BinaryInfC{$\mathsf{Sigma}(n, A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
-
 \medskip
+
 \begin{center}
 \AxiomC{$A \in \mathcal{U}^\alpha_n$}
 \AxiomC{$B(id_n, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
 \BinaryInfC{$\mathsf{Pi}(n, A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
-
 \medskip
+
+\begin{center}
+\AxiomC{$A \in \mathcal{U}^\alpha_{n + 1}$}
+\AxiomC{$a \in [\mathsf{action}(\sigma_n, A)]^\alpha_n$}
+\AxiomC{$a' \in [\mathsf{action}(\tau_n, A)]^\alpha_n$}
+\TrinaryInfC{$\mathsf{Id}(n, A, a, a') \in \mathcal{U}^\alpha_n$}
+\DisplayProof
+\end{center}
+\medskip
+
 \begin{center}
 \AxiomC{$s(i) \in \mathcal{U}^\alpha_i \times \mathcal{U}^\alpha_i$ for all $0 \leq i < n$}
 \UnaryInfC{$\mathsf{Ne}(s,e,c) \in \mathcal{U}^\alpha_n$}
@@ -415,19 +447,13 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{M}_n$ by the following 
 \UnaryInfC{$\mathsf{U}(\beta) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
-
 \medskip
-\begin{center}
-\AxiomC{}
-\UnaryInfC{$\mathsf{Id}(0, a, x, y) \in \mathcal{U}^\alpha$}
-\DisplayProof
-\quad
-\end{center}
 We write simply $\mathcal{U}_n$ and $[-]_n$ for $\mathcal{U}^\omega_n$ and $[-]^\omega_n$.
 
 \begin{lem}
-For each $\alpha \leq \omega$, the graph $G^\alpha$ defines a partial function, that is $(a, A), (a, A') \in G^\alpha$ implies $A = A'$.
-For each $\alpha \leq \omega$, the partial function $[-]^\alpha : \D \to \mathscr{P}(\D)$ is defined on $\mathcal{U}^\alpha \subseteq \D$.
+For each $\alpha \leq \omega$ and $n \in \nats$, the graph $G^\alpha_n$ defines a partial function, that is $(A, R), (A, R') \in G^\alpha_n$ implies $R = R'$.
+For each $\alpha \leq \omega$ and $n \in \nats$, the partial function $[-]^\alpha_n : \D \to \mathscr{P}(\D)$
+defined by the graph $G^\alpha_n$ is defined on $\mathcal{U}^\alpha_n \subseteq \D$.
 \end{lem}
 \begin{proof}
 The first statement is proved by induction on generation of $G^\alpha$ and the second by induction on generation of $\mathcal{U}^\alpha$.
