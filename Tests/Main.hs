@@ -23,12 +23,31 @@ import Syntax.Term
 import Value
 import ErrorDoc
 import TypeChecking
+import TypeInference
 import TCM
+import Eval
+
+evalDecl :: String -> R.Expr -> Maybe R.Expr -> TCM (M.Map String DBIndex, Ctx, Value, Value)
+evalDecl name expr mty = do
+    ctx <- askCtx
+    (er,tv) <- case mty of
+        Nothing -> do
+            er <- typeCheck expr Nothing
+            tv <- typeOf er
+            return (er,tv)
+        Just ty -> do
+            tr <- typeCheck ty Nothing
+            let tv = eval 0 (ctxToCtxV ctx) tr
+            er <- typeCheck expr (Just tv)
+            return (er, tv)
+    let ev = eval 0 (ctxToCtxV ctx) er
+    (_, _, mctx, (gctx, lctx)) <- ask
+    return (M.delete name mctx, (M.insert name (ev,tv) gctx, lctx), ev, tv)
 
 processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> TCM ([String],Term,Term,Ctx)
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
-    (_,ctx,_,ev,_,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
+    (_,ctx,ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
     let Def _ mty e' = simplifyDef $ Def name (Just (reifyType 0 tv, [])) (reify 0 ev tv)
         (ty,args) = fromMaybe (error "processDecl") mty
     return (args,e',ty,ctx)

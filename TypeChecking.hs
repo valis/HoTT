@@ -1,6 +1,6 @@
 module TypeChecking
     ( typeCheck
-    , evalDecl, processDefs
+    , processDefs
     ) where
 
 import qualified Data.Map as M
@@ -62,16 +62,31 @@ exprToVars = fmap reverse . go
     go (App as (Var a)) = fmap (a :) (go as)
     go e = Left (getPos e)
 
+evalDecl :: String -> Expr -> Maybe Expr -> (T.Term -> Maybe T.Term -> TCM a) -> TCM a
+evalDecl name expr mty a = do
+    (er,tr,tv) <- case mty of
+        Nothing -> do
+            er <- typeCheck expr Nothing
+            tv <- typeOf er
+            return (er, Nothing, tv)
+        Just ty -> do
+            tr <- typeCheck ty Nothing
+            tv <- evalTCM tr
+            er <- typeCheck expr (Just tv)
+            return (er, Just tr, tv)
+    ev <- evalTCM er
+    local (\i c mctx (gctx, lctx) -> (i + 1, name : c, M.insert name i mctx, (gctx, (ev,tv) : lctx))) (a er tr)
+
 typeCheck :: Expr -> Maybe Value -> TCM T.Term
 typeCheck (Let defs e) h = do
     defs' <- liftEDocM (preprocessDefs defs)
     go (processDefs defs') [] (typeCheck e h)
   where
     go [] l e = fmap (T.Let $ reverse l) e
-    go ((name,ty,args,expr):ds) l e = do
+    go ((name,ty,args,expr):ds) l e =
         let p = if null args then getPos expr else argGetPos (head args)
-        (mctx',ctx',er,_,mtr,_) <- evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty
-        local (\i c _ _ -> (i,c,mctx',ctx')) $ go ds (T.Def name (fmap (\tr -> (tr, map unArg args)) mtr) er : l) e
+        in evalDecl name (Lam (PLam (p,"\\")) (map Binder args) expr) ty $ \er mtr ->
+            go ds (T.Def name (fmap (\tr -> (tr, map unArg args)) mtr) er : l) e
 typeCheck (Paren _ e) h = typeCheck e h
 typeCheck (Lam _ [] e) h = typeCheck e h
 
@@ -371,22 +386,6 @@ isArr :: T.DBIndex -> Value -> (Integer -> [D] -> Value -> Value) -> Maybe Value
 isArr i t f =
     let r = f 0 [] (svar i t)
     in if isFreeVar 0 (i + 1) r then Nothing else Just r
-
-evalDecl :: String -> Expr -> Maybe Expr -> TCM (M.Map String T.DBIndex, Ctx, T.Term, Value, Maybe T.Term, Value)
-evalDecl name expr mty = do
-    (er,tr,tv) <- case mty of
-        Nothing -> do
-            er <- typeCheck expr Nothing
-            tv <- typeOf er
-            return (er,Nothing,tv)
-        Just ty -> do
-            tr <- typeCheck ty Nothing
-            tv <- evalTCM tr
-            er <- typeCheck expr (Just tv)
-            return (er,Just tr,tv)
-    ev <- evalTCM er
-    (_, _, mctx, (gctx, lctx)) <- ask
-    return (M.delete name mctx, (M.insert name (ev,tv) gctx, lctx), er, ev, tr, tv)
 
 eprettyType :: T.DBIndex -> [String] -> Value -> EDoc
 eprettyType i c t = epretty c $ T.simplify (reifyType i t)

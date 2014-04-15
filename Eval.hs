@@ -45,9 +45,8 @@ eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
 eval n ctx Proj1 = Slam "p" $ \_ _ -> proj1
 eval n ctx Proj2 = Slam "p" $ \_ _ -> proj2
 eval n ctx (Let [] e) = eval n ctx e
-eval n (ctx,lctx) (Let (Def v Nothing d : ds) e) = eval n (M.insert v (eval n (ctx,lctx) d) ctx, lctx) (Let ds e)
-eval n (ctx,lctx) (Let (Def v (Just (_,args)) d : ds) e) =
-    eval n (M.insert v (eval n (ctx,lctx) $ Lam args d) ctx, lctx) (Let ds e)
+eval n ctx@(gctx,lctx) (Let (Def v Nothing d : ds) e) = eval n (gctx, eval n ctx d : lctx) (Let ds e)
+eval n ctx@(gctx,lctx) (Let (Def v (Just (_,args)) d : ds) e) = eval n (gctx, eval n ctx (Lam args d) : lctx) (Let ds e)
 eval n ctx (Lam args e) = go n ctx args
   where
     go n ctx []     = eval n ctx e

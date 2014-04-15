@@ -16,13 +16,11 @@ updateCtx :: [Def] -> TCM a -> TCM a
 updateCtx [] e = e
 updateCtx (Def name Nothing expr : ds) e = do
     t <- typeOf expr
-    ctx <- askCtx
-    let upd = M.insert name (eval 0 (ctxToCtxV ctx) expr, t)
-    local (\i c mctx (gctx,lctx) -> (i, c, mctx, (upd gctx, lctx))) (updateCtx ds e)
-updateCtx (Def name (Just (ty,args)) expr : ds) e = do
-    ctx <- askCtx
-    let upd = M.insert name (eval 0 (ctxToCtxV ctx) (Lam args expr), eval 0 (ctxToCtxV ctx) ty)
-    local (\i c mctx (gctx,lctx) -> (i, c, mctx, (upd gctx, lctx))) (updateCtx ds e)
+    let upd ctx@(gctx,lctx) = (gctx, (eval 0 (ctxToCtxV ctx) expr, t) : lctx)
+    local (\i c mctx ctx -> (i + 1, name : c, M.insert name i mctx, upd ctx)) (updateCtx ds e)
+updateCtx (Def name (Just (ty,args)) expr : ds) e =
+    let upd ctx@(gctx,lctx) = (gctx, (eval 0 (ctxToCtxV ctx) (Lam args expr), eval 0 (ctxToCtxV ctx) ty) : lctx)
+    in local (\i c mctx ctx -> (i + 1, name : c, M.insert name i mctx, upd ctx)) (updateCtx ds e)
 
 updateLCtx :: Value -> [(Value,Value)] -> DBIndex -> DBIndex -> [(Value,Value)]
 updateLCtx _ lctx _ 0 = lctx
