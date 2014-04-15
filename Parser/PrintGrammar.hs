@@ -177,11 +177,10 @@ instance Print Expr where
    Lam plam binders expr -> prPrec i 0 (concatD [prt 0 plam , prt 0 binders , doc (showString "->") , prt 0 expr])
    Arr expr0 expr -> prPrec i 1 (concatD [prt 2 expr0 , doc (showString "->") , prt 1 expr])
    Pi typedvars expr -> prPrec i 1 (concatD [prt 0 typedvars , doc (showString "->") , prt 1 expr])
-   Typed expr0 expr -> prPrec i 1 (concatD [prt 4 expr0 , doc (showString "::") , prt 1 expr])
    Prod expr0 expr -> prPrec i 2 (concatD [prt 3 expr0 , doc (showString "*") , prt 2 expr])
    Sigma typedvars expr -> prPrec i 2 (concatD [prt 0 typedvars , doc (showString "*") , prt 2 expr])
    Over expr0 expr -> prPrec i 3 (concatD [prt 4 expr0 , doc (showString "|") , prt 3 expr])
-   Id impexpr0 impexpr -> prPrec i 4 (concatD [prt 0 impexpr0 , doc (showString "=") , prt 0 impexpr])
+   Id expr0 expr -> prPrec i 4 (concatD [prt 5 expr0 , doc (showString "=") , prt 5 expr])
    Pair expr0 expr -> prPrec i 5 (concatD [prt 5 expr0 , doc (showString ",") , prt 6 expr])
    App expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , prt 7 expr])
    Var arg -> prPrec i 7 (concatD [prt 0 arg])
@@ -201,12 +200,6 @@ instance Print Expr where
    NatConst pint -> prPrec i 7 (concatD [prt 0 pint])
    Universe u -> prPrec i 7 (concatD [prt 0 u])
    Paren ppar expr -> prPrec i 7 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])
-
-
-instance Print ImpExpr where
-  prt i e = case e of
-   Implicit pident -> prPrec i 0 (concatD [doc (showString "{") , prt 0 pident , doc (showString "}")])
-   Explicit expr -> prPrec i 0 (concatD [prt 5 expr])
 
 
 instance Print Arg where

@@ -23,7 +23,7 @@ data Term
     | Lam [String] Term
     | Pi [([String],Term)] Term
     | Sigma [([String],Term)] Term
-    | Id Term (Either String Term) (Either String Term)
+    | Id Term Term Term
     | App Term Term
     | NoVar
     | Var String
@@ -42,7 +42,6 @@ data Term
     | InvIdp
     | NatConst Integer
     | Universe Level
-    | Typed Term Term
     | Ext Term Term
     | ExtSigma Term Term
     | Pair Term Term
@@ -59,10 +58,7 @@ freeLVars (Lam [] e) = freeLVars e
 freeLVars (Lam (v:vs) e) = map pred $ freeLVars (Lam vs e)
 freeLVars (Pi vs e) = freeLVarsDep vs e
 freeLVars (Sigma vs e) = freeLVarsDep vs e
-freeLVars (Id t (Left _) (Left _)) = freeLVars t
-freeLVars (Id t (Left _) (Right e2)) = freeLVars t `union` map pred (freeLVars e2)
-freeLVars (Id t (Right e1) (Left _)) = freeLVars t `union` map pred (freeLVars e1)
-freeLVars (Id t (Right e1) (Right e2)) = freeLVars t `union` freeLVars e1 `union` freeLVars e2
+freeLVars (Id t e1 e2) = freeLVars t `union` freeLVars e1 `union` freeLVars e2
 freeLVars (App e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (Ext e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (ExtSigma e1 e2) = freeLVars e1 `union` freeLVars e2
@@ -84,16 +80,9 @@ freeLVars Inv = []
 freeLVars InvIdp = []
 freeLVars (NatConst _) = []
 freeLVars (Universe _) = []
-freeLVars (Typed e1 e2) = freeLVars e1 `union` freeLVars e2
 
 freeLVarsDep :: [([String],Term)] -> Term -> [DBIndex]
 freeLVarsDep [] e = freeLVars e
-freeLVarsDep ((vars, Id t (Left _) (Left _)):vs) e =
-    freeLVars t `union` map (\l -> l - genericLength vars - 2) (freeLVarsDep vs e)
-freeLVarsDep ((vars, Id t (Right a) (Left _)):vs) e =
-    freeLVars t `union` map pred (freeLVars a) `union` map (\l -> l - genericLength vars - 1) (freeLVarsDep vs e)
-freeLVarsDep ((vars, Id t (Left _) (Right b)):vs) e =
-    freeLVars t `union` map pred (freeLVars b) `union` map (\l -> l - genericLength vars - 1) (freeLVarsDep vs e)
 freeLVarsDep ((vars,t):vs) e = freeLVars t `union` map (\l -> l - genericLength vars) (freeLVarsDep vs e)
 
 liftTermDB :: DBIndex -> Term -> Term
@@ -108,11 +97,7 @@ liftTermDB' n k (Pi vars e) =
 liftTermDB' n k (Sigma vars e) =
     let (v,l) = liftTermDBVars n k vars
     in Sigma v (liftTermDB' l k e)
-liftTermDB' n k (Id t e1@(Left _) e2@(Left _)) = Id (liftTermDB' n k t) e1 e2
-liftTermDB' n k (Id t (Right e1) e2@(Left _)) = Id (liftTermDB' n k t) (Right $ liftTermDB' (n + 1) k e1) e2
-liftTermDB' n k (Id t e1@(Left x1) (Right e2)) = Id (liftTermDB' n k t) e1 (Right $ liftTermDB' (n + 1) k e2)
-liftTermDB' n k (Id t (Right e1) (Right e2)) =
-    Id (liftTermDB' n k t) (Right $ liftTermDB' n k e1) (Right $ liftTermDB' n k e2)
+liftTermDB' n k (Id t e1 e2) = Id (liftTermDB' n k t) (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (App e1 e2) = App (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Ext e1 e2) = Ext (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (ExtSigma e1 e2) = ExtSigma (liftTermDB' n k e1) (liftTermDB' n k e2)
@@ -135,19 +120,9 @@ liftTermDB' _ _ Inv = Inv
 liftTermDB' _ _ InvIdp = InvIdp
 liftTermDB' _ _ e@(NatConst _) = e
 liftTermDB' _ _ e@(Universe _) = e
-liftTermDB' n k (Typed e1 e2) = Typed (liftTermDB' n k e1) (liftTermDB' n k e2)
 
 liftTermDBVars :: DBIndex -> DBIndex -> [([String],Term)] -> ([([String],Term)],DBIndex)
 liftTermDBVars n _ [] = ([], n)
-liftTermDBVars n k ((vars,Id t a@(Left _) b@(Left _)):vs) =
-    let (r, n') = liftTermDBVars (n + genericLength vars + 2) k vs
-    in ((vars, Id (liftTermDB' n k t) a b) : r, n')
-liftTermDBVars n k ((vars,Id t a@(Left _) (Right b)):vs) =
-    let (r, n') = liftTermDBVars (n + genericLength vars + 1) k vs
-    in ((vars, Id (liftTermDB' n k t) a (Right $ liftTermDB' (n + 1) k b)) : r, n')
-liftTermDBVars n k ((vars,Id t (Right a) b@(Left _)):vs) =
-    let (r, n') = liftTermDBVars (n + genericLength vars + 1) k vs
-    in ((vars, Id (liftTermDB' n k t) (Right $ liftTermDB' (n + 1) k a) b) : r, n')
 liftTermDBVars n k ((vars,t):vs) =
     let (r, n') = liftTermDBVars (n + genericLength vars) k vs
     in ((vars, liftTermDB' n k t) : r, n')
@@ -181,13 +156,8 @@ instance Eq Term where
             cmp c m1 m2 t1 t2 && cmp c m1 m2 (Pi ts1 e1) (Pi ts2 e2)
         cmp c m1 m2 (Sigma ((_,t1):ts1) e1) (Sigma ((_,t2):ts2) e2) =
             cmp c m1 m2 t1 t2 && cmp c m1 m2 (Sigma ts1 e1) (Sigma ts2 e2)
-        cmp c m1 m2 (Id t1 (Left _) (Left _)) (Id t2 (Left _) (Left _)) = cmp c m1 m2 t1 t2
-        cmp c m1 m2 (Id t1 (Right a1) (Left _)) (Id t2 (Right a2) (Left _)) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2
-        cmp c m1 m2 (Id t1 (Left _) (Right b1)) (Id t2 (Left _) (Right b2)) = cmp c m1 m2 t1 t2 && cmp c m1 m2 b1 b2
-        cmp c m1 m2 (Id t1 (Right a1) (Right b1)) (Id t2 (Right a2) (Right b2)) =
-            cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Id t1 a1 b1) (Id t2 a2 b2) = cmp c m1 m2 t1 t2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (App a1 b1) (App a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
-        cmp c m1 m2 (Typed a1 b1) (Typed a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Ext a1 b1) (Ext a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (ExtSigma a1 b1) (ExtSigma a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
@@ -296,13 +266,10 @@ ppTerm ctx = go ctx False
         in r <+> ppArrow ctx' l' e
     go ctx False l (Id _ e1 e2) =
         let l' = fmap pred l
-        in either (braces . text) (ppId ctx l') e1 <+> equals <+> either (braces . text) (ppId ctx l') e2
+        in ppId ctx l' e1 <+> equals <+> ppId ctx l' e2
     go ctx False l (App e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <+> go ctx True l' e2
-    go ctx False l (Typed e1 e2) =
-        let l' = fmap pred l
-        in go ctx (isComp e1) l' e1 <+> text "::" <+> go ctx False l' e2
     go ctx False l (Pair e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <> comma <+> go ctx False l' e2
@@ -359,9 +326,8 @@ simplify (Sigma ((v:vs,t):ts) e)
     | otherwise = Sigma [([], simplify t)] $ simplify $
         let (ts',e') = lowerTermDB (genericLength vs) ts e
         in Sigma ((vs,t) : ts') e'
-simplify (Id t a b) = Id (simplify t) (fmap simplify a) (fmap simplify b)
+simplify (Id t a b) = Id (simplify t) (simplify a) (simplify b)
 simplify (App e1 e2) = App (simplify e1) (simplify e2)
-simplify (Typed e1 e2) = Typed (simplify e1) (simplify e2)
 simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify e@(Ext _ _) = e
 simplify e@(ExtSigma _ _) = e

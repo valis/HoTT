@@ -121,11 +121,10 @@ transExpr x = case x of
   Lam plam binders expr  -> failure x
   Arr expr1 expr2  -> failure x
   Pi typedvars expr  -> failure x
-  Typed expr1 expr2  -> failure x
   Prod expr1 expr2  -> failure x
   Sigma typedvars expr  -> failure x
   Over expr1 expr2  -> failure x
-  Id impexpr1 impexpr2  -> failure x
+  Id expr1 expr2  -> failure x
   Pair expr1 expr2  -> failure x
   App expr1 expr2  -> failure x
   Var arg  -> failure x
@@ -145,12 +144,6 @@ transExpr x = case x of
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x
-
-
-transImpExpr :: ImpExpr -> Result
-transImpExpr x = case x of
-  Implicit pident  -> failure x
-  Explicit expr  -> failure x
 
 
 transArg :: Arg -> Result

@@ -20,14 +20,13 @@ import Parser.ErrM
  ',' { PT _ (TS _ 3) }
  '->' { PT _ (TS _ 4) }
  ':' { PT _ (TS _ 5) }
- '::' { PT _ (TS _ 6) }
- ';' { PT _ (TS _ 7) }
- '=' { PT _ (TS _ 8) }
- 'in' { PT _ (TS _ 9) }
- 'let' { PT _ (TS _ 10) }
- '{' { PT _ (TS _ 11) }
- '|' { PT _ (TS _ 12) }
- '}' { PT _ (TS _ 13) }
+ ';' { PT _ (TS _ 6) }
+ '=' { PT _ (TS _ 7) }
+ 'in' { PT _ (TS _ 8) }
+ 'let' { PT _ (TS _ 9) }
+ '{' { PT _ (TS _ 10) }
+ '|' { PT _ (TS _ 11) }
+ '}' { PT _ (TS _ 12) }
 
 L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
@@ -97,7 +96,6 @@ Expr : 'let' '{' ListDef '}' 'in' Expr { Let $3 $6 }
 Expr1 :: { Expr }
 Expr1 : Expr2 '->' Expr1 { Arr $1 $3 } 
   | ListTypedVar '->' Expr1 { Pi $1 $3 }
-  | Expr4 '::' Expr1 { Typed $1 $3 }
   | Expr2 { $1 }
 
 
@@ -113,7 +111,7 @@ Expr3 : Expr4 '|' Expr3 { Over $1 $3 }
 
 
 Expr4 :: { Expr }
-Expr4 : ImpExpr '=' ImpExpr { Id $1 $3 } 
+Expr4 : Expr5 '=' Expr5 { Id $1 $3 } 
   | Expr5 { $1 }
 
 
@@ -145,11 +143,6 @@ Expr7 : Arg { Var $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }
-
-
-ImpExpr :: { ImpExpr }
-ImpExpr : '{' PIdent '}' { Implicit $2 } 
-  | Expr5 { Explicit $1 }
 
 
 Arg :: { Arg }

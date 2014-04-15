@@ -23,6 +23,7 @@ import Syntax.Term
 import Value
 import ErrorDoc
 import TypeChecking
+import TCM
 
 processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> TCM ([String],Term,Term,Ctx)
 processDecl name args expr ty = do

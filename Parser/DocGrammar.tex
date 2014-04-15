@@ -116,8 +116,8 @@ The symbols used in Grammar are the following: \\
 \begin{tabular}{lll}
 {\symb{{$=$}}} &{\symb{:}} &{\symb{;}} \\
 {\symb{\{}} &{\symb{\}}} &{\symb{{$-$}{$>$}}} \\
-{\symb{::}} &{\symb{*}} &{\symb{{$|$}}} \\
-{\symb{,}} &{\symb{)}} & \\
+{\symb{*}} &{\symb{{$|$}}} &{\symb{,}} \\
+{\symb{)}} & & \\
 \end{tabular}\\
 
 \subsection*{Comments}
@@ -153,7 +153,6 @@ All other symbols are terminals.\\
 \begin{tabular}{lll}
 {\nonterminal{Expr1}} & {\arrow}  &{\nonterminal{Expr2}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr1}}  \\
  & {\delimit}  &{\nonterminal{ListTypedVar}} {\terminal{{$-$}{$>$}}} {\nonterminal{Expr1}}  \\
- & {\delimit}  &{\nonterminal{Expr4}} {\terminal{::}} {\nonterminal{Expr1}}  \\
  & {\delimit}  &{\nonterminal{Expr2}}  \\
 \end{tabular}\\
 
@@ -169,7 +168,7 @@ All other symbols are terminals.\\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr4}} & {\arrow}  &{\nonterminal{ImpExpr}} {\terminal{{$=$}}} {\nonterminal{ImpExpr}}  \\
+{\nonterminal{Expr4}} & {\arrow}  &{\nonterminal{Expr5}} {\terminal{{$=$}}} {\nonterminal{Expr5}}  \\
  & {\delimit}  &{\nonterminal{Expr5}}  \\
 \end{tabular}\\
 
@@ -201,11 +200,6 @@ All other symbols are terminals.\\
  & {\delimit}  &{\nonterminal{PInt}}  \\
  & {\delimit}  &{\nonterminal{U}}  \\
  & {\delimit}  &{\nonterminal{PPar}} {\nonterminal{Expr}} {\terminal{)}}  \\
-\end{tabular}\\
-
-\begin{tabular}{lll}
-{\nonterminal{ImpExpr}} & {\arrow}  &{\terminal{\{}} {\nonterminal{PIdent}} {\terminal{\}}}  \\
- & {\delimit}  &{\nonterminal{Expr5}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}

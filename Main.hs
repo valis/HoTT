@@ -19,6 +19,7 @@ import Syntax.Term
 import Value
 import ErrorDoc
 import TypeChecking
+import TCM
 
 outputFilename :: String -> String
 outputFilename input = case break (== '/') input of

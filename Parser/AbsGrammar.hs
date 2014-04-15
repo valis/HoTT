@@ -36,11 +36,10 @@ data Expr =
  | Lam PLam [Binder] Expr
  | Arr Expr Expr
  | Pi [TypedVar] Expr
- | Typed Expr Expr
  | Prod Expr Expr
  | Sigma [TypedVar] Expr
  | Over Expr Expr
- | Id ImpExpr ImpExpr
+ | Id Expr Expr
  | Pair Expr Expr
  | App Expr Expr
  | Var Arg
@@ -60,11 +59,6 @@ data Expr =
  | NatConst PInt
  | Universe U
  | Paren PPar Expr
-  deriving (Eq,Ord,Show)
-
-data ImpExpr =
-   Implicit PIdent
- | Explicit Expr
   deriving (Eq,Ord,Show)
 
 data Arg =

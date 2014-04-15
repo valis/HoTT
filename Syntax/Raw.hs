@@ -23,8 +23,7 @@ getPos (Pi [] e) = getPos e
 getPos (Pi (TypedVar (PPar (p,_)) _ _ : _) _) = p
 getPos (Sigma [] e) = getPos e
 getPos (Sigma (TypedVar (PPar (p,_)) _ _ : _) _) = p
-getPos (Id (Implicit (PIdent (p,_))) _) = p
-getPos (Id (Explicit e) _) = getPos e
+getPos (Id e _) = getPos e
 getPos (Over e _) = getPos e
 getPos (App e _) = getPos e
 getPos (Var (NoArg (Pus (p,_)))) = p
@@ -39,7 +38,6 @@ getPos (Coe (PCoe (p,_))) = p
 getPos (NatConst (PInt (p,_))) = p
 getPos (Universe (U (p,_))) = p
 getPos (Paren (PPar (p,_)) _) = p
-getPos (Typed e _) = getPos e
 getPos (Pair e _) = getPos e
 getPos (Proj1 (PProjl (lc,_))) = lc
 getPos (Proj2 (PProjr (lc,_))) = lc
@@ -131,9 +129,7 @@ ppExpr = go False
         in ppArrow l' e1 <+> char '×' <+> ppArrow l' e2
     go False l (Id e1 e2) =
         let l' = fmap pred l
-            go' (Implicit (PIdent (_,x))) = braces (text x)
-            go' (Explicit e) = go False l' e
-        in go' e1 <+> equals <+> go' e2
+        in go False l' e1 <+> equals <+> go False l' e2
     go False l (Over e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> char '|' <+> go False l' e2
@@ -141,9 +137,6 @@ ppExpr = go False
         let l' = fmap pred l
         in go False l' e1 <+> go True l' e2
     go False l (Paren _ e) = go False l e
-    go False l (Typed e1 e2) =
-        let l' = fmap pred l
-        in go (isComp e1) l' e1 <+> text "::" <+> go False l' e2
     go False l (Pair e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> comma <+> go False l' e2

@@ -17,11 +17,10 @@ Let.      Expr  ::= "let" "{" [Def] "}" "in" Expr;
 Lam.      Expr  ::= PLam [Binder] "->" Expr;
 Arr.      Expr1 ::= Expr2 "->" Expr1;
 Pi.       Expr1 ::= [TypedVar] "->" Expr1;
-Typed.    Expr1 ::= Expr4 "::" Expr1;
 Prod.     Expr2 ::= Expr3 "*" Expr2;
 Sigma.    Expr2 ::= [TypedVar] "*" Expr2;
 Over.     Expr3 ::= Expr4 "|" Expr3;
-Id.       Expr4 ::= ImpExpr "=" ImpExpr;
+Id.       Expr4 ::= Expr5 "=" Expr5;
 Pair.     Expr5 ::= Expr5 "," Expr6;
 App.      Expr6 ::= Expr6 Expr7;
 Var.      Expr7 ::= Arg;
@@ -48,9 +47,6 @@ _.        Expr4 ::= Expr5;
 _.        Expr5 ::= Expr6;
 _.        Expr6 ::= Expr7;
 Paren.    Expr7 ::= PPar Expr ")";
-
-Implicit. ImpExpr ::= "{" PIdent "}";
-Explicit. ImpExpr ::= Expr5;
 
 Arg.       Arg ::= PIdent;
 NoArg.     Arg ::= Pus;

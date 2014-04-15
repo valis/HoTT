@@ -141,7 +141,7 @@ A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morph
 
 First, let us define the sets of raw terms and contexts:
 \[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi\,A\,B\ |\ \lambda b\ |\ b\ a\ |\ \Sigma\,A\,B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ | \]
-\[ (a = a'\,|\,A)\ |\ idp\ a\ |\ pmap\ b\ a\ |\ inv\ p\ |\ comp\ p\ q\ |\ coe\ p\ |\ pcon\ t\ |\ pdec\ t, \]
+\[ (a = a'\,|\,A)\ |\ idp\ a\ |\ pmap\ b\ a\ |\ inv\ p\ |\ comp\ p\ q\ |\ coe\ p\ |\ pcon\ p\ q\ t\ |\ pdec\ t, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
 where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, q, t, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
@@ -265,13 +265,13 @@ We write $\Pi_1 A\,B$ for $pmap\,(pmap\,(\lambda \lambda \Pi\,v_1\,(v_1\,v_0))\,
 \medskip
 \begin{center}
 \AxiomC{$\Gamma \vdash t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
-\UnaryInfC{$\Gamma \vdash pcon\ t : p = p' \,|\, Id_1 A\,a\,a'$}
+\UnaryInfC{$\Gamma \vdash pcon\ p\ p'\ t : p = p' \,|\, Id_1\,(idp\ A)\,a\,a'$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash t : p = p' \,|\, Id_1 A\,a\,a'$}
+\AxiomC{$\Gamma \vdash t : p = p' \,|\, Id_1\,(idp\ A)\,a\,a'$}
 \UnaryInfC{$\Gamma \vdash pdec\ t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
 \DisplayProof
 \end{center}
@@ -297,18 +297,19 @@ We work in a suitable category of domains (see, for example, \cite{domains} for 
 Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\bbG)$ the set of objects,
 and $Hom(\bbG)$ the set of morphisms of the category $\bbG$, thus $Ob(\bbG)$ is simply the set of natural numbers.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \]
-\[ \oplus [\nats_\bot \to \D \times \D] \times TM_\bot \times \nats_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
+\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \mathsf{List}(\D \times \D) \times \D \]
+\[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
 \[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
-\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
+\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D], \]
+where $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$, and $\mathsf{List}(\D \times \D)$ is a domain of finite sequences of elements of $\D \times \D$.
 
-Here, $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$.
 The meaning of the components in this equaltion should be clear from the names of the constructors:
 \begin{itemize}
 \item[] $\mathsf{Lam} : [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
-\item[] $\mathsf{Ne} : [\nats_\bot \to \D \times \D] \times TM_\bot \times \nats_\bot \to \D$
+\item[] $\mathsf{Path} : \mathsf{List}(\D \times \D) \times \D \to \D$
+\item[] $\mathsf{Ne} : \D \times \D \times TM_\bot \times \nats_\bot \to \D$
 \item[] $\mathsf{Id} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
 \item[] $\mathsf{Pi} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Sigma} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
