@@ -103,10 +103,9 @@ typeOf (App (App Comp e1) e2) = do
         _ -> fail "typeOf.App.Comp"
 typeOf (App e1 e2) = do
     t1 <- typeOf e1
-    t2 <- typeOf e2
     ctx <- askCtx
-    case (t1,t2) of
-        (Spi 0 _ _ b, _) -> return $ b 0 [] $ eval 0 (ctxToCtxV ctx) e2
+    case t1 of
+        Spi 0 _ _ b -> return $ b 0 [] $ eval 0 (ctxToCtxV ctx) e2
         _ -> fail "typeOf.App"
 typeOf (LVar v) = do
     (_,lctx) <- askCtx

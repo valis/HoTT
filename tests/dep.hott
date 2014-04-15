@@ -55,7 +55,7 @@ transport A B a a' p = coe (pmap (idp B) p)
 -- pmap (pmap (idp B a) p) (idp p) : Id Type (B a a (p; inv p)) (B a a' p)
 -- coe (pmap (pmap (idp B a) p) (idp p)) : B a a (p; inv p) -> B a a' p
 
-contrPathSpace : (A : Type) (a a' : A) (p : a = a') -> ((a, idp a) :: (a' : A) * a = a') = (a', p)
+contrPathSpace : (A : Type) (a a' : A) (p : a = a') -> (a, idp a) = (a', p) | ((a' : A) * a = a')
 contrPathSpace A a a' p = ext (p, idp p)
 
 J : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> ((a : A) -> B a a (idp a)) -> (a a' : A) (p : a = a') -> B a a' p
@@ -68,7 +68,7 @@ J'fail A B a a' p = pmap (pmap (idp (B a)) p) (idp p)
                     -- [ B [a] p [p] ]
 
 J0 : (A : Type) (B : (a a' : A) -> a = a' -> Type) (a a' : A) -> (p : a = a')
-    -> ((\x -> B a a (comp x (inv p))) :: a = a' -> Type) = B a a'
+    -> (\x -> B a a (comp x (inv p))) = B a a' | (a = a' -> Type)
 J0 A B a a' p = pmap (idp (B a)) p
 
 J1 : (A : Type) (B : (a a' : A) -> a = a' -> Type) -> (a a' : A) (p : a = a') -> B a a (comp p (inv p)) = B a a' p

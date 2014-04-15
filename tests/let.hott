@@ -30,3 +30,13 @@ test8'fail x y f = f (\z -> x)
 
 test9'fail : (x : Type0) -> x -> ((x -> x) -> x) -> x
 test9'fail x y f = f (let y = 0 in \z -> y)
+
+test10 =
+    let x = 0
+        y = x
+    in y
+
+test10'fail =
+    let y = x
+        x = 0
+    in x
