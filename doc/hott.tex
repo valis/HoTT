@@ -337,7 +337,10 @@ Now, we define the evaluation function:
 \item[] $\llbracket idp\ a \rrbracket^\rho_n = \mathsf{Path}([(a_0, a'_0), \ldots (a_{n-1}, a'_{n-1})], \delta_n \cdot \llbracket a \rrbracket^\rho_n)$, \\
     \indent where $a_k  = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k$ and
                   $a'_k = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k$
-\item[] $\llbracket pmap\ b\ a \rrbracket^\rho_n = \mathsf{app}(n + 1, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
+\item[] $\llbracket pmap\ b\ a \rrbracket^\rho_n = \mathsf{Path}([(x_0,x'_0), \ldots (x_{n-1},x'_{n-1}))], x)$, \\
+    \indent where $x = \mathsf{app}(n + 1, \mathsf{pdec}(\llbracket b \rrbracket^\rho_n), \mathsf{pdec}(\llbracket a \rrbracket^\rho_n))$, \\
+    \indent \indent $x_k = \mathsf{app}(k + 1, \mathsf{pdec}(\llbracket b \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k), \mathsf{pdec}(\llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k))$, and \\
+    \indent \indent $x'_k = \mathsf{app}(k + 1, \mathsf{pdec}(\llbracket b \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k), \mathsf{pdec}(\llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k))$
 \end{itemize}
 
 Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{pdec}$, and $\cdot$ are defined as follows:
@@ -379,7 +382,8 @@ then define $\mathcal{S}igma\,R\,Q, \mathcal{P}i_n R\,Q, \mathcal{N}\!e, \mathca
 \[ \mathcal{P}i_n R\,Q = \{ \mathsf{Lam}(f) \in \D\,|\,f(id_n,a) \in Q(a) \text{ for all } a \in R \}, \]
 \[ \mathcal{N}\!e = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \}, \]
 \[ \mathcal{I}d_n R\,x_0\,x'_0 = \{ \mathsf{Path}([(x_1,x'_1), \ldots (x_n,x'_n)],x) \,|\, x \in R, \]
-\[ \sigma_n \cdot x = d^0_{n,n}(x_n,x'_{n-1},x_{n-2},x'_{n-3},\ldots), \tau_n \cdot x = d^1_{n,n}(x'_n,x_{n-1},x'_{n-2},x_{n-3},\ldots) \}, \]
+\[ \sigma_n \cdot x = d^0_{n,n}(x_n,x'_{n-1},x_{n-2},x'_{n-3},\ldots), \]
+\[ \tau_n \cdot x = d^1_{n,n}(x'_n,x_{n-1},x'_{n-2},x_{n-3},\ldots) \}, \]
 where $d^i_{n,k}$ are defined as follows: $d^i_{n,0}(a_0) = a_0$,
 \[ d^i_{n,k+1}(a_0, \ldots a_{k+1}) = \left\{ \begin{array}{l l}
             d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, \delta^n_{n-k} \cdot a_k, a_{k+1})) \text{, if $k \bmod 2 = i$} \\
