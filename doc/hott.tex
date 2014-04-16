@@ -325,20 +325,22 @@ Now, we define the evaluation function:
 \begin{itemize}
 \item[] $\llbracket - \rrbracket : Tm_\bot \times Env \times Ob(\bbG)_\bot \to \D$
 \item[] $\llbracket v_i \rrbracket^\rho_n = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
-\item[] $\llbracket U_\alpha \rrbracket^\rho_n = \mathsf{U}(\alpha)$, if $\alpha \in \nats$, and $\bot$, otherwise.
+\item[] $\llbracket U_\alpha \rrbracket^\rho_n = \mathsf{U}(\alpha)$
 \item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
 \item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
-\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \llbracket A \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
+\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \mathsf{pdec}(\llbracket A \rrbracket^\rho_n), \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
 \item[] $\llbracket \lambda b \rrbracket^\rho_n = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
 \item[] $\llbracket b\ a \rrbracket^\rho_n = \mathsf{app}(n, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \item[] $\llbracket a, b \rrbracket^\rho_n = \mathsf{Pair}(\llbracket a \rrbracket^\rho_n, \llbracket b \rrbracket^\rho_n)$
 \item[] $\llbracket proj_1\ p \rrbracket^\rho_n = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_n)$
 \item[] $\llbracket proj_2\ p \rrbracket^\rho_n = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_n)$
-\item[] $\llbracket idp\ a \rrbracket^\rho_n = \delta_n \cdot \llbracket a \rrbracket^\rho_n$
+\item[] $\llbracket idp\ a \rrbracket^\rho_n = \mathsf{Path}([(a_0, a'_0), \ldots (a_{n-1}, a'_{n-1})], \delta_n \cdot \llbracket a \rrbracket^\rho_n)$, \\
+    \indent where $a_k  = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k$ and
+                  $a'_k = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k$
 \item[] $\llbracket pmap\ b\ a \rrbracket^\rho_n = \mathsf{app}(n + 1, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \end{itemize}
 
-Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\cdot$ are defined as follows:
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{pdec}$, and $\cdot$ are defined as follows:
 \begin{itemize}
 \item[] $\mathsf{app} : Ob(\bbG)_\bot \times \D \times \D \to \D$
 \item[] $\mathsf{app}(n,\mathsf{Lam}(f),a) = f(id_n,a)$
@@ -351,6 +353,10 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\cdot$ are 
 \item[] $\mathsf{proj_2} : \D \to \D$
 \item[] $\mathsf{proj_2}(\mathsf{Pair}(a,b)) = b$
 \item[] $\mathsf{proj_2}(x) = \bot$, otherwise
+\item[]
+\item[] $\mathsf{pdec} : \D \to \D$
+\item[] $\mathsf{pdec}(\mathsf{Path}(s,x)) = x$
+\item[] $\mathsf{pdec}(x) = \bot$, otherwise
 \item[]
 \item[] $\cdot : Hom(\bbG)_\bot \times \D \to \D$
 \item[] $m \cdot \mathsf{Lam}(f) = \mathsf{Lam}((m',x) \mapsto f(m \circ m', x))$
@@ -373,11 +379,11 @@ then define $\mathcal{S}igma\,R\,Q, \mathcal{P}i_n R\,Q, \mathcal{N}\!e, \mathca
 \[ \mathcal{P}i_n R\,Q = \{ \mathsf{Lam}(f) \in \D\,|\,f(id_n,a) \in Q(a) \text{ for all } a \in R \}, \]
 \[ \mathcal{N}\!e = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \}, \]
 \[ \mathcal{I}d_n R\,x_0\,x'_0 = \{ \mathsf{Path}([(x_1,x'_1), \ldots (x_n,x'_n)],x) \,|\, x \in R, \]
-\[ \sigma_n \cdot x = d^0_n(x_n,x'_{n-1},x_{n-2},x'_{n-3},\ldots), \tau_n \cdot x = d^1_n(x'_n,x_{n-1},x'_{n-2},x_{n-3},\ldots) \}, \]
-where $d^i_n$ are defined as follows: $d^i_0(a_0) = a_0$,
-\[ d^i_{n+1}(a_0, \ldots a_{n+1}) = \left\{ \begin{array}{l l}
-            d^i_n(a_0, \ldots a_{n-1}, \mathsf{comp}(n, \delta^n_1 \cdot a_n, a_{n+1})), & \text{if $n \bmod 2 = i$} \\
-            d^i_n(a_0, \ldots a_{n-1}, \mathsf{comp}(n, a_{n+1}, \delta^n_1 \cdot a_n)), & \text{otherwise.}
+\[ \sigma_n \cdot x = d^0_{n,n}(x_n,x'_{n-1},x_{n-2},x'_{n-3},\ldots), \tau_n \cdot x = d^1_{n,n}(x'_n,x_{n-1},x'_{n-2},x_{n-3},\ldots) \}, \]
+where $d^i_{n,k}$ are defined as follows: $d^i_{n,0}(a_0) = a_0$,
+\[ d^i_{n,k+1}(a_0, \ldots a_{k+1}) = \left\{ \begin{array}{l l}
+            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, \delta^n_{n-k} \cdot a_k, a_{k+1})) \text{, if $k \bmod 2 = i$} \\
+            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, a_{k+1}, \delta^n_{n-k} \cdot a_k)) \text{, otherwise.}
     \end{array} \right. \]
 
 Now, for each $\alpha \leq \omega$ and $n \in \nats$,
@@ -458,7 +464,7 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ by the followin
 \DisplayProof
 \end{center}
 \medskip
-We write simply $\mathcal{U}_n$ and $[-]_n$ for $\mathcal{U}^\omega_n$ and $[-]^\omega_n$.
+We write simply $\mathcal{U}_n$ for $\mathcal{U}^\omega_n$ and $[-]_n$ for $[-]^\omega_n$.
 
 \begin{lem}
 For each $\alpha \leq \omega$ and $n \in \nats$, the graph $G^\alpha_n$ defines a partial function, that is $(A, R), (A, R') \in G^\alpha_n$ implies $R = R'$.
