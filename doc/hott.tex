@@ -300,10 +300,8 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 We work in a suitable category of domains (see, for example, \cite{domains} for more information on the topic).
 Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\theta)$ the set of objects, and $Hom(\theta)$ the set of morphisms of the category $\theta$.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \mathsf{List}(\D \times \D) \times \D \]
-\[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus \D \times \D \times \D \oplus \nats_\bot \times \D \times \D \times \D \]
-\[ \oplus \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \]
-\[ \oplus \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D], \]
+\[ \D = [Hom(\theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \times \D \times \mathsf{List}(\D \times \D) \times \D \]
+\[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus \D \times \D \times \D \oplus \D \times \D \times \D \oplus \D \times \D \oplus \D \times \D, \]
 where $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$, and $\mathsf{List}(\D \times \D)$ is a domain of finite sequences of elements of $\D \times \D$.
 
 The meaning of the components in this equaltion should be clear from the names of the constructors:
@@ -311,12 +309,12 @@ The meaning of the components in this equaltion should be clear from the names o
 \item[] $\mathsf{Lam} : [Hom(\theta)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
-\item[] $\mathsf{Path} : \mathsf{List}(\D \times \D) \times \D \to \D$
+\item[] $\mathsf{Path} : \D \times \D \times \mathsf{List}(\D \times \D) \times \D \to \D$
 \item[] $\mathsf{Ne} : \D \times \D \times TM_\bot \times \nats_\bot \to \D$
 \item[] $\mathsf{Tri} : \D \times \D \times \D \to \D$
-\item[] $\mathsf{Id} : \nats_\bot \times \D \times \D \times \D \to \D$
-\item[] $\mathsf{Pi} : \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \to \D$
-\item[] $\mathsf{Sigma} : \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Id} : \D \times \D \times \D \to \D$
+\item[] $\mathsf{Pi} : \D \times \D \to \D$
+\item[] $\mathsf{Sigma} : \D \times \D \to \D$
 \end{itemize}
 
 Let $Env$ be the domain $[\nats_\bot \to \D]$.
@@ -334,9 +332,9 @@ Now, we define a part of the evaluation function, the rest of the cases will be 
 \end{itemize}
 
 \begin{comment}
-\item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
-\item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
-\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \mathsf{pdec}(\llbracket A \rrbracket^\rho_n), \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
+\item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(\llbracket A \rrbracket^\rho_n, \mathsf{Lam}((m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)}))$
+\item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(\llbracket A \rrbracket^\rho_n, \mathsf{Lam}((m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)}))$
+\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(\mathsf{pdec}(\llbracket A \rrbracket^\rho_n), \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
 \item[] $\llbracket idp\ a \rrbracket^\rho_n = \mathsf{Path}([(a_0, a'_0), \ldots (a_{n-1}, a'_{n-1})], \delta_n \cdot \llbracket a \rrbracket^\rho_n)$, \\
     \indent where $a_k  = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k$ and
                   $a'_k = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k$
@@ -361,7 +359,7 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\cdot$ are 
 \item[] $\mathsf{proj_2}(x) = \bot$, otherwise
 \item[]
 \item[] $\mathsf{pdec} : \D \to \D$
-\item[] $\mathsf{pdec}(\mathsf{Path}(s,x)) = x$
+\item[] $\mathsf{pdec}(\mathsf{Path}(a,b,s,x)) = x$
 \item[] $\mathsf{pdec}(x) = \bot$, otherwise
 \item[]
 \item[] $\cdot : Hom(\theta)_\bot \times \D \to \D$
@@ -369,29 +367,31 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\cdot$ are 
 \item[] $m \cdot \mathsf{Pair}(a, b) = \mathsf{Pair}(m \cdot a, m \cdot b)$
 \item[] $m \cdot \mathsf{U}(\alpha) = \mathsf{U}(\alpha)$
 \item[] $m \cdot \mathsf{Ne}(s,e,c) = TODO$
-\item[] $m \cdot \mathsf{Id}(n, A, a, a') = \mathsf{Id}(dom(m), m \cdot A, m \cdot a, m \cdot a')$
-\item[] $m \cdot \mathsf{Pi}(n, A, B) = \mathsf{Pi}(dom(m), m \cdot A, (m', x) \mapsto B(m \circ m', x))$
-\item[] $m \cdot \mathsf{Sigma}(n, A, B) = \mathsf{Sigma}(dom(m), m \cdot A, (m', x) \mapsto B(m \circ m', x))$
+\item[] $m \cdot \mathsf{Id}(A, a, a') = \mathsf{Id}(m \cdot A, m \cdot a, m \cdot a')$
+\item[] $m \cdot \mathsf{Pi}(A, B) = \mathsf{Pi}(m \cdot A, m \cdot B)$
+\item[] $m \cdot \mathsf{Sigma}(A, B) = \mathsf{Sigma}(m \cdot A, m \cdot B)$
 \item[] $\alpha \cdot \mathsf{Tri}(a, b, c) = a$
 \item[] $\beta \cdot \mathsf{Tri}(a, b, c) = b$
 \item[] $\gamma \cdot \mathsf{Tri}(a, b, c) = c$
 \item[] $m \cdot x = \bot$, otherwise
 \end{itemize}
 
-\begin{comment}
-\item[] $\mathsf{comp} : Ob(\theta)_\bot \times \D \times \D \to \D$
-% \item[] $\mathsf{comp}(n, \mathsf{Idp}(x, y, d), \mathsf{Idp}(x', y', e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
-\item[] $\mathsf{comp}(n, \mathsf{Lam}(f), \mathsf{Lam}(f')) = $ \\
-    \indent $\mathsf{Lam}((m,a) \mapsto \mathsf{comp}(dom(m), f(m, \delta^{dom(m)}_0 \cdot \tau^0_{dom(m)} \cdot a), f'(m, a)))$
-\item[] $\mathsf{comp}(n, \mathsf{Pair}(a,b), \mathsf{Pair}(a',b')) = \mathsf{Pair}(\mathsf{comp}(a,a'), \mathsf{comp}(b,b'))$
-\item[] $\mathsf{comp}(n, \mathsf{Path}(s,x), \mathsf{Path}(s',x')) = \mathsf{Path}(TODO)$
-\item[] $\mathsf{comp}(n, \mathsf{Sigma}(k,A,B), \mathsf{Sigma}(k',A',B')) = \mathsf{Sigma}(TODO)$
-\item[] $\mathsf{comp}(n, \mathsf{Pi}(k,A,B), \mathsf{Pi}(k',A',B')) = \mathsf{Pi}(TODO)$
-\item[] $\mathsf{comp}(n, \mathsf{Id}(k,A,a,a'), \mathsf{Id}(k',B,b,b')) = \mathsf{Id}(TODO)$
-\item[] $\mathsf{comp}(n, \mathsf{Ne}(l,r,t,c), \mathsf{Ne}(l',r',t',c')) = \mathsf{Ne}(TODO)$
-\item[] $\mathsf{comp}(n, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = \mathsf{U}(max(\alpha,\beta))$
-\item[] $\mathsf{comp}(n, x, x') = \bot$, otherwise
-\end{comment}
+Now, let us define the composition function.
+The second argument is the dimension of the cells which we compose, and the first one is the dimension of the cell along which we compose.
+\begin{itemize}
+\item[] $\mathsf{comp} : \nats_\bot \times \nats_\bot \times \D \times \D \to \D$
+\item[] $\mathsf{comp}(k, n, \mathsf{Lam}(f), \mathsf{Lam}(f')) = $ \\
+    \indent $\mathsf{Lam}((m,a) \mapsto \mathsf{comp}(k, dom(m), f(m, \delta^{dom(m)}_0 \cdot \tau^0_{dom(m)} \cdot a), f'(m, a)))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Pair}(a,b), \mathsf{Pair}(a',b')) = \mathsf{Pair}(\mathsf{comp}(k,n,a,a'), \mathsf{comp}(k,n,b,b'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Path}(a,b,s,x), \mathsf{Path}(a',b',s',x')) = \mathsf{Path}(TODO)$
+\item[] $\mathsf{comp}(k, n, \mathsf{Sigma}(A,B), \mathsf{Sigma}(A',B')) = \mathsf{Sigma}(\mathsf{comp}(n, A, A'), \mathsf{comp}(n, B, B'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Pi}(A,B), \mathsf{Pi}(A',B')) = \mathsf{Pi}(\mathsf{comp}(n, A, A'), \mathsf{comp}(n, B, B'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Id}(A,a,a'), \mathsf{Id}(B,b,b')) =$ \\
+    \indent $\mathsf{Id}(\mathsf{comp}(n + 1, A, B), \mathsf{comp}(n, a, b), \mathsf{comp}(n, a', b'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Ne}(l,r,t,c), \mathsf{Ne}(l',r',t',c')) = \mathsf{Ne}(TODO)$
+\item[] $\mathsf{comp}(k, n, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = \mathsf{U}(max(\alpha,\beta))$
+\item[] $\mathsf{comp}(k, n, x, x') = \bot$, otherwise
+\end{itemize}
 
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
 If $n \in \nats$, $R \in \mathscr{P}(\D)$, $Q : \D \to \mathscr{P}(\D)$, and $x_0,x'_0 \in \D$,
@@ -399,13 +399,13 @@ then define $\mathcal{S}igma\,R\,Q, \mathcal{P}i_n R\,Q, \mathcal{N}\!e, \mathca
 \[ \mathcal{S}igma\,R\,Q = \{ \mathsf{Pair}(a,b) \in \D\,|\,a \in R, b \in R(a) \}, \]
 \[ \mathcal{P}i_n R\,Q = \{ \mathsf{Lam}(f) \in \D\,|\,f(id_n,a) \in Q(a) \text{ for all } a \in R \}, \]
 \[ \mathcal{N}\!e = \{ \mathsf{Ne}(s,e,c)\,|\,e \in TM \}, \]
-\[ \mathcal{I}d_n R\,x_0\,x'_0 = \{ \mathsf{Path}([(x_1,x'_1), \ldots (x_n,x'_n)],x) \,|\, x \in R, \]
+\[ \mathcal{I}d_n R\,x_0\,x'_0 = \{ \mathsf{Path}(x_0,x_0',[(x_1,x'_1), \ldots (x_n,x'_n)],x) \,|\, x \in R, \]
 \[ \sigma_n \cdot x = d^0_{n,n}(x_n,x'_{n-1},x_{n-2},x'_{n-3},\ldots), \]
 \[ \tau_n \cdot x = d^1_{n,n}(x'_n,x_{n-1},x'_{n-2},x_{n-3},\ldots) \}, \]
 where $d^i_{n,k}$ are defined as follows: $d^i_{n,0}(a_0) = a_0$,
 \[ d^i_{n,k+1}(a_0, \ldots a_{k+1}) = \left\{ \begin{array}{l l}
-            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, \delta^n_{n-k} \cdot a_k, a_{k+1})) \text{, if $k \bmod 2 = i$} \\
-            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, a_{k+1}, \delta^n_{n-k} \cdot a_k)) \text{, otherwise.}
+            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(k, n, \delta^n_{n-k} \cdot a_k, a_{k+1})) \text{, if $k \bmod 2 = i$} \\
+            d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(k, n, a_{k+1}, \delta^n_{n-k} \cdot a_k)) \text{, otherwise.}
     \end{array} \right. \]
 
 Now, for each $\alpha \leq \omega$ and $n \in Ob(\theta)$,
@@ -414,23 +414,23 @@ First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{P}(\D)$ ind
 \medskip
 \begin{center}
 \AxiomC{$(A, R) \in G^\alpha_n$}
-\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
-\BinaryInfC{$(\mathsf{Sigma}(n, A, B), \mathcal{S}igma\,R\,Q) \in G^\alpha_n$}
+\AxiomC{$(\mathsf{app}(n, B, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
+\BinaryInfC{$(\mathsf{Sigma}(A, B), \mathcal{S}igma\,R\,Q) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
 \AxiomC{$(A, R) \in G^\alpha_n$}
-\AxiomC{$(B(id_n, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
-\BinaryInfC{$(\mathsf{Pi}(n, A, B), \mathcal{P}i_n R\,Q) \in G^\alpha_n$}
+\AxiomC{$(\mathsf{app}(n, B, a), Q(a)) \in G^\alpha_n$ for all $a \in R$}
+\BinaryInfC{$(\mathsf{Pi}(A, B), \mathcal{P}i_n R\,Q) \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
 \AxiomC{$(A,R) \in G^\alpha_{n+1}$}
-\UnaryInfC{$(\mathsf{Id}(n, A, a, a'), \mathcal{I}d_n R\,a\,a') \in G^\alpha_n$}
+\UnaryInfC{$(\mathsf{Id}(A, a, a'), \mathcal{I}d_n R\,a\,a') \in G^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
@@ -451,16 +451,16 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ by the followin
 \medskip
 \begin{center}
 \AxiomC{$A \in \mathcal{U}^\alpha_n$}
-\AxiomC{$B(id_n, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
-\BinaryInfC{$\mathsf{Sigma}(n, A, B) \in \mathcal{U}^\alpha_n$}
+\AxiomC{$\mathsf{app}(n, B, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
+\BinaryInfC{$\mathsf{Sigma}(A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
 
 \begin{center}
 \AxiomC{$A \in \mathcal{U}^\alpha_n$}
-\AxiomC{$B(id_n, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
-\BinaryInfC{$\mathsf{Pi}(n, A, B) \in \mathcal{U}^\alpha_n$}
+\AxiomC{$\mathsf{app}(n, B, a) \in \mathcal{U}^\alpha_n$ for all $a \in [A]^\alpha_n$}
+\BinaryInfC{$\mathsf{Pi}(A, B) \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
@@ -469,7 +469,7 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ by the followin
 \AxiomC{$A \in \mathcal{U}^\alpha_{n + 1}$}
 \AxiomC{$a \in [\sigma_n \cdot A]^\alpha_n$}
 \AxiomC{$a' \in [\tau_n \cdot A]^\alpha_n$}
-\TrinaryInfC{$\mathsf{Id}(n, A, a, a') \in \mathcal{U}^\alpha_n$}
+\TrinaryInfC{$\mathsf{Id}(A, a, a') \in \mathcal{U}^\alpha_n$}
 \DisplayProof
 \end{center}
 \medskip
@@ -562,23 +562,23 @@ Most of the cases are straightforward, let us prove some of them:
 Now, let us show how to reify elements of $\D$ into terms.
 \begin{itemize}
 \item[] $\mathsf{reify} : \nats_\bot \times \D \times \D \to Tm_\bot$
-\item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(0, A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_0, x), B(id_0, x))$, \\
+\item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_0, x), \mathsf{app}(0, B, x))$, \\
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(0, A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, B(id_0, a))$
+\item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, \mathsf{app}(0, B, a))$
 \item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
 \item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e, c), t) = e(i)$
-\item[] $\mathsf{reify}(i, \mathsf{Id}(0, A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
-\item[] $\mathsf{reify}(i, \mathsf{Pi}(0, A, B), \mathsf{U}(\alpha)) =$
-        $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_0, x), \mathsf{U}(\alpha))$, \\
+\item[] $\mathsf{reify}(i, \mathsf{Id}(A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
+\item[] $\mathsf{reify}(i, \mathsf{Pi}(A, B), \mathsf{U}(\alpha)) =$
+        $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, \mathsf{app}(0, B, x), \mathsf{U}(\alpha))$, \\
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, \mathsf{Sigma}(0, A, B), \mathsf{U}(\alpha)) = $
-        $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, B(id_0, x), \mathsf{U}(\alpha))$, \\
+\item[] $\mathsf{reify}(i, \mathsf{Sigma}(A, B), \mathsf{U}(\alpha)) = $
+        $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, \mathsf{app}(0, B, x), \mathsf{U}(\alpha))$, \\
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise.
 \item[]
 \item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
-\item[] $\mathsf{reflect}(e,\mathsf{Pi}(0, A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), B(id_0, a)))$
-\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(0, A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(k \mapsto proj_2\ e(k), B(id_0, a)))$, \\
+\item[] $\mathsf{reflect}(e,\mathsf{Pi}(A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), \mathsf{app}(0, B, a)))$
+\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(k \mapsto proj_2\ e(k), \mathsf{app}(0, B, a)))$, \\
         \indent where $a = \mathsf{reflect}(k \mapsto proj_1\ e(k), A)$
 \item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e, 0)$, otherwise
 \end{itemize}
