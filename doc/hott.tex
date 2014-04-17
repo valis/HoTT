@@ -298,42 +298,45 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 \label{sec:eval}
 
 We work in a suitable category of domains (see, for example, \cite{domains} for more information on the topic).
-Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\bbG)$ the set of objects,
-and $Hom(\bbG)$ the set of morphisms of the category $\bbG$, thus $Ob(\bbG)$ is simply the set of natural numbers.
+Let $TM$ be the set of functions $\nats \to Tm$, $Ob(\theta)$ the set of objects, and $Hom(\theta)$ the set of morphisms of the category $\theta$.
 Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
-\[ \D = [Hom(\bbG)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \mathsf{List}(\D \times \D) \times \D \]
-\[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus Ob(\bbG)_\bot \times \D \times \D \times \D \]
-\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \]
-\[ \oplus Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D], \]
+\[ \D = [Hom(\theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \mathsf{List}(\D \times \D) \times \D \]
+\[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus \D \times \D \times \D \oplus \nats_\bot \times \D \times \D \times \D \]
+\[ \oplus \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \]
+\[ \oplus \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D], \]
 where $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$, and $\mathsf{List}(\D \times \D)$ is a domain of finite sequences of elements of $\D \times \D$.
 
 The meaning of the components in this equaltion should be clear from the names of the constructors:
 \begin{itemize}
-\item[] $\mathsf{Lam} : [Hom(\bbG)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Lam} : [Hom(\theta)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
 \item[] $\mathsf{U} : (\omega + 1)_\bot \to \D$
 \item[] $\mathsf{Path} : \mathsf{List}(\D \times \D) \times \D \to \D$
 \item[] $\mathsf{Ne} : \D \times \D \times TM_\bot \times \nats_\bot \to \D$
-\item[] $\mathsf{Id} : Ob(\bbG)_\bot \times \D \times \D \times \D \to \D$
-\item[] $\mathsf{Pi} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
-\item[] $\mathsf{Sigma} : Ob(\bbG)_\bot \times \D \times [Hom(\bbG)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Tri} : \D \times \D \times \D \to \D$
+\item[] $\mathsf{Id} : \nats_\bot \times \D \times \D \times \D \to \D$
+\item[] $\mathsf{Pi} : \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \to \D$
+\item[] $\mathsf{Sigma} : \nats_\bot \times \D \times [Hom(\theta)_\bot \times \D \to \D] \to \D$
 \end{itemize}
 
 Let $Env$ be the domain $[\nats_\bot \to \D]$.
 If $\rho \in Env$ and $x \in \D$, then we define $\rho[x] \in Env$ to be the function defined by the following rules: $\rho[x](0) = x$ and $\rho[x](i+1) = \rho(i)$.
-Now, we define the evaluation function:
+Now, we define a part of the evaluation function, the rest of the cases will be defined later.
 \begin{itemize}
-\item[] $\llbracket - \rrbracket : Tm_\bot \times Env \times Ob(\bbG)_\bot \to \D$
+\item[] $\llbracket - \rrbracket : Tm_\bot \times Env \times Ob(\theta)_\bot \to \D$
 \item[] $\llbracket v_i \rrbracket^\rho_n = \rho(i)$, if $i \geq 0$, and $\bot$, otherwise.
 \item[] $\llbracket U_\alpha \rrbracket^\rho_n = \mathsf{U}(\alpha)$
-\item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
-\item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
-\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \mathsf{pdec}(\llbracket A \rrbracket^\rho_n), \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
 \item[] $\llbracket \lambda b \rrbracket^\rho_n = \mathsf{Lam}((m, a) \mapsto \llbracket b \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
 \item[] $\llbracket b\ a \rrbracket^\rho_n = \mathsf{app}(n, \llbracket b \rrbracket^\rho_n, \llbracket a \rrbracket^\rho_n)$
 \item[] $\llbracket a, b \rrbracket^\rho_n = \mathsf{Pair}(\llbracket a \rrbracket^\rho_n, \llbracket b \rrbracket^\rho_n)$
 \item[] $\llbracket proj_1\ p \rrbracket^\rho_n = \mathsf{proj_1}(\llbracket p \rrbracket^\rho_n)$
 \item[] $\llbracket proj_2\ p \rrbracket^\rho_n = \mathsf{proj_2}(\llbracket p \rrbracket^\rho_n)$
+\end{itemize}
+
+\begin{comment}
+\item[] $\llbracket \Pi A B \rrbracket^\rho_n = \mathsf{Pi}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
+\item[] $\llbracket \Sigma A B \rrbracket^\rho_n = \mathsf{Sigma}(n, \llbracket A \rrbracket^\rho_n, (m, a) \mapsto \llbracket B \rrbracket^{(i \mapsto m \cdot \rho(i))[a]}_{dom(m)})$
+\item[] $\llbracket a = a' | A \rrbracket^\rho_n = \mathsf{Id}(n, \mathsf{pdec}(\llbracket A \rrbracket^\rho_n), \llbracket a \rrbracket^\rho_n, \llbracket a' \rrbracket^\rho_n)$
 \item[] $\llbracket idp\ a \rrbracket^\rho_n = \mathsf{Path}([(a_0, a'_0), \ldots (a_{n-1}, a'_{n-1})], \delta_n \cdot \llbracket a \rrbracket^\rho_n)$, \\
     \indent where $a_k  = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k$ and
                   $a'_k = \delta_k \cdot \llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k$
@@ -341,11 +344,11 @@ Now, we define the evaluation function:
     \indent where $x = \mathsf{app}(n + 1, \mathsf{pdec}(\llbracket b \rrbracket^\rho_n), \mathsf{pdec}(\llbracket a \rrbracket^\rho_n))$, \\
     \indent \indent $x_k = \mathsf{app}(k + 1, \mathsf{pdec}(\llbracket b \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k), \mathsf{pdec}(\llbracket a \rrbracket^{i \mapsto \sigma^k_n \cdot \rho(i)}_k))$, and \\
     \indent \indent $x'_k = \mathsf{app}(k + 1, \mathsf{pdec}(\llbracket b \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k), \mathsf{pdec}(\llbracket a \rrbracket^{i \mapsto \tau^k_n \cdot \rho(i)}_k))$
-\end{itemize}
+\end{comment}
 
-Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{pdec}$, and $\cdot$ are defined as follows:
+Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, and $\cdot$ are defined as follows:
 \begin{itemize}
-\item[] $\mathsf{app} : Ob(\bbG)_\bot \times \D \times \D \to \D$
+\item[] $\mathsf{app} : Ob(\theta)_\bot \times \D \times \D \to \D$
 \item[] $\mathsf{app}(n,\mathsf{Lam}(f),a) = f(id_n,a)$
 \item[] $\mathsf{app}(n,e,a) = \bot$, otherwise
 \item[]
@@ -361,7 +364,7 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{pdec}$,
 \item[] $\mathsf{pdec}(\mathsf{Path}(s,x)) = x$
 \item[] $\mathsf{pdec}(x) = \bot$, otherwise
 \item[]
-\item[] $\cdot : Hom(\bbG)_\bot \times \D \to \D$
+\item[] $\cdot : Hom(\theta)_\bot \times \D \to \D$
 \item[] $m \cdot \mathsf{Lam}(f) = \mathsf{Lam}((m',x) \mapsto f(m \circ m', x))$
 \item[] $m \cdot \mathsf{Pair}(a, b) = \mathsf{Pair}(m \cdot a, m \cdot b)$
 \item[] $m \cdot \mathsf{U}(\alpha) = \mathsf{U}(\alpha)$
@@ -369,11 +372,26 @@ Functions $\mathsf{app}$, $\mathsf{proj_1}$, $\mathsf{proj_2}$, $\mathsf{pdec}$,
 \item[] $m \cdot \mathsf{Id}(n, A, a, a') = \mathsf{Id}(dom(m), m \cdot A, m \cdot a, m \cdot a')$
 \item[] $m \cdot \mathsf{Pi}(n, A, B) = \mathsf{Pi}(dom(m), m \cdot A, (m', x) \mapsto B(m \circ m', x))$
 \item[] $m \cdot \mathsf{Sigma}(n, A, B) = \mathsf{Sigma}(dom(m), m \cdot A, (m', x) \mapsto B(m \circ m', x))$
-\item[]
-\item[] $\mathsf{comp} : Ob(\bbG)_\bot \times \D \times \D \to \D$
-% \item[] $\mathsf{comp}(n, \mathsf{Idp}(x, y, d), \mathsf{Idp}(x', y', e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
-\item[] $\mathsf{comp}(n, d, e) = TODO$
+\item[] $\alpha \cdot \mathsf{Tri}(a, b, c) = a$
+\item[] $\beta \cdot \mathsf{Tri}(a, b, c) = b$
+\item[] $\gamma \cdot \mathsf{Tri}(a, b, c) = c$
+\item[] $m \cdot x = \bot$, otherwise
 \end{itemize}
+
+\begin{comment}
+\item[] $\mathsf{comp} : Ob(\theta)_\bot \times \D \times \D \to \D$
+% \item[] $\mathsf{comp}(n, \mathsf{Idp}(x, y, d), \mathsf{Idp}(x', y', e)) = \mathsf{Idp}(\mathsf{comp}(n - 1, d, e))$, if $n > 0$
+\item[] $\mathsf{comp}(n, \mathsf{Lam}(f), \mathsf{Lam}(f')) = $ \\
+    \indent $\mathsf{Lam}((m,a) \mapsto \mathsf{comp}(dom(m), f(m, \delta^{dom(m)}_0 \cdot \tau^0_{dom(m)} \cdot a), f'(m, a)))$
+\item[] $\mathsf{comp}(n, \mathsf{Pair}(a,b), \mathsf{Pair}(a',b')) = \mathsf{Pair}(\mathsf{comp}(a,a'), \mathsf{comp}(b,b'))$
+\item[] $\mathsf{comp}(n, \mathsf{Path}(s,x), \mathsf{Path}(s',x')) = \mathsf{Path}(TODO)$
+\item[] $\mathsf{comp}(n, \mathsf{Sigma}(k,A,B), \mathsf{Sigma}(k',A',B')) = \mathsf{Sigma}(TODO)$
+\item[] $\mathsf{comp}(n, \mathsf{Pi}(k,A,B), \mathsf{Pi}(k',A',B')) = \mathsf{Pi}(TODO)$
+\item[] $\mathsf{comp}(n, \mathsf{Id}(k,A,a,a'), \mathsf{Id}(k',B,b,b')) = \mathsf{Id}(TODO)$
+\item[] $\mathsf{comp}(n, \mathsf{Ne}(l,r,t,c), \mathsf{Ne}(l',r',t',c')) = \mathsf{Ne}(TODO)$
+\item[] $\mathsf{comp}(n, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = \mathsf{U}(max(\alpha,\beta))$
+\item[] $\mathsf{comp}(n, x, x') = \bot$, otherwise
+\end{comment}
 
 Let $\mathscr{P}(\D)$ denote the set of subset of $\D$.
 If $n \in \nats$, $R \in \mathscr{P}(\D)$, $Q : \D \to \mathscr{P}(\D)$, and $x_0,x'_0 \in \D$,
@@ -390,7 +408,7 @@ where $d^i_{n,k}$ are defined as follows: $d^i_{n,0}(a_0) = a_0$,
             d^i_{n,k}(a_0, \ldots a_{k-1}, \mathsf{comp}(n, a_{k+1}, \delta^n_{n-k} \cdot a_k)) \text{, otherwise.}
     \end{array} \right. \]
 
-Now, for each $\alpha \leq \omega$ and $n \in \nats$,
+Now, for each $\alpha \leq \omega$ and $n \in Ob(\theta)$,
 we define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ and a function $[-]^\alpha_n : \mathcal{U}^\alpha_n \to \mathscr{P}(\D)$ by induction on $\alpha$.
 First, we define a relation $G^\alpha_n \subseteq \D \times \mathscr{P}(\D)$ inductively by the following rules:
 \medskip
@@ -471,16 +489,16 @@ We inductively define $\mathcal{U}^\alpha_n \in \mathscr{P}(\D)$ by the followin
 We write simply $\mathcal{U}_n$ for $\mathcal{U}^\omega_n$ and $[-]_n$ for $[-]^\omega_n$.
 
 \begin{lem}
-For each $\alpha \leq \omega$ and $n \in \nats$, the graph $G^\alpha_n$ defines a partial function, that is $(A, R), (A, R') \in G^\alpha_n$ implies $R = R'$.
-For each $\alpha \leq \omega$ and $n \in \nats$, the partial function $[-]^\alpha_n : \D \to \mathscr{P}(\D)$
+For each $\alpha \leq \omega$ and $n \in Ob(\theta)$, the graph $G^\alpha_n$ defines a partial function, that is $(A, R), (A, R') \in G^\alpha_n$ implies $R = R'$.
+For each $\alpha \leq \omega$ and $n \in Ob(\theta)$, the partial function $[-]^\alpha_n : \D \to \mathscr{P}(\D)$
 defined by the graph $G^\alpha_n$ is defined on $\mathcal{U}^\alpha_n \subseteq \D$.
 \end{lem}
 \begin{proof}
 The first statement is proved by induction on generation of $G^\alpha_n$ and the second by induction on generation of $\mathcal{U}^\alpha_n$.
 \end{proof}
 
-For each $n \in \nats$ and context $\Gamma$ (that is, finite sequence of terms), we define its interpretation $[\Gamma]_n \subseteq Env$ as follows:
-$\rho \in [\Gamma]_n$ if and only if $\rho(i) \in [\llbracket \Gamma(i) \rrbracket^\rho_n]_n$ for each $0 \leq i < |\Gamma|$ and $n \in \nats$.
+For each $n \in Ob(\theta)$ and context $\Gamma$ (that is, finite sequence of terms), we define its interpretation $[\Gamma]_n \subseteq Env$ as follows:
+$\rho \in [\Gamma]_n$ if and only if $\rho(i) \in [\llbracket \Gamma(i) \rrbracket^\rho_n]_n$ for each $0 \leq i < |\Gamma|$.
 We define a predicate on contexts $\Gamma \models$ inductively as follows:
 
 \centerAlignProof
@@ -492,15 +510,14 @@ We define a predicate on contexts $\Gamma \models$ inductively as follows:
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \models$}
-\AxiomC{$\llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$ for all $n \in \nats$ and $\rho \in [\Gamma]_n$}
+\AxiomC{$\llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$ for all $n \in Ob(\theta)$ and $\rho \in [\Gamma]_n$}
 \BinaryInfC{$\Gamma, A \models$}
 \DisplayProof
 \end{center}
 \medskip
 
-We write $\Gamma \models a : A$ if and only if $\Gamma \models$,
-$\forall \rho \in [\Gamma]_n, \llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$,
-and $\forall \rho \in [\Gamma]_n, \llbracket a \rrbracket^\rho_n \in [\llbracket A \rrbracket^\rho_n]_n$.
+We write $\Gamma \models a : A$ if and only if $\Gamma \models$, and for all $n \in Ob(\theta)$ and $\rho \in [\Gamma]_n$,
+we have $\llbracket A \rrbracket^\rho_n \in \mathcal{U}_n$ and $\llbracket a \rrbracket^\rho_n \in [\llbracket A \rrbracket^\rho_n]_n$.
 
 \begin{prop}
 If $\Gamma \vdash$, then $\Gamma \models$.
