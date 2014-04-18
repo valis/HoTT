@@ -140,10 +140,10 @@ A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morph
 \section{Syntax and Inference Rules}
 
 First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi\,A\,B\ |\ \lambda b\ |\ b\ a\ |\ \Sigma\,A\,B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ | \]
-\[ (a = a'\,|\,A)\ |\ idp\ a\ |\ pmap\ b\ a\ |\ inv\ p\ |\ comp\ p\ q\ |\ coe\ p\ |\ pcon\ p\ q\ t\ |\ pdec\ t, \]
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi\,A\,B\ |\ \lambda b\ |\ app\ n\ f\ a\ |\ \Sigma\,A\,B\ |\ a , b\ |\ proj_1\ n\ p\ |\ proj_2\ n\ p\ | \]
+\[ (a = a' \,|\, A)\ |\ idp\ a\ |\ pmap\ p\ q\ |\ inv\ n\ p\ |\ comp\ k\ n\ p\ q\ |\ coe\ n\ p, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
-where $i \in \Z$, $\alpha \in \nats$, $\Gamma \in Ctx$, and $a, a', b, p, q, t, A, B \in Tm$.
+where $i \in \Z$, $\alpha, k, n \in \nats$, $\Gamma \in Ctx$, and $a, a', b, f, p, q, t, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
 
 The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
@@ -192,7 +192,7 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 \quad
 \AxiomC{$\Gamma \vdash b : \Pi A B$}
 \AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash b\ a : B[a]$}
+\BinaryInfC{$\Gamma \vdash app\ 0\ b\ a : B[a]$}
 \DisplayProof
 \end{center}
 
@@ -244,39 +244,9 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash P : A = B \,|\, U_\alpha$}
-\noLine
-\UnaryInfC{$\Gamma \vdash Q : B = C \,|\, U_\alpha$}
-\AxiomC{$\Gamma \vdash p : a = b \,|\, P$}
-\noLine
-\UnaryInfC{$\Gamma \vdash q : b = c \,|\, Q$}
-\BinaryInfC{$\Gamma \vdash comp\ p\ q : a = c \,|\, comp\ P\ Q$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash p : a = b \,|\, P$}
-\UnaryInfC{$\Gamma \vdash inv\ p : b = a \,|\, inv\ P$}
-\DisplayProof
-\quad
 \AxiomC{$\Gamma \vdash p : A = B \,|\, idp\ U_\alpha$}
 \AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash coe\ p\ a : B$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
-\UnaryInfC{$\Gamma \vdash pcon\ p\ p'\ t : p = p' \,|\, Id_1\,(idp\ A)\,a\,a'$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash t : p = p' \,|\, Id_1\,(idp\ A)\,a\,a'$}
-\UnaryInfC{$\Gamma \vdash pdec\ t : comp\ p\ a' = comp\ a\ p' \,|\, idp\ (a_0 = a_1 \,|\, A)$}
+\BinaryInfC{$\Gamma \vdash coe\ 0\ p\ a : B$}
 \DisplayProof
 \end{center}
 
@@ -284,7 +254,7 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 \begin{center}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash B : U_\beta$}
-\RightLabel{, $\llbracket A \rrbracket^{\rho_\Gamma}_0 = \llbracket B \rrbracket^{\rho_\Gamma}_0$}
+\RightLabel{, $\mathsf{reify}(0, \llbracket A \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega)) = \mathsf{reify}(0, \llbracket B \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega))$}
 \BinaryInfC{$\Gamma \vdash a : B$}
 \DisplayProof
 \end{center}
@@ -303,8 +273,7 @@ Let $(\D,\sqsubseteq)$ be a domain satisfying the following equation:
 \[ \D = [Hom(\theta)_\bot \times \D \to \D] \oplus \D \times \D \oplus (\omega + 1)_\bot \oplus \D \times \D \times \mathsf{List}(\D \times \D) \times \D \]
 \[ \oplus \D \times \D \times TM_\bot \times \nats_\bot \oplus \D \times \D \times \D \oplus \D \times \D \times \D \oplus \D \times \D \oplus \D \times \D, \]
 where $\omega + 1$ denotes the set $\nats \cup \{ \omega \}$, and $\mathsf{List}(\D \times \D)$ is a domain of finite sequences of elements of $\D \times \D$.
-
-The meaning of the components in this equaltion should be clear from the names of the constructors:
+We introduce the following names for the constructors:
 \begin{itemize}
 \item[] $\mathsf{Lam} : [Hom(\theta)_\bot \times \D \to \D] \to \D$
 \item[] $\mathsf{Pair} : \D \times \D \to \D$
@@ -380,14 +349,17 @@ Now, let us define the composition function.
 The second argument is the dimension of the cells which we compose, and the first one is the dimension of the cell along which we compose.
 \begin{itemize}
 \item[] $\mathsf{comp} : \nats_\bot \times \nats_\bot \times \D \times \D \to \D$
-\item[] $\mathsf{comp}(k, n, \mathsf{Lam}(f), \mathsf{Lam}(f')) = $ \\
-    \indent $\mathsf{Lam}((m,a) \mapsto \mathsf{comp}(k, dom(m), f(m, \delta^{dom(m)}_0 \cdot \tau^0_{dom(m)} \cdot a), f'(m, a)))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Lam}(f), \mathsf{Lam}(f')) = \mathsf{Lam}(g)$, where \\
+    \indent $g(\delta^n_{n'},a) = \mathsf{comp}(k, n', f(\delta^n_{n'}, \delta^{n'}_k \cdot \tau^k_{n'} \cdot a), f'(\delta^n_{n'}, a))$ \\
+    \indent $g(\sigma^n_{n'},a) = f(\sigma^n_{n'},a)$ \\
+    \indent $g(\tau^n_{n'},a) = f(\tau^n_{n'},a)$
 \item[] $\mathsf{comp}(k, n, \mathsf{Pair}(a,b), \mathsf{Pair}(a',b')) = \mathsf{Pair}(\mathsf{comp}(k,n,a,a'), \mathsf{comp}(k,n,b,b'))$
 \item[] $\mathsf{comp}(k, n, \mathsf{Path}(a,b,s,x), \mathsf{Path}(a',b',s',x')) = \mathsf{Path}(TODO)$
-\item[] $\mathsf{comp}(k, n, \mathsf{Sigma}(A,B), \mathsf{Sigma}(A',B')) = \mathsf{Sigma}(\mathsf{comp}(n, A, A'), \mathsf{comp}(n, B, B'))$
-\item[] $\mathsf{comp}(k, n, \mathsf{Pi}(A,B), \mathsf{Pi}(A',B')) = \mathsf{Pi}(\mathsf{comp}(n, A, A'), \mathsf{comp}(n, B, B'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Sigma}(A,B), \mathsf{Sigma}(A',B')) =$ \\
+    \indent $\mathsf{Sigma}(\mathsf{comp}(k, n, A, A'), \mathsf{comp}(k, n, B, B'))$
+\item[] $\mathsf{comp}(k, n, \mathsf{Pi}(A,B), \mathsf{Pi}(A',B')) = \mathsf{Pi}(\mathsf{comp}(k, n, A, A'), \mathsf{comp}(k, n, B, B'))$
 \item[] $\mathsf{comp}(k, n, \mathsf{Id}(A,a,a'), \mathsf{Id}(B,b,b')) =$ \\
-    \indent $\mathsf{Id}(\mathsf{comp}(n + 1, A, B), \mathsf{comp}(n, a, b), \mathsf{comp}(n, a', b'))$
+    \indent $\mathsf{Id}(\mathsf{comp}(k + 1, n + 1, A, B), \mathsf{comp}(k, n, a, b), \mathsf{comp}(k, n, a', b'))$
 \item[] $\mathsf{comp}(k, n, \mathsf{Ne}(l,r,t,c), \mathsf{Ne}(l',r',t',c')) = \mathsf{Ne}(TODO)$
 \item[] $\mathsf{comp}(k, n, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = \mathsf{U}(max(\alpha,\beta))$
 \item[] $\mathsf{comp}(k, n, x, x') = \bot$, otherwise
@@ -565,6 +537,7 @@ Now, let us show how to reify elements of $\D$ into terms.
 \item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_0, x), \mathsf{app}(0, B, x))$, \\
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
 \item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, \mathsf{app}(0, B, a))$
+\item[] $\mathsf{reify}(i, \mathsf{Path}(a, b, s, x), \mathsf{Id}(A, a', b')) = \mathsf{reify}(i, x, A)$
 \item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
 \item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e, c), t) = e(i)$
 \item[] $\mathsf{reify}(i, \mathsf{Id}(A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
@@ -574,7 +547,7 @@ Now, let us show how to reify elements of $\D$ into terms.
 \item[] $\mathsf{reify}(i, \mathsf{Sigma}(A, B), \mathsf{U}(\alpha)) = $
         $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, \mathsf{app}(0, B, x), \mathsf{U}(\alpha))$, \\
         \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise.
+\item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise
 \item[]
 \item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
 \item[] $\mathsf{reflect}(e,\mathsf{Pi}(A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), \mathsf{app}(0, B, a)))$
