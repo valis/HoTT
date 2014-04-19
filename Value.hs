@@ -1,7 +1,7 @@
 module Value
     ( Value(..)
     -- , SisoData(..)
-    , Cube(..), CubeMap
+    , Cube(..), CubeMap, dom
     , svar, gvar, sarr, sprod
     , Ctx, CtxV
     , ctxToCtxV
