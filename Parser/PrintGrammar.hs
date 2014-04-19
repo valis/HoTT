@@ -115,14 +115,6 @@ instance Print Pus where
   prt _ (Pus (_,i)) = doc (showString ( i))
 
 
-instance Print PExt where
-  prt _ (PExt (_,i)) = doc (showString ( i))
-
-
-instance Print Ppmap where
-  prt _ (Ppmap (_,i)) = doc (showString ( i))
-
-
 instance Print PCoe where
   prt _ (PCoe (_,i)) = doc (showString ( i))
 
@@ -137,18 +129,6 @@ instance Print PProjr where
 
 instance Print PIso where
   prt _ (PIso (_,i)) = doc (showString ( i))
-
-
-instance Print PComp where
-  prt _ (PComp (_,i)) = doc (showString ( i))
-
-
-instance Print PInv where
-  prt _ (PInv (_,i)) = doc (showString ( i))
-
-
-instance Print PInvIdp where
-  prt _ (PInvIdp (_,i)) = doc (showString ( i))
 
 
 instance Print PIdent where
@@ -183,20 +163,16 @@ instance Print Expr where
    Id expr0 expr -> prPrec i 4 (concatD [prt 5 expr0 , doc (showString "=") , prt 5 expr])
    Pair expr0 expr -> prPrec i 5 (concatD [prt 5 expr0 , doc (showString ",") , prt 6 expr])
    App expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , prt 7 expr])
+   Pmap expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString "<*>") , prt 7 expr])
    Var arg -> prPrec i 7 (concatD [prt 0 arg])
    Nat pnat -> prPrec i 7 (concatD [prt 0 pnat])
    Suc psuc -> prPrec i 7 (concatD [prt 0 psuc])
    Rec pr -> prPrec i 7 (concatD [prt 0 pr])
    Idp pidp -> prPrec i 7 (concatD [prt 0 pidp])
-   Ext pext -> prPrec i 7 (concatD [prt 0 pext])
-   Pmap ppmap -> prPrec i 7 (concatD [prt 0 ppmap])
    Coe pcoe -> prPrec i 7 (concatD [prt 0 pcoe])
    Proj1 pprojl -> prPrec i 7 (concatD [prt 0 pprojl])
    Proj2 pprojr -> prPrec i 7 (concatD [prt 0 pprojr])
    Iso piso -> prPrec i 7 (concatD [prt 0 piso])
-   Comp pcomp -> prPrec i 7 (concatD [prt 0 pcomp])
-   Inv pinv -> prPrec i 7 (concatD [prt 0 pinv])
-   InvIdp pinvidp -> prPrec i 7 (concatD [prt 0 pinvidp])
    NatConst pint -> prPrec i 7 (concatD [prt 0 pint])
    Universe u -> prPrec i 7 (concatD [prt 0 u])
    Paren ppar expr -> prPrec i 7 (concatD [prt 0 ppar , prt 0 expr , doc (showString ")")])

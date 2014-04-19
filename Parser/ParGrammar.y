@@ -21,12 +21,13 @@ import Parser.ErrM
  '->' { PT _ (TS _ 4) }
  ':' { PT _ (TS _ 5) }
  ';' { PT _ (TS _ 6) }
- '=' { PT _ (TS _ 7) }
- 'in' { PT _ (TS _ 8) }
- 'let' { PT _ (TS _ 9) }
- '{' { PT _ (TS _ 10) }
- '|' { PT _ (TS _ 11) }
- '}' { PT _ (TS _ 12) }
+ '<*>' { PT _ (TS _ 7) }
+ '=' { PT _ (TS _ 8) }
+ 'in' { PT _ (TS _ 9) }
+ 'let' { PT _ (TS _ 10) }
+ '{' { PT _ (TS _ 11) }
+ '|' { PT _ (TS _ 12) }
+ '}' { PT _ (TS _ 13) }
 
 L_U { PT _ (T_U _) }
 L_PLam { PT _ (T_PLam _) }
@@ -37,15 +38,10 @@ L_PR { PT _ (T_PR _) }
 L_PSuc { PT _ (T_PSuc _) }
 L_PNat { PT _ (T_PNat _) }
 L_Pus { PT _ (T_Pus _) }
-L_PExt { PT _ (T_PExt _) }
-L_Ppmap { PT _ (T_Ppmap _) }
 L_PCoe { PT _ (T_PCoe _) }
 L_PProjl { PT _ (T_PProjl _) }
 L_PProjr { PT _ (T_PProjr _) }
 L_PIso { PT _ (T_PIso _) }
-L_PComp { PT _ (T_PComp _) }
-L_PInv { PT _ (T_PInv _) }
-L_PInvIdp { PT _ (T_PInvIdp _) }
 L_PIdent { PT _ (T_PIdent _) }
 L_err    { _ }
 
@@ -61,15 +57,10 @@ PR    :: { PR} : L_PR { PR (mkPosToken $1)}
 PSuc    :: { PSuc} : L_PSuc { PSuc (mkPosToken $1)}
 PNat    :: { PNat} : L_PNat { PNat (mkPosToken $1)}
 Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
-PExt    :: { PExt} : L_PExt { PExt (mkPosToken $1)}
-Ppmap    :: { Ppmap} : L_Ppmap { Ppmap (mkPosToken $1)}
 PCoe    :: { PCoe} : L_PCoe { PCoe (mkPosToken $1)}
 PProjl    :: { PProjl} : L_PProjl { PProjl (mkPosToken $1)}
 PProjr    :: { PProjr} : L_PProjr { PProjr (mkPosToken $1)}
 PIso    :: { PIso} : L_PIso { PIso (mkPosToken $1)}
-PComp    :: { PComp} : L_PComp { PComp (mkPosToken $1)}
-PInv    :: { PInv} : L_PInv { PInv (mkPosToken $1)}
-PInvIdp    :: { PInvIdp} : L_PInvIdp { PInvIdp (mkPosToken $1)}
 PIdent    :: { PIdent} : L_PIdent { PIdent (mkPosToken $1)}
 
 Defs :: { Defs }
@@ -122,6 +113,7 @@ Expr5 : Expr5 ',' Expr6 { Pair $1 $3 }
 
 Expr6 :: { Expr }
 Expr6 : Expr6 Expr7 { App $1 $2 } 
+  | Expr6 '<*>' Expr7 { Pmap $1 $3 }
   | Expr7 { $1 }
 
 
@@ -131,15 +123,10 @@ Expr7 : Arg { Var $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }
   | PIdp { Idp $1 }
-  | PExt { Ext $1 }
-  | Ppmap { Pmap $1 }
   | PCoe { Coe $1 }
   | PProjl { Proj1 $1 }
   | PProjr { Proj2 $1 }
   | PIso { Iso $1 }
-  | PComp { Comp $1 }
-  | PInv { Inv $1 }
-  | PInvIdp { InvIdp $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }
   | PPar Expr ')' { Paren $1 $2 }

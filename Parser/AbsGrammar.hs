@@ -12,15 +12,10 @@ newtype PR = PR ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PSuc = PSuc ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PNat = PNat ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Pus = Pus ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype PExt = PExt ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype Ppmap = Ppmap ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PCoe = PCoe ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjl = PProjl ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIso = PIso ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype PComp = PComp ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype PInv = PInv ((Int,Int),String) deriving (Eq,Ord,Show)
-newtype PInvIdp = PInvIdp ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIdent = PIdent ((Int,Int),String) deriving (Eq,Ord,Show)
 data Defs =
    Defs [Def]
@@ -42,20 +37,16 @@ data Expr =
  | Id Expr Expr
  | Pair Expr Expr
  | App Expr Expr
+ | Pmap Expr Expr
  | Var Arg
  | Nat PNat
  | Suc PSuc
  | Rec PR
  | Idp PIdp
- | Ext PExt
- | Pmap Ppmap
  | Coe PCoe
  | Proj1 PProjl
  | Proj2 PProjr
  | Iso PIso
- | Comp PComp
- | Inv PInv
- | InvIdp PInvIdp
  | NatConst PInt
  | Universe U
  | Paren PPar Expr

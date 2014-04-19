@@ -32,8 +32,7 @@ getPos (Nat (PNat (p,_))) = p
 getPos (Suc (PSuc (p,_))) = p
 getPos (Rec (PR (p,_))) = p
 getPos (Idp (PIdp (p,_))) = p
-getPos (Ext (PExt (p,_))) = p
-getPos (Pmap (Ppmap (p,_))) = p
+getPos (Pmap e _) = getPos e
 getPos (Coe (PCoe (p,_))) = p
 getPos (NatConst (PInt (p,_))) = p
 getPos (Universe (U (p,_))) = p
@@ -42,9 +41,6 @@ getPos (Pair e _) = getPos e
 getPos (Proj1 (PProjl (lc,_))) = lc
 getPos (Proj2 (PProjr (lc,_))) = lc
 getPos (Iso (PIso (lc,_))) = lc
-getPos (Comp (PComp (lc,_))) = lc
-getPos (Inv (PInv (lc,_))) = lc
-getPos (InvIdp (PInvIdp (lc,_))) = lc
 
 dropParens :: Expr -> Expr
 dropParens (Paren _ e) = dropParens e
@@ -100,15 +96,10 @@ ppExpr = go False
     go _ _ (Suc _) = text "suc"
     go _ _ (Rec _) = text "R"
     go _ _ (Idp _) = text "idp"
-    go _ _ (Ext _) = text "ext"
-    go _ _ (Pmap _) = text "pmap"
     go _ _ (Coe _) = text "coe"
     go _ _ (Proj1 _) = text "proj1"
     go _ _ (Proj2 _) = text "proj2"
     go _ _ (Iso _) = text "iso"
-    go _ _ (Comp _) = text "comp"
-    go _ _ (Inv _) = text "inv"
-    go _ _ (InvIdp _) = text "invIdp"
     go _ _ (Universe (U (_,u))) = text u
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e
@@ -140,6 +131,9 @@ ppExpr = go False
     go False l (Pair e1 e2) =
         let l' = fmap pred l
         in go False l' e1 <+> comma <+> go False l' e2
+    go False l (Pmap e1 e2) =
+        let l' = fmap pred l
+        in go False l' e1 <+> text "<*>" <+> go False l' e2
 
 preprocessDefs :: [Def] -> EDocM [Def]
 preprocessDefs defs =

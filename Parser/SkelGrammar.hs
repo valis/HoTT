@@ -54,16 +54,6 @@ transPus x = case x of
   Pus str  -> failure x
 
 
-transPExt :: PExt -> Result
-transPExt x = case x of
-  PExt str  -> failure x
-
-
-transPpmap :: Ppmap -> Result
-transPpmap x = case x of
-  Ppmap str  -> failure x
-
-
 transPCoe :: PCoe -> Result
 transPCoe x = case x of
   PCoe str  -> failure x
@@ -82,21 +72,6 @@ transPProjr x = case x of
 transPIso :: PIso -> Result
 transPIso x = case x of
   PIso str  -> failure x
-
-
-transPComp :: PComp -> Result
-transPComp x = case x of
-  PComp str  -> failure x
-
-
-transPInv :: PInv -> Result
-transPInv x = case x of
-  PInv str  -> failure x
-
-
-transPInvIdp :: PInvIdp -> Result
-transPInvIdp x = case x of
-  PInvIdp str  -> failure x
 
 
 transPIdent :: PIdent -> Result
@@ -127,20 +102,16 @@ transExpr x = case x of
   Id expr1 expr2  -> failure x
   Pair expr1 expr2  -> failure x
   App expr1 expr2  -> failure x
+  Pmap expr1 expr2  -> failure x
   Var arg  -> failure x
   Nat pnat  -> failure x
   Suc psuc  -> failure x
   Rec pr  -> failure x
   Idp pidp  -> failure x
-  Ext pext  -> failure x
-  Pmap ppmap  -> failure x
   Coe pcoe  -> failure x
   Proj1 pprojl  -> failure x
   Proj2 pprojr  -> failure x
   Iso piso  -> failure x
-  Comp pcomp  -> failure x
-  Inv pinv  -> failure x
-  InvIdp pinvidp  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x
   Paren ppar expr  -> failure x
