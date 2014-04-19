@@ -36,8 +36,8 @@ data Expr =
  | Over Expr Expr
  | Id Expr Expr
  | Pair Expr Expr
- | App Expr Expr
  | Pmap Expr Expr
+ | App Expr Expr
  | Var Arg
  | Nat PNat
  | Suc PSuc

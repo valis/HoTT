@@ -94,10 +94,10 @@ coe :: Integer -> Value -> Value
 coe = error "TODO: coe"
 
 pmap :: Integer -> Value -> Value -> Value
-pmap = error "TODO: pmap"
+pmap n = app (n + 1)
 
 idp :: Integer -> Value -> Value
-idp = error "TODO: idp"
+idp n = action $ CubeMap n [Deg n]
 
 idf :: Value
 idf = Slam "x" $ \_ -> id

@@ -158,13 +158,17 @@ All other symbols are terminals.\\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr6}} & {\arrow}  &{\nonterminal{Expr6}} {\nonterminal{Expr7}}  \\
- & {\delimit}  &{\nonterminal{Expr6}} {\terminal{{$<$}*{$>$}}} {\nonterminal{Expr7}}  \\
+{\nonterminal{Expr6}} & {\arrow}  &{\nonterminal{Expr6}} {\terminal{{$<$}*{$>$}}} {\nonterminal{Expr7}}  \\
  & {\delimit}  &{\nonterminal{Expr7}}  \\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr7}} & {\arrow}  &{\nonterminal{Arg}}  \\
+{\nonterminal{Expr7}} & {\arrow}  &{\nonterminal{Expr7}} {\nonterminal{Expr8}}  \\
+ & {\delimit}  &{\nonterminal{Expr8}}  \\
+\end{tabular}\\
+
+\begin{tabular}{lll}
+{\nonterminal{Expr8}} & {\arrow}  &{\nonterminal{Arg}}  \\
  & {\delimit}  &{\nonterminal{PNat}}  \\
  & {\delimit}  &{\nonterminal{PSuc}}  \\
  & {\delimit}  &{\nonterminal{PR}}  \\

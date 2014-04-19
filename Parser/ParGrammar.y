@@ -112,13 +112,17 @@ Expr5 : Expr5 ',' Expr6 { Pair $1 $3 }
 
 
 Expr6 :: { Expr }
-Expr6 : Expr6 Expr7 { App $1 $2 } 
-  | Expr6 '<*>' Expr7 { Pmap $1 $3 }
+Expr6 : Expr6 '<*>' Expr7 { Pmap $1 $3 } 
   | Expr7 { $1 }
 
 
 Expr7 :: { Expr }
-Expr7 : Arg { Var $1 } 
+Expr7 : Expr7 Expr8 { App $1 $2 } 
+  | Expr8 { $1 }
+
+
+Expr8 :: { Expr }
+Expr8 : Arg { Var $1 } 
   | PNat { Nat $1 }
   | PSuc { Suc $1 }
   | PR { Rec $1 }

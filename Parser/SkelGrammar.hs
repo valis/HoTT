@@ -101,8 +101,8 @@ transExpr x = case x of
   Over expr1 expr2  -> failure x
   Id expr1 expr2  -> failure x
   Pair expr1 expr2  -> failure x
-  App expr1 expr2  -> failure x
   Pmap expr1 expr2  -> failure x
+  App expr1 expr2  -> failure x
   Var arg  -> failure x
   Nat pnat  -> failure x
   Suc psuc  -> failure x

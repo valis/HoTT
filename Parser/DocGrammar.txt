@@ -111,10 +111,11 @@ All other symbols are terminals.
   |  |  **|**  | //Expr5// 
   | //Expr5// | -> | //Expr5// ``,`` //Expr6// 
   |  |  **|**  | //Expr6// 
-  | //Expr6// | -> | //Expr6// //Expr7// 
-  |  |  **|**  | //Expr6// ``<*>`` //Expr7// 
+  | //Expr6// | -> | //Expr6// ``<*>`` //Expr7// 
   |  |  **|**  | //Expr7// 
-  | //Expr7// | -> | //Arg// 
+  | //Expr7// | -> | //Expr7// //Expr8// 
+  |  |  **|**  | //Expr8// 
+  | //Expr8// | -> | //Arg// 
   |  |  **|**  | //PNat// 
   |  |  **|**  | //PSuc// 
   |  |  **|**  | //PR// 
