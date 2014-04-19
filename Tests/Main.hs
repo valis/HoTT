@@ -48,7 +48,7 @@ processDecl :: String -> [R.Arg] -> R.Expr -> Maybe R.Expr -> TCM ([String],Term
 processDecl name args expr ty = do
     let p = if null args then getPos expr else argGetPos (head args)
     (_,ctx,ev,tv) <- evalDecl name (R.Lam (R.PLam (p,"\\")) (map R.Binder args) expr) ty
-    let Def _ mty e' = simplifyDef $ Def name (Just (reifyType 0 tv, [])) (reify 0 ev tv)
+    let Def _ mty e' = simplifyDef $ Def name (Just (reifyType 0 0 tv, [])) (reify 0 0 ev tv)
         (ty,args) = fromMaybe (error "processDecl") mty
     return (args,e',ty,ctx)
 

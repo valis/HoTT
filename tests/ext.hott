@@ -1,6 +1,7 @@
 extTest1 : (A B : Type) (f : A -> B) -> f = f
 extTest1 A B f = idp f
 
+{-
 extTest2 : (A B : Type) (f : A -> B) -> f = f
 extTest2 A B f = ext (\a -> idp (f a))
 
@@ -12,10 +13,12 @@ extTest4 A B f = ext
 
 extTest4' : (A B : Type) (f : A -> B) -> ((a : A) -> f a = f a) -> f = f
 extTest4' A B f g = ext g
+-}
 
 ofType : (A : Type) -> A -> A
 ofType A a = a
 
+{-
 extTest5 : (A B : Type) (f : A -> B) -> idp f = idp f
 extTest5 A B f = pmap (idp (ofType (((x : A) -> f x = f x) -> f = f) ext))
     (ofType (ofType ((x : A) -> f x = f x) (\x -> idp (f x)) = (\x -> idp (f x))) (ext (\x -> idp (idp (f x)))))
@@ -27,3 +30,4 @@ extTest6'fail : (A B : Type) (f : A -> B) -> idp f = idp f
 extTest6'fail A B f = pmap
     (ofType (f = f) (ext (\g -> idp (ext g))))
     (ofType (ofType ((x : A) -> f x = f x) (\x -> idp (f x)) = (\x -> idp (f x))) (ext (\x -> idp (idp (f x)))))
+-}
