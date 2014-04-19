@@ -51,9 +51,9 @@ typeCheck'depType dt (TypedVar _ vars t) e = case exprToVars vars of
 updateCtx :: Value -> [Arg] -> TCM (T.DBIndex, [String], M.Map String T.DBIndex, Ctx)
 updateCtx _ [] = ask
 updateCtx tv (NoArg _ : as) =
-    local (\i c mctx (gctx,lctx) -> (i + 1, "_" : c, mctx, (gctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+    local (\i c mctx (gctx,lctx) -> (i + 1, "_" : c, mctx, (gctx, (svar i 0 tv, tv) : lctx))) (updateCtx tv as)
 updateCtx tv (Arg (PIdent (_,x)) : as) =
-    local (\i c mctx (gctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (gctx, (svar i tv, tv) : lctx))) (updateCtx tv as)
+    local (\i c mctx (gctx,lctx) -> (i + 1, x : c, M.insert x i mctx, (gctx, (svar i 0 tv, tv) : lctx))) (updateCtx tv as)
 
 exprToVars :: Expr -> Either (Int,Int) [Arg]
 exprToVars = fmap reverse . go
@@ -90,125 +90,61 @@ typeCheck (Let defs e) h = do
 typeCheck (Paren _ e) h = typeCheck e h
 typeCheck (Lam _ [] e) h = typeCheck e h
 
-typeCheck (Lam _ (x:xs) e) (Just (Spi 0 z a b)) = do
+typeCheck (Lam _ (x:xs) e) (Just (Spi a b)) = do
     i <- askIndex
     let p = if null xs then getPos e else binderGetPos (head xs)
-        v = svar i a
+        v = svar i 0 a
         x' = unBinder x
-    fmap (T.Lam [x']) $ local (\i c mctx (gctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (gctx, (v,a) : lctx))) $
-        typeCheck (Lam (PLam (p,"\\")) xs e) $ Just (b 0 [] v)
+    fmap (T.Lam 0 [x']) $ local (\i c mctx (gctx,lctx) -> (i + 1, x' : c, M.insert x' i mctx, (gctx, (v,a) : lctx))) $
+        typeCheck (Lam (PLam (p,"\\")) xs e) $ Just (app 0 b v)
 typeCheck (Lam _ (Binder arg : _) _) (Just ty) = do
     let lc = case arg of
             Arg (PIdent (p,_)) -> p
             NoArg (Pus (p,_)) -> p
     (i,c,_,_) <- ask
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But lambda expression has pi type"
-typeCheck j@(Idp _) (Just exp@(Spi 0 x a _)) = do
+typeCheck j@(Idp _) (Just exp@(Spi a (Slam x _))) = do
     let ctx = (M.singleton (freshName "a" [x]) a, [])
-    cmpTypesErr exp (eval 0 ctx $ T.Pi [([x],T.Var "a")] $ T.Id (T.Var "a") (T.LVar 0) (T.LVar 0)) j
+    cmpTypesErr exp (eval 0 ctx $ T.Pi 0 [([x],T.Var "a")] $ T.Id 0 (T.Var "a") (T.LVar 0) (T.LVar 0)) j
     return T.Idp
 typeCheck (Idp (PIdp (lc,_))) (Just ty) = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But idp has pi type"
-typeCheck e@(Coe (PCoe (lc,_))) (Just ty@(Spi 0 v a@(Sid 0 (Stype _) x y) b)) = do
+typeCheck e@(Coe (PCoe (lc,_))) (Just ty@(Spi a@(Sid (Stype _) x y) b)) = do
     i <- askIndex
-    case b 0 [] $ svar i a of
-        Spi 0 v' x' y' | cmpTypes i 0 x x' && cmpTypes (i + 1) 0 y (y' 0 [] $ svar i x') -> return T.Coe
+    case app 0 b $ svar i 0 a of
+        Spi x' y' | cmpTypes i 0 x x' && cmpTypes (i + 1) 0 y (app 0 y' $ svar i 0 x') -> return T.Coe
         _ -> coeErrorMsg lc ty
 typeCheck (Coe (PCoe (lc,_))) (Just ty) = coeErrorMsg lc ty
-typeCheck ea@(App e1 e) (Just exp@(Sid 0 t a b)) | Idp _ <- dropParens e1 = do
+typeCheck ea@(App e1 e) (Just exp@(Sid t a b)) | Idp _ <- dropParens e1 = do
     r <- typeCheck e (Just t)
     e' <- evalTCM r
-    cmpTypesErr exp (Sid 0 t e' e') ea
-    return (T.App T.Idp r)
+    cmpTypesErr exp (Sid t e' e') ea
+    return (T.App 0 T.Idp r)
 typeCheck (App e1 _) (Just exp) | Idp (PIdp (lc,_)) <- dropParens e1 = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC lc "" $ expType i c 1 exp $$ etext "But idp _ has Id type"
--- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
-typeCheck e@(Pmap (Ppmap (lc,_))) (Just exp@(Spi 0 v a@(Sid 0 (Spi 0 v' a' b') f g) b)) = do
-    i <- askIndex
-    case isArr i a b of
-        Just (Spi 0 v2 a2'@(Sid 0 a2 x y) b2') | cmpTypes i 0 a2 a' -> do
-            let ctx' = [("a",a),("a'",a'),("x",x),("y",y),("B",Slam v' b'),("f'",app 0 f x),("g'",app 0 g y)]
-                term = T.Pi [([],T.Var "a")] $ T.Pi [(["p"],T.Id (T.Var "a'") (T.Var "x") (T.Var "y"))] $
-                    T.Id (T.Var "B" `T.App` T.Var "y")
-                         (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
-                         (T.Var "g'")
-            cmpTypesErr exp (eval 0 (M.fromList ctx', []) term) e
-            return T.Pmap
-        _ -> pmapErrorMsg lc exp
-typeCheck (Pmap (Ppmap (lc,_))) (Just exp) = pmapErrorMsg lc exp
-typeCheck ea@(App e1 e) (Just ty@(Spi 0 v a'@(Sid 0 a x y) b')) | Pmap _ <- dropParens e1 = do
-    r <- typeCheck e Nothing
-    t <- typeOf r
-    (i,c,_,_) <- ask
-    case t of
-        Sid 0 (Spi 0 v1 a1 b1) f g | cmpTypes i 0 a a1 -> do
-            let ctx' = [("a'",a'),("B",Slam v1 b1),("y",y),("f'",app 0 f x),("g'",app 0 g y)]
-                term = T.Pi [(["p"],T.Var "a'")] $ T.Id (T.Var "B" `T.App` T.Var "y")
-                    (T.Coe `T.App` (T.Pmap `T.App` (T.Idp `T.App` T.Var "B") `T.App` T.LVar 0) `T.App` T.Var "f'")
-                    (T.Var "g'")
-            cmpTypesErr ty (eval 0 (M.fromList ctx', []) term) ea
-            return (T.App T.Pmap r)
-        _ -> errorTCM $ emsgLC (getPos e) "" $
-            etext "Expected type: _ = _ |" <+> epretty c (T.Pi [([],reifyType i a)] $ T.Var "_") $$
-            etext "But term" <+> eprettyExpr e <+> etext "has type" <+> epretty c (reifyType i t)
-typeCheck (App e1 e) (Just ty) | Pmap (Ppmap (lc,_)) <- dropParens e1 = pmap1ErrorMsg lc ty
-typeCheck (App e1 e) (Just (Sid 0 t x y)) | Inv _ <- dropParens e1 = do
-    r <- typeCheck e $ Just (Sid 0 t y x)
-    return (T.App T.Inv r)
-typeCheck (App e1 e) (Just exp) | Inv (PInv (lc,_)) <- dropParens e1 = do
-    (i,c,_,_) <- ask
-    errorTCM $ emsgLC lc "" $ expType i c (-1) exp $$ etext "But term inv _ has Id type"
-typeCheck (Pair e1 e2) (Just (Ssigma 0 _ a b)) = do
+typeCheck (Pair e1 e2) (Just (Ssigma a b)) = do
     r1 <- typeCheck e1 (Just a)
     v1 <- evalTCM r1
-    r2 <- typeCheck e2 $ Just (b 0 [] v1)
+    r2 <- typeCheck e2 $ Just (app 0 b v1)
     return (T.Pair r1 r2)
 typeCheck e@(Pair _ _) (Just exp) = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC (getPos e) "" $ expType i c (-1) exp $$ etext "But term" <+> eprettyExpr e <+> etext "has Sigma type"
-typeCheck (Proj1 (PProjl (lc,_))) (Just r@(Spi 0 x a'@(Ssigma 0 _ a _) b)) = do
+typeCheck (Proj1 (PProjl (lc,_))) (Just r@(Spi a'@(Ssigma a _) b)) = do
     i <- askIndex
     case isArr i a' b of
         Just b' | cmpTypes i 0 a b' -> return T.Proj1
         _ -> proj1ErrorMsg lc r
 typeCheck (Proj1 (PProjl (lc,_))) (Just exp) = proj1ErrorMsg lc exp
 -- proj2 : (p : (x : A) -> B x) -> B (proj1 p)
-typeCheck (Proj2 (PProjr (lc,_))) (Just r@(Spi 0 x a'@(Ssigma 0 _ a b) b')) = do
+typeCheck (Proj2 (PProjr (lc,_))) (Just r@(Spi a'@(Ssigma a b) b')) = do
     i <- askIndex
-    if cmpTypes (i + 1) 0 (b 0 [] $ reflect (\l -> T.App T.Proj1 $ T.LVar $ l - i - 1) a) (b' 0 [] $ svar i a')
+    if cmpTypes (i + 1) 0 (app 0 b $ reflect 0 (\l -> T.App 0 T.Proj1 $ T.LVar $ l - i - 1) a) (app 0 b' $ svar i 0 a')
         then return T.Proj2
         else proj2ErrorMsg lc r
 typeCheck (Proj2 (PProjr (lc,_))) (Just exp) = proj2ErrorMsg lc exp
-typeCheck (Comp (PComp (lc,_))) (Just exp) = do
-    (i,c,_,_) <- ask
-    case exp of
-        Spi 0 v1 a1@(Sid 0 t1 x1 y1) b1
-            | Just (Spi 0 v2 a2@(Sid 0 t2 x2 y2) b2) <- isArr i a1 b1, Just (Sid 0 t3 x3 y3) <- isArr i a2 b2
-            , cmpTypes i 1 t1 t2 && cmpTypes i 1 t2 t3 && cmpValues i y1 x2 t1 && cmpValues i x1 x3 t1 && cmpValues i y2 y3 t2
-            -> return T.Comp
-        _ -> errorTCM $ emsgLC lc "" $ expType i c (-1) exp $$
-                etext "But comp has type of the form Id A x y -> Id A y z -> Id A x z"
-typeCheck (Inv (PInv (lc,_))) (Just exp) = do
-    (i,c,_,_) <- ask
-    case exp of
-        Spi 0 v a@(Sid 0 t x y) b
-            | Just (Sid 0 t' x' y') <- isArr i a b, cmpTypes i 1 t t' && cmpValues i x y' t && cmpValues i x' y t
-            -> return T.Inv
-        _ -> errorTCM $ emsgLC lc "" $ expType i c (-1) exp $$ etext "But inv has type of the form Id A x y -> Id A y x"
--- invIdp : (p : Id t x y) -> Id (Id (Id t x y) p p) (comp (inv p) p) (idp p)
-typeCheck e@(InvIdp _) (Just exp@(Spi 0 v a@(Sid 0 t x y) b)) = do
-    let ctx' = (M.fromList [("a",a)], [])
-        term = T.Pi [(["p"],T.Var "a")] $ T.Id
-            (T.Id (T.Var "a") (T.LVar 0) (T.LVar 0))
-            (T.Comp `T.App` (T.Inv `T.App` T.LVar 0) `T.App` T.LVar 0)
-            (T.Idp `T.App` T.LVar 0)
-    cmpTypesErr exp (eval 0 ctx' term) e
-    return T.InvIdp
-typeCheck (InvIdp (PInvIdp (lc,_))) (Just exp) = do
-    (i,c,_,_) <- ask
-    errorTCM $ emsgLC lc "" $ expType i c (-1) exp $$ etext "But invIdp has type of the form Id A x y -> _"
 typeCheck e (Just exp) = do
     r <- typeCheck e Nothing
     act <- typeOf r
@@ -219,93 +155,62 @@ typeCheck (Pair e1 e2) Nothing = liftTCM2' T.Pair (typeCheck e1 Nothing) (typeCh
 typeCheck (Lam (PLam (lc,_)) _ _) Nothing = inferErrorMsg lc "the argument"
 typeCheck (Idp (PIdp (lc,_))) Nothing = inferErrorMsg lc "idp"
 typeCheck (Coe (PCoe (lc,_))) Nothing = inferErrorMsg lc "coe"
-typeCheck (App e1 e) Nothing | Idp _ <- dropParens e1 = fmap (T.App T.Idp) (typeCheck e Nothing)
-typeCheck (Pmap (Ppmap (lc,_))) Nothing = inferErrorMsg lc "pmap"
-typeCheck (Ext (PExt (lc,_))) Nothing = inferErrorMsg lc "ext"
+typeCheck (App e1 e) Nothing | Idp _ <- dropParens e1 = fmap (T.App 0 T.Idp) (typeCheck e Nothing)
 typeCheck (Proj1 (PProjl (lc,_))) Nothing = inferErrorMsg lc "proj1"
 typeCheck (Proj2 (PProjr (lc,_))) Nothing = inferErrorMsg lc "proj2"
 typeCheck (App e1 e) Nothing | Proj1 _ <- dropParens e1 = do
     r <- typeCheck e Nothing
     t <- typeOf r
     case t of
-        Ssigma 0 _ a _ -> return (T.App T.Proj1 r)
+        Ssigma a _ -> return (T.App 0 T.Proj1 r)
         _ -> expTypeBut "Sigma" e t
 typeCheck (App e1 e) Nothing | Proj2 (PProjr p) <- dropParens e1 = do
     r <- typeCheck e Nothing
     t <- typeOf r
     case t of
-        Ssigma 0 _ a b -> return (T.App T.Proj2 r)
+        Ssigma a b -> return (T.App 0 T.Proj2 r)
         _ -> expTypeBut "Sigma" e t
-typeCheck (App e1 _) Nothing | Pmap (Ppmap (lc,_)) <- dropParens e1 = inferErrorMsg lc "pmap"
 -- pmap : Id ((a : A) -> B a) f g -> (p : Id A x y) -> Id (B y) (trans B p (f x)) (g y)
-typeCheck (App e1' e2) Nothing | App e3 e1 <- dropParens e1', Pmap _ <- dropParens e3 = do
+typeCheck (Pmap e1 e2) Nothing = do
     (r1,r2) <- liftTCM2' (,) (typeCheck e1 Nothing) (typeCheck e2 Nothing)
     t1 <- typeOf r1
     t2 <- typeOf r2
     case (t1,t2) of
-        (Sid 0 (Spi 1 v a b) f g, Sid 0 a' x y) -> do
+        (Sid (Spi a b) f g, Sid a' x y) -> do
             (i,c,mctx,ctx) <- ask
             if cmpTypes i 1 a' a
-                then return $ T.Pmap `T.App` r1 `T.App` r2
+                then return (T.Pmap r1 r2)
                 else pmapErrMsg e2 a' (eprettyType i c a)
-        (Sid 0 t f g, Sid 0 a' x y) -> pmapErrMsg e1 t (etext "_ -> _")
-        (Sid 0 t f g, _) -> expTypeBut "Id" e2 t2
+        (Sid t f g, Sid a' x y) -> pmapErrMsg e1 t (etext "_ -> _")
+        (Sid t f g, _) -> expTypeBut "Id" e2 t2
         _ -> expTypeBut "Id" e1 t1
 typeCheck (App e1 e) Nothing | Coe _ <- dropParens e1 = do
     r <- typeCheck e Nothing
     t <- typeOf r
     case t of
-        Sid 0 (Stype _) x y -> return (T.App T.Coe r)
+        Sid (Stype _) x y -> return (T.App 0 T.Coe r)
         _ -> expTypeBut "Id Type _ _" e t
-typeCheck (App e1 e) Nothing | Inv _ <- dropParens e1 = do
-    r <- typeCheck e Nothing
-    t <- typeOf r
-    case t of
-        Sid 0 t' x y -> return (T.App T.Inv r)
-        _ -> expTypeBut "Id" e t
--- invIdp (e : Id t x y) : Id (Id (Id t x y) e e) (comp (inv e) e) (idp e)
-typeCheck (App e1 e) Nothing | InvIdp _ <- dropParens e1 = do
-    r <- typeCheck e Nothing
-    t <- typeOf r
-    case t of
-        Sid 0 _ _ _ -> return (T.App T.InvIdp r)
-        _ -> expTypeBut "Id" e t
-typeCheck (App e1' e2) Nothing | App e3 e1 <- dropParens e1', Comp (PComp (lc,_)) <- dropParens e3 = do
-    (r1,r2) <- liftTCM2' (,) (typeCheck e1 Nothing) (typeCheck e2 Nothing)
-    t1 <- typeOf r1
-    t2 <- typeOf r2
-    (i,c,_,_) <- ask
-    case (t1,t2) of
-        (Sid 0 t1 x1 y1, Sid 0 t2 x2 y2) | cmpTypes i 1 t1 t2 -> if cmpValues i y1 x2 t1
-            then return $ T.Comp `T.App` r1 `T.App` r2
-            else errorTCM $ emsgLC lc "" $ etext "Terms" <+> epretty c (reify i y1 t1)
-                 <+> etext "and" <+> epretty c (reify i x2 t2) <+> etext "must be equal"
-        (Sid 0 t1 _ _, Sid 0 t2 _ _) -> errorTCM $ emsgLC lc "" $ etext "Types" <+> epretty c (reifyType i t1)
-                                    <+> etext "and" <+> epretty c (reifyType i t2) <+> etext "must be equal"
-        (Sid 0 _ _ _, t2) -> expTypeBut "Id" e2 t2
-        (t1, Sid 0 _ _ _) -> expTypeBut "Id" e1 t1
-        (t1, t2) -> liftTCM2' const (expTypeBut "Id" e1 t1) (expTypeBut "Id" e2 t2)
 typeCheck (Arr e1 e2) Nothing = do
     (r1,r2) <- liftTCM2' (,) (isType e1) (isType e2)
-    return (T.Pi [([],r1)] r2)
+    return (T.Pi 0 [([],r1)] r2)
 typeCheck (Prod e1 e2) Nothing = do
     (r1,r2) <- liftTCM2' (,) (isType e1) (isType e2)
-    return (T.Sigma [([],r1)] r2)
+    return (T.Sigma 0 [([],r1)] r2)
 typeCheck (Pi [] e) Nothing = typeCheck e Nothing
-typeCheck (Pi (t:tv) e) Nothing = typeCheck'depType T.Pi t (Pi tv e)
+typeCheck (Pi (t:tv) e) Nothing = typeCheck'depType (T.Pi 0) t (Pi tv e)
 typeCheck (Sigma [] e) Nothing = typeCheck e Nothing
-typeCheck (Sigma (t:tv) e) Nothing = typeCheck'depType T.Sigma t (Sigma tv e)
+typeCheck (Sigma (t:tv) e) Nothing = typeCheck'depType (T.Sigma 0) t (Sigma tv e)
 typeCheck (Id e1 e2) Nothing = do
     r1 <- typeCheck e1 Nothing
     t <- typeOf r1
     r2 <- typeCheck e2 (Just t)
     i <- askIndex
-    return $ T.Id (reifyType i t) r1 r2
+    return $ T.Id 0 (reifyType i 0 t) r1 r2
 typeCheck (Over t1 t) Nothing | Id e1 e2 <- dropParens t1 = do
     r <- typeCheck t Nothing
     v <- evalTCM r
     (r1,r2) <- liftTCM2' (,) (typeCheck e1 $ Just v) (typeCheck e2 $ Just v)
-    return (T.Id r r1 r2)
+    return (T.Id 0 r r1 r2)
 typeCheck (Over t _) Nothing = errorTCM $ emsgLC (getPos t) "Expected term of the form _ = _" enull
 typeCheck (Nat _) Nothing = return T.Nat
 typeCheck (Universe (U (_,t))) Nothing = return $ T.Universe (parseLevel t)
@@ -313,7 +218,7 @@ typeCheck (App e1 e2) Nothing = do
     r1 <- typeCheck e1 Nothing
     t1 <- typeOf r1
     case t1 of
-        Spi 0 _ a b -> fmap (T.App r1) $ typeCheck e2 (Just a)
+        Spi a b -> fmap (T.App 0 r1) $ typeCheck e2 (Just a)
         _ -> expTypeBut "pi" e1 t1
 typeCheck (Var (NoArg (Pus (lc,_)))) Nothing = errorTCM $ emsgLC lc "Expected identifier" enull
 typeCheck (Var (Arg (PIdent (lc,x)))) Nothing = do
@@ -339,17 +244,14 @@ typeCheck (Iso _) Nothing =
                T.Id (T.Universe $ pred $ pred maxBound) (T.LVar 3) (T.LVar 2)
     in return (eval 0 (M.empty,[]) term)
 -}
-typeCheck (Comp (PComp (lc,_))) Nothing = inferErrorMsg lc "comp"
-typeCheck (Inv (PInv (lc,_))) Nothing = inferErrorMsg lc "inv"
-typeCheck (InvIdp (PInvIdp (lc,_))) Nothing = inferErrorMsg lc "invIdp"
 
-isArr :: T.DBIndex -> Value -> (Integer -> [D] -> Value -> Value) -> Maybe Value
+isArr :: T.DBIndex -> Value -> Value -> Maybe Value
 isArr i t f =
-    let r = f 0 [] (svar i t)
+    let r = app 0 f (svar i 0 t)
     in if isFreeVar 0 (i + 1) r then Nothing else Just r
 
 eprettyType :: T.DBIndex -> [String] -> Value -> EDoc
-eprettyType i c t = epretty c $ T.simplify (reifyType i t)
+eprettyType i c t = epretty c $ T.simplify (reifyType i 0 t)
 
 inferErrorMsg :: (Int,Int) -> String -> TCM a
 inferErrorMsg lc s = errorTCM $ emsgLC lc ("Cannot infer type of " ++ s) enull
@@ -396,7 +298,7 @@ extErrorMsg lc exp = do
         ++ "of the form (s : Id A a a') * Id (B a') (trans B s b) b' -> Id ((a : A) * B a) (a,b) (a',b')")
 
 expType :: T.DBIndex -> [String] -> Int -> Value -> EDoc
-expType i c l ty = etext "Expected type:" <+> eprettyLevel c l (T.simplify $ reifyType i ty)
+expType i c l ty = etext "Expected type:" <+> eprettyLevel c l (T.simplify $ reifyType i 0 ty)
 
 cmpTypesErr :: Value -> Value -> Expr -> TCM ()
 cmpTypesErr t1 t2 e = do
@@ -410,4 +312,4 @@ expTypeBut :: String -> Expr -> Value -> TCM a
 expTypeBut exp e act = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC (getPos e) "" $ etext ("Expected " ++ exp ++ " type") $$
-        etext "But term" <+> eprettyExpr e <+> etext "has type" <+> eprettyHead c (T.simplify $ reifyType i act)
+        etext "But term" <+> eprettyExpr e <+> etext "has type" <+> eprettyHead c (T.simplify $ reifyType i 0 act)
