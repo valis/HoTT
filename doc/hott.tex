@@ -140,11 +140,12 @@ A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morph
 \section{Syntax and Inference Rules}
 
 First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi\,A\,B\ |\ \lambda b\ |\ app\ n\ f\ a\ |\ \Sigma\,A\,B\ |\ a , b\ |\ proj_1\ n\ p\ |\ proj_2\ n\ p\ | \]
-\[ (a = a' \,|\, A)\ |\ idp\ a\ |\ pmap\ p\ q\ |\ inv\ n\ p\ |\ comp\ k\ n\ p\ q\ |\ coe\ n\ p, \]
+\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi_n A\,B\ |\ \lambda_n b\ |\ app\ n\ f\ a\ |\ \Sigma_n A\,B\ |\ a , b\ |\ proj_1\ n\ p\ |\ proj_2\ n\ p\ | \]
+\[ Id_n A\,a\,a' \ |\ idp\ a\ |\ pmap\ p\ q\ |\ inv\ n\ p\ |\ comp\ k\ n\ p\ q\ |\ coe\ n\ p, \]
 \[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
 where $i \in \Z$, $\alpha, k, n \in \nats$, $\Gamma \in Ctx$, and $a, a', b, f, p, q, t, A, B \in Tm$.
 Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
+We write $\Pi\,A\,B$ for $\Pi_0\,A\,B$, $\Sigma\,A\,B$ for $\Sigma_0\,A\,B$, $a = a' \,|\, A$ for $Id_0 A\,a\,a'$, and $\lambda b$ for $\lambda_0 b$.
 
 The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
 Note that we do not use reduction rules, instead we define terms to be computationally equal if their interpretations coincide.
@@ -254,7 +255,7 @@ Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as f
 \begin{center}
 \AxiomC{$\Gamma \vdash a : A$}
 \AxiomC{$\Gamma \vdash B : U_\beta$}
-\RightLabel{, $\mathsf{reify}(0, \llbracket A \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega)) = \mathsf{reify}(0, \llbracket B \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega))$}
+\RightLabel{, $\mathsf{reify}(|\Gamma|, 0, \llbracket A \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega)) = \mathsf{reify}(|\Gamma|, 0, \llbracket B \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega))$}
 \BinaryInfC{$\Gamma \vdash a : B$}
 \DisplayProof
 \end{center}
@@ -286,8 +287,37 @@ We introduce the following names for the constructors:
 \item[] $\mathsf{Sigma} : \D \times \D \to \D$
 \end{itemize}
 
+First, let us show how to reify elements of $\D$ into terms.
+\begin{itemize}
+\item[] $\mathsf{reify} : \nats_\bot \times \nats_\bot \times \D \times \D \to Tm_\bot$
+\item[] $\mathsf{reify}(i, n, \mathsf{Lam}(f), \mathsf{Pi}(A, B)) = \lambda\,\mathsf{reify}(i + 1, n, f(id_n, x), \mathsf{app}(n, B, x))$, \\
+        \indent where $x = \mathsf{reflect}(n, k \mapsto v_{k - i - 1}, A)$
+\item[] $\mathsf{reify}(i, n, \mathsf{Pair}(a, b), \mathsf{Sigma}(A, B)) = \mathsf{reify}(i, n, a, A), \mathsf{reify}(i, n, b, \mathsf{app}(0, B, a))$
+\item[] $\mathsf{reify}(i, n, \mathsf{Path}(a, b, s, x), \mathsf{Id}(A, a', b')) = \mathsf{reify}(i, n + 1, x, A)$
+\item[] $\mathsf{reify}(i, n, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
+\item[] $\mathsf{reify}(i, n, \mathsf{Ne}(s, e, c), t) = e(i)$
+\item[] $\mathsf{reify}(i, n, \mathsf{Id}(A, a, a'), \mathsf{U}(\alpha)) =$ \\
+        \indent $(\mathsf{reify}(i, n, a, A) = \mathsf{reify}(i, n, a', A)\,|\,\mathsf{reify}(i, n + 1, A, \mathsf{U}(\alpha))$)
+\item[] $\mathsf{reify}(i, n, \mathsf{Pi}(A, B), \mathsf{U}(\alpha)) =$ \\
+        \indent $\Pi\,\mathsf{reify}(i, n, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, n, \mathsf{app}(n, B, x), \mathsf{U}(\alpha))$, \\
+        \indent where $x = \mathsf{reflect}(n, k \mapsto v_{k - i - 1}, A)$
+\item[] $\mathsf{reify}(i, n, \mathsf{Sigma}(A, B), \mathsf{U}(\alpha)) = $ \\
+        \indent $\Sigma\,\mathsf{reify}(i, n, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, n, \mathsf{app}(n, B, x), \mathsf{U}(\alpha))$, \\
+        \indent where $x = \mathsf{reflect}(n, k \mapsto v_{k - i - 1}, A)$
+\item[] $\mathsf{reify}(i, n, e, t) = \bot$, otherwise
+\item[]
+\item[] $\mathsf{reflect} : \nats_\bot \times TM_\bot \times \D \to \D$
+\item[] $\mathsf{reflect}(n, e, \mathsf{Pi}(A, B)) = \mathsf{Lam}((m, a) \mapsto $ \\
+        \indent $\mathsf{reflect}(dom(m), k \mapsto e(k)\ \mathsf{reify}(k, dom(m), a, A), \mathsf{app}(dom(m), B, a)))$
+\item[] $\mathsf{reflect}(n, e, \mathsf{Sigma}(A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(n, k \mapsto proj_2\ e(k), \mathsf{app}(n, B, a)))$, \\
+        \indent where $a = \mathsf{reflect}(n, k \mapsto proj_1\ e(k), A)$
+\item[] $\mathsf{reflect}(n, e, \mathsf{Id}(A, a, a')) = \mathsf{Path}(a, a', [\,], \mathsf{reflect}(n + 1, e, A))$
+\item[] $\mathsf{reflect}(n, e, t) = Ne(i \mapsto \bot, e, 0)$, otherwise
+\end{itemize}
+
+If $\mathsf{X}$ is a domain, $\rho : \nats_\bot \to \mathsf{X}$, and $x \in \mathsf{X}$,
+then let $\rho[x] : \nats_\bot \to \mathsf{X}$ be the function defined by the following rules: $\rho[x](0) = x$ and $\rho[x](i+1) = \rho(i)$.
 Let $Env$ be the domain $[\nats_\bot \to \D]$.
-If $\rho \in Env$ and $x \in \D$, then we define $\rho[x] \in Env$ to be the function defined by the following rules: $\rho[x](0) = x$ and $\rho[x](i+1) = \rho(i)$.
 Now, we define a part of the evaluation function, the rest of the cases will be defined later.
 \begin{itemize}
 \item[] $\llbracket - \rrbracket : Tm_\bot \times Env \times Ob(\theta)_\bot \to \D$
@@ -530,31 +560,6 @@ Most of the cases are straightforward, let us prove some of them:
 \DisplayProof
 \end{itemize}
 \end{proof}
-
-Now, let us show how to reify elements of $\D$ into terms.
-\begin{itemize}
-\item[] $\mathsf{reify} : \nats_\bot \times \D \times \D \to Tm_\bot$
-\item[] $\mathsf{reify}(i, \mathsf{Lam}(f), \mathsf{Pi}(A, B)) = \lambda\,\mathsf{reify}(i + 1, f(id_0, x), \mathsf{app}(0, B, x))$, \\
-        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, \mathsf{Pair}(a, b), \mathsf{Sigma}(A, B)) = \mathsf{reify}(i, a, A), \mathsf{reify}(i, b, \mathsf{app}(0, B, a))$
-\item[] $\mathsf{reify}(i, \mathsf{Path}(a, b, s, x), \mathsf{Id}(A, a', b')) = \mathsf{reify}(i, x, A)$
-\item[] $\mathsf{reify}(i, \mathsf{U}(\alpha), \mathsf{U}(\beta)) = U_\alpha$, if $\alpha < \beta$
-\item[] $\mathsf{reify}(i, \mathsf{Ne}(s, e, c), t) = e(i)$
-\item[] $\mathsf{reify}(i, \mathsf{Id}(A, a, a'), \mathsf{U}(\alpha)) = (\mathsf{reify}(i, a, A) = \mathsf{reify}(i, a', A)\,|\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))$)
-\item[] $\mathsf{reify}(i, \mathsf{Pi}(A, B), \mathsf{U}(\alpha)) =$
-        $\Pi\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, \mathsf{app}(0, B, x), \mathsf{U}(\alpha))$, \\
-        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, \mathsf{Sigma}(A, B), \mathsf{U}(\alpha)) = $
-        $\Sigma\,\mathsf{reify}(i, A, \mathsf{U}(\alpha))\,\mathsf{reify}(i + 1, \mathsf{app}(0, B, x), \mathsf{U}(\alpha))$, \\
-        \indent where $x = \mathsf{reflect}(k \mapsto v_{k - i - 1}, A)$
-\item[] $\mathsf{reify}(i, e, t) = \bot$, otherwise
-\item[]
-\item[] $\mathsf{reflect} : TM_\bot \times \D \to \D$
-\item[] $\mathsf{reflect}(e,\mathsf{Pi}(A, B)) = \mathsf{Lam}((m, a) \mapsto \mathsf{reflect}(k \mapsto e(k)\ \mathsf{reify}(0, a, A), \mathsf{app}(0, B, a)))$
-\item[] $\mathsf{reflect}(e,\mathsf{Sigma}(A, B)) = \mathsf{Pair}(a, \mathsf{reflect}(k \mapsto proj_2\ e(k), \mathsf{app}(0, B, a)))$, \\
-        \indent where $a = \mathsf{reflect}(k \mapsto proj_1\ e(k), A)$
-\item[] $\mathsf{reflect}(e,t) = Ne(n \mapsto \bot, e, 0)$, otherwise
-\end{itemize}
 
 \bibliographystyle{amsplain}
 \bibliography{ref}
