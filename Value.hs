@@ -17,10 +17,8 @@ import Data.List
 
 import Syntax.Common
 import Syntax.Term
+import Cube
 
-data Sign = Plus | Minus deriving (Eq,Show)
-data Cube = Face Integer Sign | Deg Integer deriving (Eq, Show)
-data CubeMap = CubeMap { dom :: Integer, cube :: [Cube] } deriving Show
 data Value
     = Slam String (CubeMap -> Value -> Value) -- Constructor for Pi-types
     | Szero | Ssuc Value -- Constructors for Nat
@@ -30,9 +28,6 @@ data Value
     | Ne (CubeMap -> Value) ITerm
 type Ctx  = (M.Map String (Value,Value), [(Value,Value)])
 type CtxV = (M.Map String Value, [Value])
-
-comp :: CubeMap -> CubeMap -> CubeMap
-comp (CubeMap d m1) (CubeMap _ m2) = CubeMap d (m1 ++ m2)
 
 sarr :: Value -> Value -> Value
 sarr a b = Spi a $ Slam "_" $ \m _ -> action m b
@@ -44,7 +39,7 @@ ctxToCtxV :: Ctx -> CtxV
 ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
 isFreeVar :: DBIndex -> DBIndex -> Value -> Bool
-isFreeVar k i (Slam _ f) = isFreeVar (k + 1) (i + 1) (f (CubeMap 0 []) go)
+isFreeVar k i (Slam _ f) = isFreeVar (k + 1) (i + 1) (f (idc 0) go)
   where go = Ne (\_ -> go) (\_ -> NoVar)
 isFreeVar _ _ Szero = False
 isFreeVar k i (Ssuc v) = isFreeVar k i v
@@ -87,7 +82,7 @@ proj2 (Spair _ b) = b
 proj2 _ = error "proj1"
 
 app :: Integer -> Value -> Value -> Value
-app n (Slam _ f) a = f (CubeMap n []) a
+app n (Slam _ f) a = f (idc n) a
 app _ _ _ = error "Value.app"
 
 coe :: Integer -> Value -> Value -> Value
@@ -97,21 +92,21 @@ coe n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
 coe _ Snat x = x
 coe _ (Stype _) x = x
 coe n (Ne fs t) x = Ne (\m -> coe (dom m) (fs m) $ action m x) $
-    \i -> App n (App n Coe $ t i) $ reify i n x $ fs $ CubeMap n [Face 0 Minus]
+    \i -> App n (App n Coe $ t i) $ reify i n x $ fs (faceMap n 0 Minus)
 coe _ _ _ = error "coe"
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
 
 idp :: Integer -> Value -> Value
-idp n = action $ CubeMap n [Deg n]
+idp n = action (degMap n n)
 
 idf :: Value
 idf = Slam "x" $ \_ -> id
 
 action :: CubeMap -> Value -> Value
-action (CubeMap _ []) v = v
-action m (Slam x f) = Slam x (\m' -> f (comp m' m))
+action m v | isId m = v
+action m (Slam x f) = Slam x (\m' -> f (compose m' m))
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
@@ -125,7 +120,7 @@ action m v@(Stype _) = v
 reflect :: Integer -> ITerm -> Value -> Value
 reflect n e (Sid t _ _) = reflect (n + 1) e t
 reflect n e (Spi a (Slam x b)) =
-    Slam x $ \m v -> reflect (dom m) (\i -> App (dom m) (e i) $ reify i (dom m) v a) (b (CubeMap n []) v)
+    Slam x $ \m v -> reflect (dom m) (\i -> App (dom m) (e i) $ reify i (dom m) v a) (b (idc n) v)
 reflect n e (Ssigma a b) =
     let e1 = reflect n (\i -> App n Proj1 (e i)) a
     in Spair e1 $ reflect n (\i -> App n Proj2 (e i)) (app n b e1)
@@ -137,7 +132,7 @@ reify :: DBIndex -> Integer -> Value -> Value -> Term
 reify i n v (Sid t _ _) = reify i (n + 1) v t
 reify i n (Slam x f) (Spi a b) =
     let v = svar i n a
-    in Lam n [x] $ reify (i + 1) n (f (CubeMap n []) v) (app n b v)
+    in Lam n [x] $ reify (i + 1) n (f (idc n) v) (app n b v)
 reify _ _ (Slam _ _) _ = error "reify.Slam"
 reify i n (Spair e1 e2) (Ssigma a b) = Pair (reify i n e1 a) (reify i n e2 $ app n b e1)
 reify _ _ (Spair _ _) _ = error "reify.Spair"
@@ -149,10 +144,10 @@ reify i n (Ssuc e) Snat = iidp n $ case reify i n e Snat of
   where iidp k x = iterate (App 0 Idp) x `genericIndex` k
 reify _ _ (Ssuc _) _ = error "reify.Ssuc"
 reify i n (Spi a (Slam x b)) u@(Stype _) =
-    Pi n [([x],reify i n a u)] $ reify (i + 1) n (b (CubeMap n []) $ svar i n a) u
+    Pi n [([x],reify i n a u)] $ reify (i + 1) n (b (idc n) $ svar i n a) u
 reify _ _ (Spi _ _) _ = error "reify.Spi"
 reify i n (Ssigma a (Slam x b)) u@(Stype _) =
-    Sigma n [([x],reify i n a u)] $ reify (i + 1) n (b (CubeMap n []) $ svar i n a) u
+    Sigma n [([x],reify i n a u)] $ reify (i + 1) n (b (idc n) $ svar i n a) u
 reify _ _ (Ssigma _ _) _ = error "reify.Ssigma"
 reify i n (Sid t a b) u@(Stype _) = Id n (reify i n t u) (reify i n a t) (reify i n b t)
 reify _ _ (Sid _ _ _) _ = error "reify.Sid"
