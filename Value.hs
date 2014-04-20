@@ -90,8 +90,15 @@ app :: Integer -> Value -> Value -> Value
 app n (Slam _ f) a = f (CubeMap n []) a
 app _ _ _ = error "Value.app"
 
-coe :: Integer -> Value -> Value
-coe = error "TODO: coe"
+coe :: Integer -> Value -> Value -> Value
+coe n (Spi a b) _ = error $ "TODO: coe.Spi " ++ show n
+coe n (Ssigma a b) _ = error $ "TODO: coe.Ssigma " ++ show n
+coe n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
+coe _ Snat x = x
+coe _ (Stype _) x = x
+coe n (Ne fs t) x = Ne (\m -> coe (dom m) (fs m) $ action m x) $
+    \i -> App n (App n Coe $ t i) $ reify i n x $ fs $ CubeMap n [Face 0 Minus]
+coe _ _ _ = error "coe"
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
