@@ -1,7 +1,5 @@
 module Value
     ( Value(..)
-    -- , SisoData(..)
-    , Cube(..), CubeMap, dom
     , svar, gvar, sarr, sprod
     , Ctx, CtxV
     , ctxToCtxV
@@ -9,7 +7,7 @@ module Value
     , isFreeVar
     , reify, reifyType
     , proj1, proj2, app, coe, pmap
-    , idf, idp, action, reflect
+    , idp, action, reflect
     ) where
 
 import qualified Data.Map as M
@@ -25,7 +23,7 @@ data Value
     | Spair Value Value -- Constructor for Sigma-types
     | Spi Value Value | Ssigma Value Value | Snat | Stype Level -- Constructors for Type_k
     | Sid Value Value Value
-    | Ne (CubeMap -> Value) ITerm
+    | Ne DegMap (Cube Value) ITerm
 type Ctx  = (M.Map String (Value,Value), [(Value,Value)])
 type CtxV = (M.Map String Value, [Value])
 
@@ -40,18 +38,18 @@ ctxToCtxV (ctx,vs) = (M.map fst ctx, map fst vs)
 
 isFreeVar :: DBIndex -> DBIndex -> Value -> Bool
 isFreeVar k i (Slam _ f) = isFreeVar (k + 1) (i + 1) (f (idc 0) go)
-  where go = Ne (\_ -> go) (\_ -> NoVar)
+  where go = Ne (idd 0) (Cube $ \_ -> go) (\_ -> NoVar)
 isFreeVar _ _ Szero = False
 isFreeVar k i (Ssuc v) = isFreeVar k i v
 isFreeVar k i (Spair a b) = isFreeVar k i a || isFreeVar k i b
 isFreeVar k i (Spi a b) = isFreeVar k i a || isFreeVar (k + 1) (i + 1) (app 0 b go)
-  where go = Ne (\_ -> go) (\_ -> NoVar)
+  where go = Ne (idd 0) (Cube $ \_ -> go) (\_ -> NoVar)
 isFreeVar k i (Ssigma a b) = isFreeVar k i a || isFreeVar (k + 1) (i + 1) (app 0 b go)
-  where go = Ne (\_ -> go) (\_ -> NoVar)
+  where go = Ne (idd 0) (Cube $ \_ -> go) (\_ -> NoVar)
 isFreeVar _ _ Snat = False
 isFreeVar _ _ (Stype _) = False
 isFreeVar k i (Sid t a b) = isFreeVar k i t || isFreeVar k i a || isFreeVar k i b
-isFreeVar k i (Ne _ t) = elem k $ freeLVars (t i)
+isFreeVar k i (Ne _ _ t) = elem k $ freeLVars (t i)
 
 cmpTypes :: DBIndex -> Integer -> Value -> Value -> Bool
 cmpTypes i n (Spi a b) (Spi a' b') =
@@ -61,7 +59,7 @@ cmpTypes i n (Ssigma a b) (Ssigma a' b') =
 cmpTypes i n (Sid t a b) (Sid t' a' b') = cmpTypes i (n + 1) t t' && cmpValues i n a a' t && cmpValues i n b b' t
 cmpTypes _ _ Snat Snat = True
 cmpTypes _ _ (Stype k) (Stype k') = k <= k'
-cmpTypes i _ (Ne _ e) (Ne _ e') = e i == e' i
+cmpTypes i _ (Ne d _ e) (Ne d' _ e') = d == d' && e i == e' i
 cmpTypes _ _ _ _ = False
 
 cmpValues :: DBIndex -> Integer -> Value -> Value -> Value -> Bool
@@ -79,7 +77,7 @@ proj1 _ = error "proj1"
 
 proj2 :: Value -> Value
 proj2 (Spair _ b) = b
-proj2 _ = error "proj1"
+proj2 _ = error "proj2"
 
 app :: Integer -> Value -> Value -> Value
 app n (Slam _ f) a = f (idc n) a
@@ -91,26 +89,25 @@ coe n (Ssigma a b) _ = error $ "TODO: coe.Ssigma " ++ show n
 coe n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
 coe _ Snat x = x
 coe _ (Stype _) x = x
-coe n (Ne fs t) x = Ne (\m -> coe (dom m) (fs m) $ action m x) $
-    \i -> App n (App n Coe $ t i) $ reify i n x $ fs (faceMap n 0 Minus)
+coe _ (Ne ds _ _) x | isDeg ds 0 = x
+coe n (Ne ds fs t) x = Ne ds (Cube $ \m -> coe (domf m) (unCube fs m) $ action (cubeMapf m) x) $
+    \i -> App n (App n Coe $ t i) $ reify i n x $ unCube fs $ faceMap (Minus : genericReplicate n Zero)
 coe _ _ _ = error "coe"
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n = app (n + 1)
 
 idp :: Integer -> Value -> Value
-idp n = action (degMap n n)
-
-idf :: Value
-idf = Slam "x" $ \_ -> id
+idp n = action $ cubeMapd $ degMap $ genericReplicate n True ++ [False]
 
 action :: CubeMap -> Value -> Value
-action m v | isId m = v
-action m (Slam x f) = Slam x (\m' -> f (compose m' m))
+action m v | isIdc m = v
+action m (Slam x f) = Slam x $ \m' -> f (composec m' m)
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
-action m (Ne fs t) = fs m
+action m (Ne ds fs t) | isDegMap m = Ne (composed (degs m) ds) fs t
+                      | otherwise = action (cubeMapd $ degs m) $ unCube fs (faces m)
 action m (Spi a b) = Spi (action m a) (action m b)
 action m (Ssigma a b) = Ssigma (action m a) (action m b)
 action m Snat = Snat
@@ -120,13 +117,13 @@ action m v@(Stype _) = v
 reflect :: Integer -> ITerm -> Value -> Value
 reflect n e (Sid t _ _) = reflect (n + 1) e t
 reflect n e (Spi a (Slam x b)) =
-    Slam x $ \m v -> reflect (dom m) (\i -> App (dom m) (e i) $ reify i (dom m) v a) (b (idc n) v)
+    Slam x $ \m v -> reflect (domc m) (\i -> App (domc m) (e i) $ reify i (domc m) v a) (b (idc n) v)
 reflect n e (Ssigma a b) =
     let e1 = reflect n (\i -> App n Proj1 (e i)) a
     in Spair e1 $ reflect n (\i -> App n Proj2 (e i)) (app n b e1)
 reflect n e _ = go e
   where
-    go e = Ne (\m -> go $ App n (Var $ "action" ++ show m) . e) e
+    go e = Ne (idd n) (Cube $ \m -> go $ App n (Var $ show (cubeMapf m) ++ "@") . e) e
 
 reify :: DBIndex -> Integer -> Value -> Value -> Term
 reify i n v (Sid t _ _) = reify i (n + 1) v t
@@ -155,7 +152,8 @@ reify _ _ (Stype u) (Stype _) = Universe u
 reify _ _ (Stype _) _ = error "reify.Stype"
 reify _ _ Snat (Stype _) = Nat
 reify _ _ Snat _ = error "reify.Snat"
-reify i _ (Ne _ e) _ = e i
+reify i _ (Ne d _ e) _ | isIdd d = e i
+reify i n (Ne d _ e) _ = App n (Var $ show (cubeMapd d) ++ "@") (e i)
 
 reifyType :: DBIndex -> Integer -> Value -> Term
 reifyType i n t = reify i n t (Stype maxBound)
