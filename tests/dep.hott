@@ -151,5 +151,5 @@ invIdpTest4 : (A : Type) (a a' : A) (p : a = a') -> idp a = comp p (inv p)
 invIdpTest4 A = J A (\a a' p -> idp a = comp p (inv p)) (\a -> idp (idp a))
 -}
 
-depmap' : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
-depmap' A B f a a' p = idp f <*> p
+depmap'fail : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
+depmap'fail A B f a a' p = idp f <*> p

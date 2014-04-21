@@ -1,3 +1,6 @@
+ofType : (A : Type) -> A -> A
+ofType A a = a
+
 funTest1 : (A B : Type) -> (A -> B) -> A -> B
 funTest1 _ _ f a = f a
 
@@ -13,15 +16,15 @@ test2'fail : 0 = 1 | Nat -> (y : (Nat -> Nat) -> Nat) -> y (\x -> x) = y (\x -> 
 test2'fail p y = idp y <*> p
 
 test3 : 0 = 1 | Nat -> (y : Nat -> Nat) -> y 0 = y 1 | Nat
-test3 p y = idp (\x -> y x) <*> p
+test3 p y = idp (ofType (Nat -> Nat) (\x -> y x)) <*> p
 
 test4 : (g f : Nat -> Nat) -> f = g | (Nat -> Nat) -> (y : Nat) -> f y = g y | Nat
-test4 g f p y = idp (\x -> x y) <*> p
+test4 g f p y = idp (ofType ((Nat -> Nat) -> Nat) (\x -> x y)) <*> p
 
-test5 : (A : Type) (a a' : A) (p : a = a' | A) -> idp (\x -> x) <*> p = p | a = a' | A
+test5 : (A : Type) (a a' : A) (p : a = a' | A) -> idp (ofType (A -> A) (\x -> x)) <*> p = p | a = a' | A
 test5 _ _ _ p = idp p
 
-test5' : (A : Type) (a a' : A) (p : a = a' | A) -> idp (\x -> x) <*> p = p | a = a' | A
+test5' : (A : Type) (a a' : A) (p : a = a' | A) -> idp (ofType (A -> A) (\x -> x)) <*> p = p | a = a' | A
 test5' _ _ _ = idp
 
 test6 : (A B : Type) (a : A) (f : A -> B) -> f a = f a | B
