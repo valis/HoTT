@@ -15,7 +15,7 @@ import Data.List
 
 data Sign = Plus | Minus | Zero deriving Eq
 newtype Cube a = Cube { unCube :: FaceMap -> a }
-data CubeMap = CubeMap { degs :: DegMap, faces :: FaceMap }
+data CubeMap = CubeMap { degs :: DegMap, faces :: FaceMap } deriving Eq
 newtype FaceMap = FaceMap [Sign] deriving Eq
 newtype DegMap = DegMap [Bool] deriving Eq
 
@@ -33,8 +33,14 @@ signToChar Zero = '0'
 instance Show Sign where
     show s = [signToChar s]
 
+instance Show FaceMap where
+    show (FaceMap f) = map signToChar f
+
+instance Show DegMap where
+    show (DegMap d) = map (\b -> if b then '1' else '0') d
+
 instance Show CubeMap where
-    show (CubeMap (DegMap d) (FaceMap f)) = map (\b -> if b then '1' else '0') d ++ "." ++ map signToChar f
+    show (CubeMap d f) = show d ++ "." ++ show f
 
 idf :: Integer -> FaceMap
 idf n = FaceMap (genericReplicate n Zero)
@@ -94,14 +100,15 @@ composed (DegMap ds1) (DegMap ds2) = DegMap (go ds1 ds2)
     go (True:ds1) [] = error "composed.1"
     go (False:ds1) ds2 = False : go ds1 ds2
     go [] [] = []
-    go [] _ = error "composed.2"
+    go [] ds = ds
 
 composefd :: FaceMap -> DegMap -> CubeMap
 composefd (FaceMap []) (DegMap []) = CubeMap (DegMap []) (FaceMap [])
 composefd (FaceMap (f:fs)) (DegMap (d:ds)) =
     let CubeMap (DegMap ds') (FaceMap fs') = composefd (FaceMap fs) (DegMap ds)
     in CubeMap (DegMap $ if f == Zero then d:ds' else ds') (FaceMap $ if d then f:fs' else fs')
-composefd _ _ = error "composefd"
+composefd (FaceMap []) d = cubeMapd d
+composefd f d = error $ "composefd " ++ show f ++ "," ++ show d
 
 composec :: CubeMap -> CubeMap -> CubeMap
 composec (CubeMap d1 f1) (CubeMap d2 f2) =
@@ -109,10 +116,10 @@ composec (CubeMap d1 f1) (CubeMap d2 f2) =
     in CubeMap (composed d1 d) (composef f f2)
 
 cubeMapf :: FaceMap -> CubeMap
-cubeMapf (FaceMap f) = CubeMap (DegMap $ genericReplicate (genericLength $ filter (== Zero) f :: Integer) True) (FaceMap f)
+cubeMapf f = CubeMap (idd $ domf f) f
 
 cubeMapd :: DegMap -> CubeMap
-cubeMapd (DegMap d) = CubeMap (DegMap d) $ FaceMap $ genericReplicate (genericLength $ filter id d :: Integer) Zero
+cubeMapd d = CubeMap d (idf $ codd d)
 
 isDeg :: DegMap -> Integer -> Bool
 isDeg (DegMap []) _ = False

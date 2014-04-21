@@ -11,6 +11,7 @@ import Eval
 import Value
 import Syntax.Common
 import Syntax.Term
+import Cube
 
 updateCtx :: [Def] -> TCM a -> TCM a
 updateCtx [] e = e
@@ -60,18 +61,21 @@ typeOf (App _ Proj2 e) = do
     case t of
         Ssigma _ b -> return $ app 0 b $ eval 0 (ctxToCtxV ctx) (App 0 Proj1 e)
         _ -> fail "typeOf.App.Proj1"
-typeOf (Id _ t _ _) = typeOf t
+typeOf (Id _ t _ _) = do
+    Sid r _ _ <- typeOf t
+    return r
 typeOf (App _ Idp e) = do
     ctx <- askCtx
     let v = eval 0 (ctxToCtxV ctx) e
     t <- typeOf e
-    return (Sid t v v)
+    return (Sid (action (cubeMapd $ degMap [False]) t) v v)
 typeOf (Pmap e1 e2) = do
     t1 <- typeOf e1
     t2 <- typeOf e2
     ctx <- askCtx
     case (t1,t2) of
-        (Sid (Spi _ b@(Slam v _)) f g, Sid _ x y) -> return $ Sid (app 0 b y) (app 0 f x) (app 0 g y)
+        (Sid (Spi _ b@(Slam v _)) f g, Sid _ x y) ->
+            return $ Sid (app 1 b $ eval 0 (ctxToCtxV ctx) e2) (app 0 f x) (app 0 g y)
         _ -> fail "typeOf.App.App.Pmap"
 typeOf (App _ Coe e) = do
     t <- typeOf e
@@ -101,6 +105,7 @@ typeOf Rec = return $ eval 0 (M.empty,[]) $ Pi 0 [(["P"], Pi 0 [([],Nat)] $ Univ
   where iht = Pi 0 [(["x"],Nat)] $ Pi 0 [([], App 0 (LVar 1) (LVar 0))] $ App 0 (LVar 1) $ App 0 Suc (LVar 0)
 typeOf (NatConst _) = return Snat
 typeOf (Universe l) = return $ Stype (succ l)
+typeOf (Act _ _) = fail "typeOf.Act"
 typeOf Idp = fail "typeOf.Idp"
 typeOf Coe = fail "typeOf.Coe"
 typeOf Iso = 
@@ -108,7 +113,7 @@ typeOf Iso =
                Pi 0 [(["B"],Universe $ pred $ pred maxBound)] $
                Pi 0 [(["f"],Pi 0 [([],LVar 1)] $ LVar 0)] $
                Pi 0 [(["g"],Pi 0 [([],LVar 1)] $ LVar 2)] $
-               Pi 0 [([],Pi 0 [(["a"],LVar 3)] $ Id 0 (LVar 4) (App 0 (LVar 1) (App 0 (LVar 2) $ LVar 0)) (LVar 0))] $
-               Pi 0 [([],Pi 0 [(["b"],LVar 2)] $ Id 0 (LVar 3) (App 0 (LVar 2) (App 0 (LVar 1) $ LVar 0)) (LVar 0))] $
-               Id 0 (Universe $ pred $ pred maxBound) (Var "A") (Var "B")
+               Pi 0 [([],Pi 0 [(["a"],LVar 3)] $ Id 0 (App 0 Idp $ LVar 4) (App 0 (LVar 1) (App 0 (LVar 2) $ LVar 0)) (LVar 0))] $
+               Pi 0 [([],Pi 0 [(["b"],LVar 2)] $ Id 0 (App 0 Idp $ LVar 3) (App 0 (LVar 2) (App 0 (LVar 1) $ LVar 0)) (LVar 0))] $
+               Id 0 (App 0 Idp $ Universe $ pred $ pred maxBound) (Var "A") (Var "B")
     in return $ eval 0 (M.empty,[]) term

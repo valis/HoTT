@@ -106,8 +106,11 @@ action m (Slam x f) = Slam x $ \m' -> f (composec m' m)
 action m (Spair e1 e2) = Spair (action m e1) (action m e2)
 action _ Szero = Szero
 action _ v@(Ssuc _) = v
-action m (Ne ds fs t) | isDegMap m = Ne (composed (degs m) ds) fs t
-                      | otherwise = action (cubeMapd $ degs m) $ unCube fs (faces m)
+action m (Ne ds fs t) =
+    let m' = composec m (cubeMapd ds)
+    in if isDegMap m'
+        then Ne (degs m') fs t
+        else action (cubeMapd $ degs m') $ unCube fs (faces m')
 action m (Spi a b) = Spi (action m a) (action m b)
 action m (Ssigma a b) = Ssigma (action m a) (action m b)
 action m Snat = Snat
@@ -116,14 +119,14 @@ action m v@(Stype _) = v
 
 reflect :: Integer -> ITerm -> Value -> Value
 reflect n e (Sid t _ _) = reflect (n + 1) e t
-reflect n e (Spi a (Slam x b)) =
-    Slam x $ \m v -> reflect (domc m) (\i -> App (domc m) (e i) $ reify i (domc m) v a) (b (idc n) v)
+reflect _ e (Spi a (Slam x b)) =
+    Slam x $ \m v -> reflect (domc m) (\i -> App (domc m) (e i) $ reify i (domc m) v $ action m a) (b m v)
 reflect n e (Ssigma a b) =
     let e1 = reflect n (\i -> App n Proj1 (e i)) a
     in Spair e1 $ reflect n (\i -> App n Proj2 (e i)) (app n b e1)
-reflect n e _ = go e
+reflect n e _ = go n e
   where
-    go e = Ne (idd n) (Cube $ \m -> go $ App n (Var $ show (cubeMapf m) ++ "@") . e) e
+    go k e = Ne (idd k) (Cube $ \m -> go (domf m) $ Act (cubeMapf m) . e) e
 
 reify :: DBIndex -> Integer -> Value -> Value -> Term
 reify i n v (Sid t _ _) = reify i (n + 1) v t
@@ -146,14 +149,14 @@ reify _ _ (Spi _ _) _ = error "reify.Spi"
 reify i n (Ssigma a (Slam x b)) u@(Stype _) =
     Sigma n [([x],reify i n a u)] $ reify (i + 1) n (b (idc n) $ svar i n a) u
 reify _ _ (Ssigma _ _) _ = error "reify.Ssigma"
-reify i n (Sid t a b) u@(Stype _) = Id n (reify i n t u) (reify i n a t) (reify i n b t)
+reify i n (Sid t a b) u@(Stype _) = Id n (reify i (n + 1) t u) (reify i n a t) (reify i n b t)
 reify _ _ (Sid _ _ _) _ = error "reify.Sid"
-reify _ _ (Stype u) (Stype _) = Universe u
+reify _ n (Stype u) (Stype _) = iterate (App 0 Idp) (Universe u) `genericIndex` n
 reify _ _ (Stype _) _ = error "reify.Stype"
-reify _ _ Snat (Stype _) = Nat
+reify _ n Snat (Stype _) = iterate (App 0 Idp) Nat `genericIndex` n
 reify _ _ Snat _ = error "reify.Snat"
 reify i _ (Ne d _ e) _ | isIdd d = e i
-reify i n (Ne d _ e) _ = App n (Var $ show (cubeMapd d) ++ "@") (e i)
+reify i _ (Ne d _ e) _ = Act (cubeMapd d) (e i)
 
 reifyType :: DBIndex -> Integer -> Value -> Term
 reifyType i n t = reify i n t (Stype maxBound)

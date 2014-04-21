@@ -12,6 +12,7 @@ import Data.List
 import Control.Arrow(first,second)
 
 import Syntax.Common
+import Cube
 
 data Def = Def String (Maybe (Term,[String])) Term
 
@@ -40,6 +41,7 @@ data Term
     | NatConst Integer
     | Universe Level
     | Pair Term Term
+    | Act CubeMap Term
 
 freeLVarsDef :: Def -> [DBIndex]
 freeLVarsDef (Def _ Nothing e) = freeLVars e
@@ -68,6 +70,7 @@ freeLVars Proj2 = []
 freeLVars Iso = []
 freeLVars (NatConst _) = []
 freeLVars (Universe _) = []
+freeLVars (Act _ t) = freeLVars t
 
 freeLVarsDep :: [([String],Term)] -> Term -> [DBIndex]
 freeLVarsDep [] e = freeLVars e
@@ -97,6 +100,7 @@ liftTermDB' _ _ Suc = Suc
 liftTermDB' _ _ Rec = Rec
 liftTermDB' _ _ Idp = Idp
 liftTermDB' n k (Pmap e1 e2) = Pmap (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (Act t e) = Act t (liftTermDB' n k e)
 liftTermDB' _ _ Coe = Coe
 liftTermDB' _ _ Proj1 = Proj1
 liftTermDB' _ _ Proj2 = Proj2
@@ -119,6 +123,8 @@ instance Eq Term where
     (==) = cmp 0 M.empty M.empty
       where
         cmp :: Int -> M.Map String Int -> M.Map String Int -> Term -> Term -> Bool
+        cmp c m1 m2 (Act a e1) e2 | isIdc a = cmp c m1 m2 e1 e2
+        cmp c m1 m2 e1 (Act a e2) | isIdc a = cmp c m1 m2 e1 e2
         cmp c m1 m2 (Let [] e1) e2 = cmp c m1 m2 e1 e2
         cmp c m1 m2 e1 (Let [] e2) = cmp c m1 m2 e1 e2
         cmp c m1 m2 (Let (Def v1 Nothing r1 : ds1) e1) (Let (Def v2 Nothing r2 : ds2) e2) =
@@ -135,6 +141,7 @@ instance Eq Term where
         cmp c m1 m2 (App n1 a1 b1) (App n2 a2 b2) = n1 == n2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pmap a1 b1) (Pmap a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Act t1 e1) (Act t2 e2) = t1 == t2 && cmp c m1 m2 e1 e2
         cmp c m1 m2 (LVar v1) (LVar v2) = v1 == v2
         cmp _ m1 m2 (Var v1) (Var v2) = M.lookup v1 m1 == M.lookup v2 m2
         cmp _ _ _ NoVar NoVar = True
@@ -257,6 +264,7 @@ ppTerm ctx = go ctx False
     go ctx False l (Pmap e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <+> text "<*>" <+> go ctx True l' e2
+    go ctx False l (Act t e) = text ('@' : show t) <+> go ctx True (fmap pred l) e
 
 addVars :: [String] -> [String] -> ([String],[String])
 addVars [] ctx = ([],ctx)
@@ -314,6 +322,9 @@ simplify (Id n t a b) = Id n (simplify t) (simplify a) (simplify b)
 simplify (App n e1 e2) = App n (simplify e1) (simplify e2)
 simplify (Pair e1 e2) = Pair (simplify e1) (simplify e2)
 simplify (Pmap e1 e2) = Pmap (simplify e1) (simplify e2)
+simplify (Act t e) | isIdc t = simplify e
+simplify (Act t1 (Act t2 e)) = simplify $ Act (composec t1 t2) e
+simplify (Act t e) = Act t (simplify e)
 simplify e@(Var _) = e
 simplify e@(LVar _) = e
 simplify NoVar = NoVar

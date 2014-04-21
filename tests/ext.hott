@@ -1,4 +1,4 @@
-extTest1 : (A B : Type) (f : A -> B) -> f = f
+extTest1 : (A B : Type) (f : A -> B) -> f = f | (A -> B)
 extTest1 A B f = idp f
 
 {-

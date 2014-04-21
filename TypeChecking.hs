@@ -14,6 +14,7 @@ import qualified Syntax.Term as T
 import Eval
 import TCM
 import TypeInference
+import Cube
 
 maxType :: Expr -> Expr -> Value -> Value -> TCM Value
 maxType _ _ (Stype k1) (Stype k2) = return $ Stype (max k1 k2)
@@ -104,8 +105,8 @@ typeCheck (Lam _ (Binder arg : _) _) (Just ty) = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But lambda expression has pi type"
 typeCheck j@(Idp _) (Just exp@(Spi a (Slam x _))) = do
-    let ctx = (M.singleton (freshName "a" [x]) a, [])
-    cmpTypesErr exp (eval 0 ctx $ T.Pi 0 [([x],T.Var "a")] $ T.Id 0 (T.Var "a") (T.LVar 0) (T.LVar 0)) j
+    let ctx = (M.singleton "a" a, [])
+    cmpTypesErr exp (eval 0 ctx $ T.Pi 0 [([x],T.Var "a")] $ T.Id 0 (T.App 0 T.Idp $ T.Var "a") (T.LVar 0) (T.LVar 0)) j
     return T.Idp
 typeCheck (Idp (PIdp (lc,_))) (Just ty) = do
     (i,c,_,_) <- ask
@@ -117,7 +118,7 @@ typeCheck e@(Coe (PCoe (lc,_))) (Just ty@(Spi a@(Sid (Stype _) x y) b)) = do
         _ -> coeErrorMsg lc ty
 typeCheck (Coe (PCoe (lc,_))) (Just ty) = coeErrorMsg lc ty
 typeCheck ea@(App e1 e) (Just exp@(Sid t a b)) | Idp _ <- dropParens e1 = do
-    r <- typeCheck e (Just t)
+    r <- typeCheck e $ Just $ action (cubeMapf $ faceMap [Minus]) t
     e' <- evalTCM r
     cmpTypesErr exp (Sid t e' e') ea
     return (T.App 0 T.Idp r)
@@ -180,7 +181,7 @@ typeCheck (Pmap e1 e2) Nothing = do
             (i,c,mctx,ctx) <- ask
             if cmpTypes i 1 a' a
                 then return (T.Pmap r1 r2)
-                else pmapErrMsg e2 a' (eprettyType i c a)
+                else pmapErrMsg e2 a' (eprettyType i 1 c a)
         (Sid t f g, Sid a' x y) -> pmapErrMsg e1 t (etext "_ -> _")
         (Sid t f g, _) -> expTypeBut "Id" e2 t2
         _ -> expTypeBut "Id" e1 t1
@@ -200,17 +201,27 @@ typeCheck (Pi [] e) Nothing = typeCheck e Nothing
 typeCheck (Pi (t:tv) e) Nothing = typeCheck'depType (T.Pi 0) t (Pi tv e)
 typeCheck (Sigma [] e) Nothing = typeCheck e Nothing
 typeCheck (Sigma (t:tv) e) Nothing = typeCheck'depType (T.Sigma 0) t (Sigma tv e)
+typeCheck (Id e1 e2) Nothing = errorTCM $ emsgLC (getPos e1) "Expected |" enull
+{-
 typeCheck (Id e1 e2) Nothing = do
     r1 <- typeCheck e1 Nothing
     t <- typeOf r1
     r2 <- typeCheck e2 (Just t)
     i <- askIndex
-    return $ T.Id 0 (reifyType i 0 t) r1 r2
+    return $ T.Id 0 (reifyType i 1 $ action (cubeMapd $ degMap [False]) t) r1 r2
+-}
 typeCheck (Over t1 t) Nothing | Id e1 e2 <- dropParens t1 = do
     r <- typeCheck t Nothing
-    v <- evalTCM r
-    (r1,r2) <- liftTCM2' (,) (typeCheck e1 $ Just v) (typeCheck e2 $ Just v)
-    return (T.Id 0 r r1 r2)
+    rt <- typeOf r
+    case rt of
+        Sid (Stype _) rl rr -> do
+            (r1,r2) <- liftTCM2' (,) (typeCheck e1 $ Just rl) (typeCheck e2 $ Just rr)
+            return (T.Id 0 r r1 r2)
+        Stype _ -> do
+            v <- evalTCM r
+            (r1,r2) <- liftTCM2' (,) (typeCheck e1 $ Just v) (typeCheck e2 $ Just v)
+            return (T.Id 0 (T.App 0 T.Idp r) r1 r2)
+        _ -> errorTCM $ emsgLC (getPos t) "Expected type of the form Id Type _ _" enull
 typeCheck (Over t _) Nothing = errorTCM $ emsgLC (getPos t) "Expected term of the form _ = _" enull
 typeCheck (Nat _) Nothing = return T.Nat
 typeCheck (Universe (U (_,t))) Nothing = return $ T.Universe (parseLevel t)
@@ -250,8 +261,8 @@ isArr i t f =
     let r = app 0 f (svar i 0 t)
     in if isFreeVar 0 (i + 1) r then Nothing else Just r
 
-eprettyType :: T.DBIndex -> [String] -> Value -> EDoc
-eprettyType i c t = epretty c $ T.simplify (reifyType i 0 t)
+eprettyType :: T.DBIndex -> Integer -> [String] -> Value -> EDoc
+eprettyType i n c t = epretty c $ T.simplify (reifyType i n t)
 
 inferErrorMsg :: (Int,Int) -> String -> TCM a
 inferErrorMsg lc s = errorTCM $ emsgLC lc ("Cannot infer type of " ++ s) enull
@@ -260,7 +271,7 @@ pmapErrMsg :: Expr -> Value -> EDoc -> TCM a
 pmapErrMsg expr ty j = do
     (i,c,_,_) <- ask
     errorTCM $ emsgLC (getPos expr) "" $ etext "Expected type of the form _ = _ |" <+> j $$
-        etext "But term" <+> eprettyExpr expr <+> etext "has type _ = _ |" <+> eprettyType i c ty
+        etext "But term" <+> eprettyExpr expr <+> etext "has type _ = _ |" <+> eprettyType i 1 c ty
 
 coeErrorMsg :: (Int,Int) -> Value -> TCM a
 coeErrorMsg lc ty = do
@@ -306,7 +317,7 @@ cmpTypesErr t1 t2 e = do
     if cmpTypes i 0 t2 t1
         then return ()
         else errorTCM $ emsgLC (getPos e) "" $ expType i c (-1) t1 $$
-            etext "But term" <+> eprettyExpr e <+> etext "has type" <+> eprettyType i c t2
+            etext "But term" <+> eprettyExpr e <+> etext "has type" <+> eprettyType i 0 c t2
 
 expTypeBut :: String -> Expr -> Value -> TCM a
 expTypeBut exp e act = do

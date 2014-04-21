@@ -1,45 +1,45 @@
 funTest1 : (A B : Type) -> (A -> B) -> A -> B
 funTest1 _ _ f a = f a
 
-typeTest1 = 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
+typeTest1 = 0 = 1 | Nat -> (y : Nat -> Nat) -> y 0 = y 1 | Nat
 
-test1 : 0 = 1 -> (y' : Nat -> Nat) -> y' 0 = y' 1
+test1 : 0 = 1 | Nat -> (y' : Nat -> Nat) -> y' 0 = y' 1 | Nat
 test1 p y = idp y <*> p
 
 test1' : typeTest1
 test1' p y = idp y <*> p
 
-test2'fail : 0 = 1 -> (y : (Nat -> Nat) -> Nat) -> y (\x -> x) = y (\x -> x)
+test2'fail : 0 = 1 | Nat -> (y : (Nat -> Nat) -> Nat) -> y (\x -> x) = y (\x -> x) | Nat
 test2'fail p y = idp y <*> p
 
-test3 : 0 = 1 -> (y : Nat -> Nat) -> y 0 = y 1
+test3 : 0 = 1 | Nat -> (y : Nat -> Nat) -> y 0 = y 1 | Nat
 test3 p y = idp (\x -> y x) <*> p
 
-test4 : (g f : Nat -> Nat) -> f = g -> (y : Nat) -> f y = g y
+test4 : (g f : Nat -> Nat) -> f = g | (Nat -> Nat) -> (y : Nat) -> f y = g y | Nat
 test4 g f p y = idp (\x -> x y) <*> p
 
-test5 : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) <*> p = p
+test5 : (A : Type) (a a' : A) (p : a = a' | A) -> idp (\x -> x) <*> p = p | a = a' | A
 test5 _ _ _ p = idp p
 
-test5' : (A : Type) (a a' : A) (p : a = a') -> idp (\x -> x) <*> p = p
+test5' : (A : Type) (a a' : A) (p : a = a' | A) -> idp (\x -> x) <*> p = p | a = a' | A
 test5' _ _ _ = idp
 
-test6 : (A B : Type) (a : A) (f : A -> B) -> f a = f a
+test6 : (A B : Type) (a : A) (f : A -> B) -> f a = f a | B
 test6 A B a f = idp (f a)
 
-test6' : (A B : Type) (a : A) (f : A -> B) -> f a = f a
+test6' : (A B : Type) (a : A) (f : A -> B) -> f a = f a | B
 test6' A B a f = idp f <*> idp a
 
-pmap1 : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
+pmap1 : (A B : Type) (f g : A -> B) -> f = g | (A -> B) -> (a : A) -> f a = g a | B
 pmap1 _ _ _ _ p a = p <*> idp a
 
-pmap1'fail : (A B : Type) (f g : A -> B) -> f = g -> (a : A) -> f a = g a
+pmap1'fail : (A B : Type) (f g : A -> B) -> f = g | (A -> B) -> (a : A) -> f a = g a | B
 pmap1'fail A' _ _ _ p a = p <*> a
 
-pmap2 : (A B : Type) (f : A -> B) (a a' : A) -> a = a' -> f a = f a'
+pmap2 : (A B : Type) (f : A -> B) (a a' : A) -> a = a' | A -> f a = f a' | B
 pmap2 _ _ f _ _ p = idp f <*> p
 
-typeTest2 = (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g -> (a : A) -> f a = g a
+typeTest2 = (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g | ((a : A) -> B a) -> (a : A) -> f a = g a | B a
 
 depmap' : typeTest2
-depmap' _ _ _ _ p a = p <*> idp a
+depmap' _ B _ _ p a = p <*> idp a

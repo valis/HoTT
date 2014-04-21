@@ -1,13 +1,13 @@
 test0 : Nat -> Nat
 test0 x = x
 
-test1 : (0 = 0 -> Nat) -> Nat
+test1 : (0 = 0 | Nat -> Nat) -> Nat
 test1 = let x = 0 in \f -> f (idp x)
 
-test2 : (0 = 0 -> Nat) -> Nat
+test2 : (0 = 0 | Nat -> Nat) -> Nat
 test2 f = let x = 0 in f (idp x)
 
-test3 : (let x = 0 in x) = 0
+test3 : (let x = 0 in x) = 0 | Nat
 test3 = idp 0
 
 test4 : (x : Type0) -> x -> x

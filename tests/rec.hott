@@ -13,8 +13,8 @@ fac = R (\_ -> Nat) 1 (\n -> mul (suc n))
 
 sht = fac 5
 
-succ : sht = 120
+succ : sht = 120 | Nat
 succ = idp sht
 
-fail : sht = 120
+fail : sht = 120 | Nat
 fail = idp 121

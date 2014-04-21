@@ -41,35 +41,21 @@ eval n ctx (Lam _ args e) = go n ctx args
     go n ctx []     = eval n ctx e
     go n (ctx,lctx) s@(a:as) = Slam a $ \m v -> go (domc m) (M.map (action m) ctx, v : map (action m) lctx) as
 eval n ctx (Pi _ [] e) = eval n ctx e
-eval n (ctx,lctx) (Pi n' ((vs,t):ts) e) = go n ctx lctx vs
+eval n (gctx,lctx) (Pi n' ((vs,t):ts) e) = go n gctx lctx vs $ eval n (gctx,lctx) t
   where
-    tv = eval n (ctx,lctx) t
-    go n ctx lctx [] = sarr tv $ eval n (ctx,lctx) (Pi n' ts e)
-    go _ ctx lctx [v] = Spi tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) ctx, a : map (action m) lctx) (Pi n' ts e)
-    go n ctx lctx (v:vs) = Spi tv $ Slam v $ \m a -> go (domc m) (M.map (action m) ctx) (a : map (action m) lctx) vs
-{-
-eval 1 (ctx,lctx) e'@(Pi (([],t):ts) e) = Siso1 $ SisoData
-    { sisoLeft = eval 0 (M.map (action [Ld]) ctx, map (action [Ld]) lctx) e'
-    , sisoRight = eval 0 (M.map (action [Rd]) ctx, map (action [Rd]) lctx) e'
-    , sisoLR = Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx ->
-        app kx (action (mx ++ mf) $ coe $ eval 1 (ctx,lctx) $ Pi ts e)
-               (app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) t) vx)
-    , sisoRL = Slam "f" $ \kf mf vf -> Slam "x" $ \kx mx vx ->
-        app kx (action (mx ++ mf) $ coe $ inv 0 $ eval 1 (ctx,lctx) $ Pi ts e)
-               (app kx (action mx vf) $ app kx (action (mx ++ mf) $ coe $ eval 1 (ctx,lctx) t) vx)
-    , sisoLI = error "TODO: eval.Pi.Siso.LI"
-    , sisoRI = error "TODO: eval.Pi.Siso.RI"
-    , sisoInv = error "TODO: eval.Pi.Siso.Inv"
-    , sisoOver = error "TODO: eval.Pi.Siso.Over"
-    }
--}
+    go n gctx lctx [] tv = sarr tv $ eval n (gctx,lctx) (Pi n' ts e)
+    go n gctx lctx [v] tv =
+        Spi tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) gctx, a : map (action m) lctx) (Pi n' ts e)
+    go n gctx lctx (v:vs) tv = Spi tv $
+        Slam v $ \m a -> go (domc m) (M.map (action m) gctx) (a : map (action m) lctx) vs (action m tv)
 eval n ctx (Sigma _ [] e) = eval n ctx e
-eval n (ctx,lctx) (Sigma n' ((vs,t):ts) e) = go n ctx lctx vs
+eval n (gctx,lctx) (Sigma n' ((vs,t):ts) e) = go n gctx lctx vs $ eval n (gctx,lctx) t
   where
-    tv = eval n (ctx,lctx) t
-    go n ctx lctx [] = sprod tv $ eval n (ctx,lctx) (Sigma n' ts e)
-    go _ ctx lctx [v] = Ssigma tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) ctx, a : map (action m) lctx) (Sigma n' ts e)
-    go n ctx lctx (v:vs) = Ssigma tv $ Slam v $ \m a -> go (domc m) (M.map (action m) ctx) (a : map (action m) lctx) vs
+    go n gctx lctx [] tv = sprod tv $ eval n (gctx,lctx) (Sigma n' ts e)
+    go n gctx lctx [v] tv =
+        Ssigma tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) gctx, a : map (action m) lctx) (Sigma n' ts e)
+    go n gctx lctx (v:vs) tv = Ssigma tv $
+        Slam v $ \m a -> go (domc m) (M.map (action m) gctx) (a : map (action m) lctx) vs (action m tv)
 eval n ctx (App _ e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
 eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
@@ -89,6 +75,7 @@ eval n _ (NatConst c) = genConst c
 eval n _ Nat = Snat
 eval n _ (Universe u) = Stype u
 eval n ctx (Id _ t a b) = Sid (eval n ctx t) (eval n ctx a) (eval n ctx b)
+eval n ctx (Act m e) = action m (eval n ctx e)
 
 rec :: Integer -> Value -> Value -> Value -> Value -> Value
 rec n p z s = go
