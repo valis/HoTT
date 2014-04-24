@@ -59,6 +59,11 @@ transPCoe x = case x of
   PCoe str  -> failure x
 
 
+transPpcon :: Ppcon -> Result
+transPpcon x = case x of
+  Ppcon str  -> failure x
+
+
 transPProjl :: PProjl -> Result
 transPProjl x = case x of
   PProjl str  -> failure x
@@ -111,6 +116,7 @@ transExpr x = case x of
   Coe pcoe  -> failure x
   Proj1 pprojl  -> failure x
   Proj2 pprojr  -> failure x
+  Pcon ppcon  -> failure x
   Iso piso  -> failure x
   NatConst pint  -> failure x
   Universe u  -> failure x

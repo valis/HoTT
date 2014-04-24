@@ -119,6 +119,10 @@ instance Print PCoe where
   prt _ (PCoe (_,i)) = doc (showString ( i))
 
 
+instance Print Ppcon where
+  prt _ (Ppcon (_,i)) = doc (showString ( i))
+
+
 instance Print PProjl where
   prt _ (PProjl (_,i)) = doc (showString ( i))
 
@@ -172,6 +176,7 @@ instance Print Expr where
    Coe pcoe -> prPrec i 8 (concatD [prt 0 pcoe])
    Proj1 pprojl -> prPrec i 8 (concatD [prt 0 pprojl])
    Proj2 pprojr -> prPrec i 8 (concatD [prt 0 pprojr])
+   Pcon ppcon -> prPrec i 8 (concatD [prt 0 ppcon])
    Iso piso -> prPrec i 8 (concatD [prt 0 piso])
    NatConst pint -> prPrec i 8 (concatD [prt 0 pint])
    Universe u -> prPrec i 8 (concatD [prt 0 u])

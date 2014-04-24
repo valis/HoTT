@@ -39,6 +39,7 @@ L_PSuc { PT _ (T_PSuc _) }
 L_PNat { PT _ (T_PNat _) }
 L_Pus { PT _ (T_Pus _) }
 L_PCoe { PT _ (T_PCoe _) }
+L_Ppcon { PT _ (T_Ppcon _) }
 L_PProjl { PT _ (T_PProjl _) }
 L_PProjr { PT _ (T_PProjr _) }
 L_PIso { PT _ (T_PIso _) }
@@ -58,6 +59,7 @@ PSuc    :: { PSuc} : L_PSuc { PSuc (mkPosToken $1)}
 PNat    :: { PNat} : L_PNat { PNat (mkPosToken $1)}
 Pus    :: { Pus} : L_Pus { Pus (mkPosToken $1)}
 PCoe    :: { PCoe} : L_PCoe { PCoe (mkPosToken $1)}
+Ppcon    :: { Ppcon} : L_Ppcon { Ppcon (mkPosToken $1)}
 PProjl    :: { PProjl} : L_PProjl { PProjl (mkPosToken $1)}
 PProjr    :: { PProjr} : L_PProjr { PProjr (mkPosToken $1)}
 PIso    :: { PIso} : L_PIso { PIso (mkPosToken $1)}
@@ -130,6 +132,7 @@ Expr8 : Arg { Var $1 }
   | PCoe { Coe $1 }
   | PProjl { Proj1 $1 }
   | PProjr { Proj2 $1 }
+  | Ppcon { Pcon $1 }
   | PIso { Iso $1 }
   | PInt { NatConst $1 }
   | U { Universe $1 }

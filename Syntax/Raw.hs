@@ -41,6 +41,7 @@ getPos (Pair e _) = getPos e
 getPos (Proj1 (PProjl (lc,_))) = lc
 getPos (Proj2 (PProjr (lc,_))) = lc
 getPos (Iso (PIso (lc,_))) = lc
+getPos (Pcon (Ppcon (lc,_))) = lc
 
 dropParens :: Expr -> Expr
 dropParens (Paren _ e) = dropParens e
@@ -100,6 +101,7 @@ ppExpr = go False
     go _ _ (Proj1 _) = text "proj1"
     go _ _ (Proj2 _) = text "proj2"
     go _ _ (Iso _) = text "iso"
+    go _ _ (Pcon _) = text "pcon"
     go _ _ (Universe (U (_,u))) = text u
     go True l e = parens (go False l e)
     go False l (Let defs e) = text "let" <+> vcat (map ppDef defs) $+$ text "in" <+> go False l e

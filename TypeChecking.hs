@@ -146,6 +146,23 @@ typeCheck (Proj2 (PProjr (lc,_))) (Just r@(Spi a'@(Ssigma a b) b')) = do
         then return T.Proj2
         else proj2ErrorMsg lc r
 typeCheck (Proj2 (PProjr (lc,_))) (Just exp) = proj2ErrorMsg lc exp
+typeCheck (App e4 e3) (Just ty) | App e5 e2 <- dropParens e4, App e6 e1 <- dropParens e5, Pcon (Ppcon (lc,_)) <- dropParens e6 = do
+    (i,c,_,_) <- ask
+    case ty of
+        Sid (Sid at a a') p p' -> do
+            r1 <- typeCheck e1 Nothing
+            r2 <- typeCheck e2 Nothing
+            t1 <- evalTCM r1
+            t2 <- evalTCM r2
+            let at1 = action (cubeMapf $ faceMap [Zero,Minus]) at
+                at' = idp 1 at1
+            if cmpTypes i 2 at at' && cmpValues i 1 t1 p at1 && cmpValues i 1 t2 p' at1
+                then do
+                    let at2 = Sid at1 (action (cubeMapf $ faceMap [Minus]) a) (action (cubeMapf $ faceMap [Plus]) a')
+                    r3 <- typeCheck e3 $ Just $ Sid (idp 0 at2) (comp 1 0 p a') (comp 1 0 a p')
+                    return $ T.App 0 (T.App 0 (T.App 0 T.Pcon r1) r2) r3
+                else errorTCM $ emsgLC lc "Something is wrong. Sorry" enull
+        _ -> errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But pcon has type of the form Id (Id _ _ _) _ _"
 typeCheck e (Just exp) = do
     r <- typeCheck e Nothing
     act <- typeOf r
@@ -159,6 +176,7 @@ typeCheck (Coe (PCoe (lc,_))) Nothing = inferErrorMsg lc "coe"
 typeCheck (App e1 e) Nothing | Idp _ <- dropParens e1 = fmap (T.App 0 T.Idp) (typeCheck e Nothing)
 typeCheck (Proj1 (PProjl (lc,_))) Nothing = inferErrorMsg lc "proj1"
 typeCheck (Proj2 (PProjr (lc,_))) Nothing = inferErrorMsg lc "proj2"
+typeCheck (Pcon (Ppcon (lc,_))) Nothing = inferErrorMsg lc "pcon"
 typeCheck (App e1 e) Nothing | Proj1 _ <- dropParens e1 = do
     r <- typeCheck e Nothing
     t <- typeOf r

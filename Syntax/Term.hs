@@ -38,6 +38,7 @@ data Term
     | Proj1
     | Proj2
     | Iso
+    | Pcon
     | NatConst Integer
     | Universe Level
     | Pair Term Term
@@ -68,6 +69,7 @@ freeLVars Coe = []
 freeLVars Proj1 = []
 freeLVars Proj2 = []
 freeLVars Iso = []
+freeLVars Pcon = []
 freeLVars (NatConst _) = []
 freeLVars (Universe _) = []
 freeLVars (Act _ t) = freeLVars t
@@ -105,6 +107,7 @@ liftTermDB' _ _ Coe = Coe
 liftTermDB' _ _ Proj1 = Proj1
 liftTermDB' _ _ Proj2 = Proj2
 liftTermDB' _ _ Iso = Iso
+liftTermDB' _ _ Pcon = Pcon
 liftTermDB' _ _ e@(NatConst _) = e
 liftTermDB' _ _ e@(Universe _) = e
 
@@ -153,6 +156,7 @@ instance Eq Term where
         cmp _ _ _ Proj1 Proj1 = True
         cmp _ _ _ Proj2 Proj2 = True
         cmp _ _ _ Iso Iso = True
+        cmp _ _ _ Pcon Pcon = True
         cmp _ _ _ (NatConst c1) (NatConst c2) = c1 == c2
         cmp _ _ _ (Universe l1) (Universe l2) = l1 == l2
         cmp _ _ _ _ _ = False
@@ -235,6 +239,7 @@ ppTerm ctx = go ctx False
     go _ _ _ Proj1 = text "proj1"
     go _ _ _ Proj2 = text "proj2"
     go _ _ _ Iso = text "iso"
+    go _ _ _ Pcon = text "pcon"
     go _ _ _ (Universe u) = text (show u)
     go ctx True l e = parens (go ctx False l e)
     go ctx False l (Let defs e) = text "let" <+> vcat (map (ppDef ctx) defs) $+$ text "in" <+> go ctx False l e
@@ -336,6 +341,7 @@ simplify Coe = Coe
 simplify Proj1 = Proj1
 simplify Proj2 = Proj2
 simplify Iso = Iso
+simplify Pcon = Pcon
 simplify e@(NatConst _) = e
 simplify e@(Universe _) = e
 

@@ -108,6 +108,7 @@ typeOf (Universe l) = return $ Stype (succ l)
 typeOf (Act _ _) = fail "typeOf.Act"
 typeOf Idp = fail "typeOf.Idp"
 typeOf Coe = fail "typeOf.Coe"
+typeOf Pcon = fail "typeOf.Pcon"
 typeOf Iso = 
     let term = Pi 0 [(["A"],Universe $ pred $ pred maxBound)] $
                Pi 0 [(["B"],Universe $ pred $ pred maxBound)] $

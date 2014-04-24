@@ -13,6 +13,7 @@ newtype PSuc = PSuc ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PNat = PNat ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype Pus = Pus ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PCoe = PCoe ((Int,Int),String) deriving (Eq,Ord,Show)
+newtype Ppcon = Ppcon ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjl = PProjl ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PProjr = PProjr ((Int,Int),String) deriving (Eq,Ord,Show)
 newtype PIso = PIso ((Int,Int),String) deriving (Eq,Ord,Show)
@@ -46,6 +47,7 @@ data Expr =
  | Coe PCoe
  | Proj1 PProjl
  | Proj2 PProjr
+ | Pcon Ppcon
  | Iso PIso
  | NatConst PInt
  | Universe U

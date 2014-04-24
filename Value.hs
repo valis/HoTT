@@ -6,7 +6,7 @@ module Value
     , cmpTypes, cmpValues
     , isFreeVar
     , reify, reifyType
-    , proj1, proj2, app, coe, pmap
+    , proj1, proj2, app, coe, pmap, comp
     , idp, action, reflect
     ) where
 
@@ -99,6 +99,9 @@ pmap n = app (n + 1)
 
 idp :: Integer -> Value -> Value
 idp n = action $ cubeMapd $ degMap $ genericReplicate n True ++ [False]
+
+comp :: Integer -> Integer -> Value -> Value -> Value
+comp n k _ _ = error $ "TODO: comp " ++ show (n,k)
 
 action :: CubeMap -> Value -> Value
 action m v | isIdc m = v
