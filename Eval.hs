@@ -82,11 +82,12 @@ rec n p z s = go
   where
     go Szero = z
     go (Ssuc x) = app n (app n s x) (go x)
-    go t@(Ne _ _ e) =
+    go t@(Ne _ (Cube c) e) =
         let r l = App n (App n Rec $ reify l n p $ sarr Snat $ Stype maxBound) $
                   App n (reify l n z $ app n p Szero) $
                   App n (reify l n s $ Spi Snat $ Slam "x" $ \m x ->
                             sarr (app (domc m) (action m p) x) $ app (domc m) (action m p) (Ssuc x))
                         (e l)
-        in reflect n r (app n p t)
+            face f = rec (domf f) (action (cubeMapf f) p) (action (cubeMapf f) z) (action (cubeMapf f) s) (c f)
+        in reflect n (Cube face) r (app n p t)
     go _ = error "rec"

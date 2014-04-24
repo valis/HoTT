@@ -8,7 +8,7 @@ module Cube
     , codf, codd, codc
     , composef, composed, composefd, composec
     , cubeMapf, cubeMapd
-    , isDeg
+    , isDeg, lastFace
     ) where
 
 import Data.List
@@ -125,3 +125,10 @@ isDeg :: DegMap -> Integer -> Bool
 isDeg (DegMap []) _ = False
 isDeg (DegMap (d:_)) 0 = not d
 isDeg (DegMap (_:ds)) n = isDeg (DegMap ds) (n - 1)
+
+lastFace :: FaceMap -> (FaceMap,Sign)
+lastFace (FaceMap []) = error "lastFace"
+lastFace (FaceMap [s]) = (FaceMap [], s)
+lastFace (FaceMap (s:ss)) =
+    let (FaceMap ss', l) = lastFace (FaceMap ss)
+    in (FaceMap (s:ss'), l)

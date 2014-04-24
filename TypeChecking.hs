@@ -142,7 +142,7 @@ typeCheck (Proj1 (PProjl (lc,_))) (Just exp) = proj1ErrorMsg lc exp
 -- proj2 : (p : (x : A) -> B x) -> B (proj1 p)
 typeCheck (Proj2 (PProjr (lc,_))) (Just r@(Spi a'@(Ssigma a b) b')) = do
     i <- askIndex
-    if cmpTypes (i + 1) 0 (app 0 b $ reflect 0 (\l -> T.App 0 T.Proj1 $ T.LVar $ l - i - 1) a) (app 0 b' $ svar i 0 a')
+    if cmpTypes (i + 1) 0 (app 0 b $ reflect0 (\l -> T.App 0 T.Proj1 $ T.LVar $ l - i - 1) a) (app 0 b' $ svar i 0 a')
         then return T.Proj2
         else proj2ErrorMsg lc r
 typeCheck (Proj2 (PProjr (lc,_))) (Just exp) = proj2ErrorMsg lc exp

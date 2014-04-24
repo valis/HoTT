@@ -1,13 +1,13 @@
 module Value
     ( Value(..)
-    , svar, gvar, sarr, sprod
+    , svar, sarr, sprod
     , Ctx, CtxV
     , ctxToCtxV
     , cmpTypes, cmpValues
     , isFreeVar
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, comp
-    , idp, action, reflect
+    , idp, action, reflect, reflect0
     ) where
 
 import qualified Data.Map as M
@@ -66,10 +66,9 @@ cmpValues :: DBIndex -> Integer -> Value -> Value -> Value -> Bool
 cmpValues i n e1 e2 t = reify i n e1 t == reify i n e2 t
 
 svar :: DBIndex -> Integer -> Value -> Value
-svar i n = reflect n $ \l -> LVar (l - i - 1)
-
-gvar :: String -> Integer -> Value -> Value
-gvar v n = reflect n $ \_ -> Var v
+svar i n = go n $ \l -> LVar (l - i - 1)
+  where
+    go n e a = reflect n (Cube $ \f -> go (domf f) (\l -> Act (cubeMapf f) (e l)) $ action (cubeMapf f) a) e a
 
 proj1 :: Value -> Value
 proj1 (Spair a _) = a
@@ -120,16 +119,25 @@ action m Snat = Snat
 action m (Sid t a b) = Sid (action m t) (action m a) (action m b)
 action m v@(Stype _) = v
 
-reflect :: Integer -> ITerm -> Value -> Value
-reflect n e (Sid t _ _) = reflect (n + 1) e t
-reflect _ e (Spi a (Slam x b)) =
-    Slam x $ \m v -> reflect (domc m) (\i -> App (domc m) (e i) $ reify i (domc m) v $ action m a) (b m v)
-reflect n e (Ssigma a b) =
-    let e1 = reflect n (\i -> App n Proj1 (e i)) a
-    in Spair e1 $ reflect n (\i -> App n Proj2 (e i)) (app n b e1)
-reflect n e _ = go n e
+reflect :: Integer -> Cube Value -> ITerm -> Value -> Value
+reflect n (Cube c) e (Sid t a a') = reflect (n + 1) (Cube face) e t
   where
-    go k e = Ne (idd k) (Cube $ \m -> go (domf m) $ Act (cubeMapf m) . e) e
+    face f = case lastFace f of
+                (f',Minus) -> action (cubeMapf f') a
+                (f',Plus) -> action (cubeMapf f') a'
+                (f',Zero) -> c f'
+reflect _ (Cube c) e (Spi a (Slam x b)) = Slam x go
+  where
+    go m v | isDegMap m = reflect (domc m) (Cube $ \f -> go (composefd f $ degs m) (action (cubeMapf f) v))
+                                           (\i -> App (domc m) (e i) $ reify i (domc m) v $ action m a) (b m v)
+           | otherwise = app (domc m) (action (cubeMapd $ degs m) $ c $ faces m) v
+reflect n (Cube c) e (Ssigma a b) =
+    let e1 = reflect n (Cube $ \f -> proj1 (c f)) (\i -> App n Proj1 (e i)) a
+    in Spair e1 $ reflect n (Cube $ \f -> proj2 (c f)) (\i -> App n Proj2 (e i)) (app n b e1)
+reflect n c e _ = Ne (idd n) c e
+
+reflect0 :: ITerm -> Value -> Value
+reflect0 = reflect 0 (error "reflect0")
 
 reify :: DBIndex -> Integer -> Value -> Value -> Term
 reify i n v (Sid t _ _) = reify i (n + 1) v t
