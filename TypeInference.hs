@@ -106,6 +106,7 @@ typeOf Rec = return $ eval 0 (M.empty,[]) $ Pi 0 [(["P"], Pi 0 [([],Nat)] $ Univ
 typeOf (NatConst _) = return Snat
 typeOf (Universe l) = return $ Stype (succ l)
 typeOf (Act _ _) = fail "typeOf.Act"
+typeOf (Comp _ _ _) = fail "typeOf.Comp"
 typeOf Idp = fail "typeOf.Idp"
 typeOf Coe = fail "typeOf.Coe"
 typeOf Pcon = fail "typeOf.Pcon"

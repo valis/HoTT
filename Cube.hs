@@ -8,7 +8,7 @@ module Cube
     , codf, codd, codc
     , composef, composed, composefd, composec
     , cubeMapf, cubeMapd
-    , isDeg, lastFace
+    , isDeg, signAt, lastFace, commonDeg
     ) where
 
 import Data.List
@@ -126,9 +126,23 @@ isDeg (DegMap []) _ = False
 isDeg (DegMap (d:_)) 0 = not d
 isDeg (DegMap (_:ds)) n = isDeg (DegMap ds) (n - 1)
 
+signAt :: FaceMap -> Integer -> Sign
+signAt (FaceMap ds) k = ds `genericIndex` k
+
 lastFace :: FaceMap -> (FaceMap,Sign)
 lastFace (FaceMap []) = error "lastFace"
 lastFace (FaceMap [s]) = (FaceMap [], s)
 lastFace (FaceMap (s:ss)) =
     let (FaceMap ss', l) = lastFace (FaceMap ss)
     in (FaceMap (s:ss'), l)
+
+-- commonDeg (x : a -> c) (y : a -> d) (k < a) : (r : a -> b, t : b -> c, s : b -> d, k' < b)
+-- composed r t == x, composed r s == y
+commonDeg :: DegMap -> DegMap -> Integer -> (DegMap, DegMap, DegMap, Integer)
+commonDeg (DegMap []) (DegMap []) k = (DegMap [], DegMap [], DegMap [], k)
+commonDeg (DegMap (d:ds)) (DegMap (d':ds')) k =
+    let (DegMap r, DegMap t, DegMap s, k') = commonDeg (DegMap ds) (DegMap ds') (k - 1)
+    in if d || d'
+        then (DegMap (True:r), DegMap (d:t), DegMap (d':s), if k == 0 then 0 else k' + 1)
+        else (DegMap (False:r), DegMap t, DegMap s, if k == 0 then 0 else k')
+commonDeg _ _ _ = error "commonDeg"

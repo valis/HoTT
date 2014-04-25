@@ -100,7 +100,24 @@ idp :: Integer -> Value -> Value
 idp n = action $ cubeMapd $ degMap $ genericReplicate n True ++ [False]
 
 comp :: Integer -> Integer -> Value -> Value -> Value
-comp n k _ _ = error $ "TODO: comp " ++ show (n,k)
+comp n k (Slam x f) (Slam _ f') = error $ "TODO: comp.Slam " ++ show (n,k)
+comp _ _ Szero Szero = Szero
+comp _ _ x@(Ssuc _) (Ssuc _) = x
+comp n k (Spair a b) (Spair a' b') = Spair (comp n k a a') (comp n k b b')
+comp n k (Spi a b) (Spi a' b') = Spi (comp n k a a') (comp n k b b')
+comp n k (Ssigma a b) (Ssigma a' b') = Ssigma (comp n k a a') (comp n k b b')
+comp _ _ Snat Snat = Snat
+comp _ _ x@(Stype _) (Stype _) = x
+comp n k (Sid a b c) (Sid a' b' c') = Sid (comp (n + 1) (k + 1) a a') (comp n k b b') (comp n k c c')
+comp n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
+comp n k (Ne d c e) (Ne d' c' e') =
+    let (cd,rd,rd',k') = commonDeg d d' k
+        face f = case signAt f k' of
+            Zero -> error "TODO: comp.1"
+            Minus -> error "TODO: comp.2"
+            Plus -> error "TODO: comp.3"
+    in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
+comp _ _ _ _ = error "comp"
 
 action :: CubeMap -> Value -> Value
 action m v | isIdc m = v
