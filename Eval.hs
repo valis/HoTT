@@ -39,25 +39,26 @@ eval n ctx@(gctx,lctx) (Let (Def v (Just (_,args)) d : ds) e) = eval n (gctx, ev
 eval n ctx (Lam _ args e) = go n ctx args
   where
     go n ctx []     = eval n ctx e
-    go n (ctx,lctx) s@(a:as) = Slam a $ \m v -> go (domc m) (M.map (action m) ctx, v : map (action m) lctx) as
+    go n (gctx,lctx) s@(a:as) = Slam a $ \m v -> go (domc m) (gctx, v : map (action m) lctx) as
 eval n ctx (Pi _ [] e) = eval n ctx e
 eval n (gctx,lctx) (Pi n' ((vs,t):ts) e) = go n gctx lctx vs $ eval n (gctx,lctx) t
   where
     go n gctx lctx [] tv = sarr tv $ eval n (gctx,lctx) (Pi n' ts e)
     go n gctx lctx [v] tv =
-        Spi tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) gctx, a : map (action m) lctx) (Pi n' ts e)
+        Spi tv $ Slam v $ \m a -> eval (domc m) (gctx, a : map (action m) lctx) (Pi n' ts e)
     go n gctx lctx (v:vs) tv = Spi tv $
-        Slam v $ \m a -> go (domc m) (M.map (action m) gctx) (a : map (action m) lctx) vs (action m tv)
+        Slam v $ \m a -> go (domc m) gctx (a : map (action m) lctx) vs (action m tv)
 eval n ctx (Sigma _ [] e) = eval n ctx e
 eval n (gctx,lctx) (Sigma n' ((vs,t):ts) e) = go n gctx lctx vs $ eval n (gctx,lctx) t
   where
     go n gctx lctx [] tv = sprod tv $ eval n (gctx,lctx) (Sigma n' ts e)
     go n gctx lctx [v] tv =
-        Ssigma tv $ Slam v $ \m a -> eval (domc m) (M.map (action m) gctx, a : map (action m) lctx) (Sigma n' ts e)
+        Ssigma tv $ Slam v $ \m a -> eval (domc m) (gctx, a : map (action m) lctx) (Sigma n' ts e)
     go n gctx lctx (v:vs) tv = Ssigma tv $
-        Slam v $ \m a -> go (domc m) (M.map (action m) gctx) (a : map (action m) lctx) vs (action m tv)
+        Slam v $ \m a -> go (domc m) gctx (a : map (action m) lctx) vs (action m tv)
 eval n ctx (App _ e1 e2) = app n (eval n ctx e1) (eval n ctx e2)
-eval n (ctx,_) (Var v) = fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
+eval n (ctx,_) (Var v) = action (cubeMapd $ degMap $ genericReplicate n False) $
+    fromMaybe (error $ "eval: Unknown identifier " ++ v) (M.lookup v ctx)
 eval _ _ NoVar = error "eval.NoVar"
 eval n (_,ctx) (LVar v) = ctx `genericIndex` v
 eval _ ctx Suc = Slam "n" $ \_ -> Ssuc
