@@ -120,13 +120,15 @@ comp n k (Path p) (Path q) = Path (go n k p q)
     go _ _ x@(Stype _) (Stype _) = x
     go n k (Sid a b c) (Sid a' b' c') = Sid (go (n + 1) (k + 1) a a') (go n k b b') (go n k c c')
     go n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
-    go n k (Ne d c e) (Ne d' c' e') =
+    go n k (Ne d c e) (Ne d' c' e') = error "TODO: comp"
+{-
         let (cd,rd,rd',k') = commonDeg d d' k
             face f = case signAt f k' of
                 Zero -> error "TODO: comp.1"
                 Minus -> error "TODO: comp.2"
                 Plus -> error "TODO: comp.3"
         in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
+-}
     go _ _ _ _ = error "comp"
 comp _ _ _ _ = error "pcomp"
 
