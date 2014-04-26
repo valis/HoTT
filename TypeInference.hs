@@ -75,7 +75,7 @@ typeOf (Pmap e1 e2) = do
     ctx <- askCtx
     case (t1,t2) of
         (Sid (Spi _ b@(Slam v _)) f g, Sid _ x y) ->
-            return $ Sid (app 1 b $ eval 0 (ctxToCtxV ctx) e2) (app 0 f x) (app 0 g y)
+            return $ Sid (app 1 b $ unPath $ eval 0 (ctxToCtxV ctx) e2) (app 0 f x) (app 0 g y)
         _ -> fail "typeOf.App.App.Pmap"
 typeOf (App _ Coe e) = do
     t <- typeOf e

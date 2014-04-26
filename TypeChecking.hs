@@ -113,7 +113,7 @@ typeCheck (Idp (PIdp (lc,_))) (Just ty) = do
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But idp has pi type"
 typeCheck e@(Coe (PCoe (lc,_))) (Just ty@(Spi a@(Sid (Stype _) x y) b)) = do
     i <- askIndex
-    case app 0 b $ svar i 0 a of
+    case app 0 b $ unPath (svar i 0 a) of
         Spi x' y' | cmpTypes i 0 x x' && cmpTypes (i + 1) 0 y (app 0 y' $ svar i 0 x') -> return T.Coe
         _ -> coeErrorMsg lc ty
 typeCheck (Coe (PCoe (lc,_))) (Just ty) = coeErrorMsg lc ty
@@ -155,11 +155,11 @@ typeCheck (App e4 e3) (Just ty) | App e5 e2 <- dropParens e4, App e6 e1 <- dropP
             t1 <- evalTCM r1
             t2 <- evalTCM r2
             let at1 = action (cubeMapf $ faceMap [Zero,Minus]) at
-                at' = idp 1 at1
-            if cmpTypes i 2 at at' && cmpValues i 1 t1 p at1 && cmpValues i 1 t2 p' at1
+                at' = unPath (idp 1 at1)
+            if cmpTypes i 2 at at' && cmpValues i 1 (unPath t1) (unPath p) at1 && cmpValues i 1 (unPath t2) (unPath p') at1
                 then do
                     let at2 = Sid at1 (action (cubeMapf $ faceMap [Minus]) a) (action (cubeMapf $ faceMap [Plus]) a')
-                    r3 <- typeCheck e3 $ Just $ Sid (idp 0 at2) (comp 1 0 p a') (comp 1 0 a p')
+                    r3 <- typeCheck e3 $ Just $ Sid (unPath $ idp 0 at2) (comp 1 0 p (Path a')) (comp 1 0 (Path a) p')
                     return $ T.App 0 (T.App 0 (T.App 0 T.Pcon r1) r2) r3
                 else errorTCM $ emsgLC lc "Something is wrong. Sorry" enull
         _ -> errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But pcon has type of the form Id (Id _ _ _) _ _"

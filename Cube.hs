@@ -6,6 +6,7 @@ module Cube
     , isFaceMap, isDegMap
     , domf, domd, domc
     , codf, codd, codc
+    , liftf, liftd, liftc
     , composef, composed, composefd, composec
     , cubeMapf, cubeMapd
     , isDeg, signAt, lastFace, commonDeg
@@ -100,7 +101,7 @@ composed (DegMap ds1) (DegMap ds2) = DegMap (go ds1 ds2)
     go (True:ds1) [] = error "composed.1"
     go (False:ds1) ds2 = False : go ds1 ds2
     go [] [] = []
-    go [] ds = ds
+    go [] _ = error "composed.2"
 
 composefd :: FaceMap -> DegMap -> CubeMap
 composefd (FaceMap []) (DegMap []) = CubeMap (DegMap []) (FaceMap [])
@@ -108,12 +109,21 @@ composefd (FaceMap (f:fs)) (DegMap (d:ds)) =
     let CubeMap (DegMap ds') (FaceMap fs') = composefd (FaceMap fs) (DegMap ds)
     in CubeMap (DegMap $ if f == Zero then d:ds' else ds') (FaceMap $ if d then f:fs' else fs')
 composefd (FaceMap []) d = cubeMapd d
-composefd f d = error $ "composefd " ++ show f ++ "," ++ show d
+composefd f d = error "composefd"
 
 composec :: CubeMap -> CubeMap -> CubeMap
 composec (CubeMap d1 f1) (CubeMap d2 f2) =
     let CubeMap d f = composefd f1 d2
     in CubeMap (composed d1 d) (composef f f2)
+
+liftf :: FaceMap -> FaceMap
+liftf (FaceMap f) = FaceMap (Zero:f)
+
+liftd :: DegMap -> DegMap
+liftd (DegMap d) = DegMap (True:d)
+
+liftc :: CubeMap -> CubeMap
+liftc (CubeMap d f) = CubeMap (liftd d) (liftf f)
 
 cubeMapf :: FaceMap -> CubeMap
 cubeMapf f = CubeMap (idd $ domf f) f
