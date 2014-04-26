@@ -68,8 +68,8 @@ ofType : (A : Type) -> A -> A
 ofType _ a = a
 
 Jx : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> (a a' : A) (p : a = a' | A) -> B a a (idp a) = B a a' p | Type10
-Jx A B a a' p = idp (B a) <*> p <*> ofType (idp a = p | idp (ofType (A -> Type10) (\a' -> a = a' | A)) <*> p) (pcon (idp a) p (idp p))
-                    -- [ B [a] p [p] ]
+Jx A B a a' p = idp (B a) <*> p <*> pcon p
+             -- [ (B a) p (pcon p) ]
 
 J : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> (a a' : A) (p : a = a' | A) -> B a a (idp a) -> B a a' p
 J A B a a' p = coe (Jx A B a a' p)

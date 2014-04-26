@@ -1,6 +1,6 @@
 module Cube
     ( Cube(..), Sign(..), CubeMap, DegMap, FaceMap
-    , faces, degs, faceMap, degMap
+    , faces, degs, faceMap, degMap, conMap
     , idf, idd, idc
     , isIdc, isIdf, isIdd
     , isFaceMap, isDegMap
@@ -26,6 +26,9 @@ faceMap = FaceMap
 
 degMap :: [Bool] -> DegMap
 degMap ds = DegMap ds 0
+
+conMap :: Integer -> DegMap
+conMap n = DegMap (genericReplicate (n + 1) True) 1
 
 signToChar :: Sign -> Char
 signToChar Plus = '+'

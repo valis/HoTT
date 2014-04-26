@@ -8,6 +8,7 @@ module Value
     , reify, reifyType
     , proj1, proj2, app, coe, pmap, comp
     , idp, action, reflect, reflect0
+    , pcon
     ) where
 
 import qualified Data.Map as M
@@ -131,6 +132,10 @@ comp n k (Path p) (Path q) = Path (go n k p q)
 -}
     go _ _ _ _ = error "comp"
 comp _ _ _ _ = error "pcomp"
+
+pcon :: Integer -> Value -> Value
+pcon n (Path p) = Path $ Path $ action (cubeMapd $ conMap $ n + 1) p
+pcon _ _ = error "pcon"
 
 action :: CubeMap -> Value -> Value
 action m v | isIdc m = v

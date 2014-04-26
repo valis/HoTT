@@ -81,7 +81,16 @@ typeOf (App _ Coe e) = do
     t <- typeOf e
     case t of
         Sid _ x y -> return (sarr x y)
-        _ -> fail "typeOfTerm.App.Coe"
+        _ -> fail "typeOf.App.Coe"
+typeOf (App _ Pcon e) = do
+    t <- typeOf e
+    ctx <- askCtx
+    case t of
+        Sid t x _ ->
+            let v = eval 0 (ctxToCtxV ctx) e
+                x' = idp 0 x
+            in return $ Sid (Sid (action (cubeMapd $ conMap 1) t) (unPath x') (unPath v)) x' v
+        _ -> fail "typeOf.Pcon"
 typeOf (App _ e1 e2) = do
     t1 <- typeOf e1
     ctx <- askCtx
