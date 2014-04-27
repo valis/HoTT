@@ -12,10 +12,10 @@ import Cube
 
 eval :: Integer -> CtxV -> Term -> Value
 -- iso A B f g
--- pmap (\A -> idp (iso A B f g)) (p : A1 = A2)
---   : iso A1 B (\a -> f (coe (inv p) a)) (\b -> coe (inv p) (g b)) = iso A2 B (f : A2 -> B) (g : B -> A2)
--- pmap (\A -> idp (iso A A (\x -> x) (\x -> x))) (p : A1 = A2)
---   : iso A2 A2 (\x -> coe p (coe (inv p) x)) (\x -> coe p (coe (inv p) x)) = iso A2 A2 (\x -> x) (\x -> x)
+-- pmap (\A -> pidp (iso A B f g)) (p : A1 = A2)
+--   : iso A1 B (\a -> f (pcoe (inv p) a)) (\b -> pcoe (inv p) (g b)) = iso A2 B (f : A2 -> B) (g : B -> A2)
+-- pmap (\A -> pidp (iso A A (\x -> x) (\x -> x))) (p : A1 = A2)
+--   : iso A2 A2 (\x -> pcoe p (pcoe (inv p) x)) (\x -> pcoe p (pcoe (inv p) x)) = iso A2 A2 (\x -> x) (\x -> x)
 {-
 eval _ _ Iso = Slam "A" $ \_  _  va ->
                Slam "B" $ \_  mb vb ->
@@ -26,8 +26,8 @@ eval _ _ Iso = Slam "A" $ \_  _  va ->
     Siso kq (error "TODO: eval.Iso.1") (error "TODO: eval.Iso.2") (error "TODO: eval.Iso.3")
             (error "TODO: eval.Iso.4") (error "TODO: eval.Iso.5") (error "TODO: eval.Iso.6")
 -}
-eval _ _ Idp = Slam "x" $ \m -> idp (domc m)
-eval _ _ Coe = Slam "p" $ \_ p -> Slam "x" $ \m -> coe (domc m) (action m p)
+eval _ _ Idp = Slam "x" $ \m -> pidp (domc m)
+eval _ _ Coe = Slam "p" $ \_ p -> Slam "x" $ \m -> pcoe (domc m) (action m p)
 -- pmap : {f g : (a : A) -> B a} -> f = g -> (p : a = a') -> transport B p (f a) = g a'
 eval n ctx (Pmap p q) = pmap n (eval n ctx p) (eval n ctx q)
 eval n ctx (Pair e1 e2) = Spair (eval n ctx e1) (eval n ctx e2)
@@ -79,6 +79,7 @@ eval n ctx (Id _ t a b) = Sid (unPath $ eval n ctx t) (eval n ctx a) (eval n ctx
 eval n ctx (Act m e) = action m (eval n ctx e)
 eval n ctx Pcon = Slam "p" $ \m -> pcon (domc m)
 eval n ctx (Comp k e1 e2) = comp n k (eval n ctx e1) (eval n ctx e2)
+eval n ctx (Inv k e) = inv n k (eval n ctx e)
 
 rec :: Integer -> Value -> Value -> Value -> Value -> Value
 rec n p z s = go

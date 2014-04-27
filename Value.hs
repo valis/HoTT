@@ -6,8 +6,8 @@ module Value
     , cmpTypes, cmpValues
     , isFreeVar
     , reify, reifyType
-    , proj1, proj2, app, coe, pmap, comp
-    , idp, action, reflect, reflect0
+    , proj1, proj2, app, pcoe, pmap, comp, inv
+    , idp, pidp, action, reflect, reflect0
     , pcon
     ) where
 
@@ -87,26 +87,44 @@ app :: Integer -> Value -> Value -> Value
 app n (Slam _ f) a = f (idc n) a
 app _ _ _ = error "Value.app"
 
-coe :: Integer -> Value -> Value -> Value
-coe n = go n . unPath
-  where
-    go :: Integer -> Value -> Value -> Value
-    go n (Spi a b) _ = error $ "TODO: coe.Spi " ++ show n
-    go n (Ssigma a b) _ = error $ "TODO: coe.Ssigma " ++ show n
-    go n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
-    go _ Snat x = x
-    go _ (Stype _) x = x
-    go _ (Ne ds _ _) x | isDeg ds 0 = x
-    go n (Ne ds fs t) x = Ne ds (Cube $ \m -> go (domf m) (unCube fs m) $ action (cubeMapf m) x) $
-        \i -> App n (App n Coe $ t i) $ reify i n x $ unCube fs $ faceMap (Minus : genericReplicate n Zero)
-    go _ _ _ = error "coe"
+fibr :: Bool -> Integer -> Value -> Value -> Value
+fibr d n (Spi a b) (Slam v f) = error "TODO: fibr.Slam"
+fibr d n (Ssigma a b) (Spair x y) =
+    let x' = fibr d n a x
+    in Spair x' $ fibr d n (app (n + 1) b x') y
+fibr d n (Sid t a b) (Path x) = error "TODO: fibr.Sid"
+fibr _ n Snat x = idp n x
+fibr _ n (Stype _) x = idp n x
+fibr d n (Ne _ _ _) _ = error "TODO: fibr.Ne"
+fibr _ _ _ _ = error "fibr"
+
+coe :: Bool -> Integer -> Value -> Value -> Value
+coe d n (Spi a b) (Slam v f) = error "TODO: coe.Slam"
+coe d n (Ssigma a b) (Spair x y) = Spair (coe d n a x) $ coe d n (app (n + 1) b $ fibr d n a x) y
+coe d n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
+coe _ _ Snat x = x
+coe _ _ (Stype _) x = x
+coe _ _ (Ne ds _ _) x | isDeg ds 0 = x
+coe d n (Ne ds fs t) x = Ne ds (Cube $ \m -> coe d (domf m) (unCube fs m) $ action (cubeMapf m) x) $
+    \i -> App n (App n Coe $ if d then t i else Inv n (t i))
+                (reify i n x $ unCube fs $ faceMap (Minus : genericReplicate n Zero))
+coe _ _ _ _ = error "coe"
+
+pcoe :: Integer -> Value -> Value -> Value
+pcoe n = coe True n . unPath
 
 pmap :: Integer -> Value -> Value -> Value
 pmap n (Path f) (Path a) = Path $ app (n + 1) f a
 pmap _ _ _ = error "pmap"
 
 idp :: Integer -> Value -> Value
-idp n x = Path $ action (cubeMapd $ degMap $ genericReplicate n True ++ [False]) x
+idp n x = action (cubeMapd $ degMap $ genericReplicate n True ++ [False]) x
+
+pidp :: Integer -> Value -> Value
+pidp n x = Path (idp n x)
+
+inv :: Integer -> Integer -> Value -> Value
+inv _ _ _ = error "TODO: inv"
 
 comp :: Integer -> Integer -> Value -> Value -> Value
 comp n k (Path p) (Path q) = Path (go n k p q)

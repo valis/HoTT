@@ -44,6 +44,7 @@ data Term
     | Pair Term Term
     | Act CubeMap Term
     | Comp Integer Term Term
+    | Inv Integer Term
 
 freeLVarsDef :: Def -> [DBIndex]
 freeLVarsDef (Def _ Nothing e) = freeLVars e
@@ -75,6 +76,7 @@ freeLVars (NatConst _) = []
 freeLVars (Universe _) = []
 freeLVars (Act _ t) = freeLVars t
 freeLVars (Comp _ e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (Inv _ e) = freeLVars e
 
 freeLVarsDep :: [([String],Term)] -> Term -> [DBIndex]
 freeLVarsDep [] e = freeLVars e
@@ -106,6 +108,7 @@ liftTermDB' _ _ Idp = Idp
 liftTermDB' n k (Pmap e1 e2) = Pmap (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Act t e) = Act t (liftTermDB' n k e)
 liftTermDB' n k (Comp m e1 e2) = Comp m (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (Inv m e) = Inv m (liftTermDB' n k e)
 liftTermDB' _ _ Coe = Coe
 liftTermDB' _ _ Proj1 = Proj1
 liftTermDB' _ _ Proj2 = Proj2
@@ -149,6 +152,7 @@ instance Eq Term where
         cmp c m1 m2 (Pmap a1 b1) (Pmap a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Act t1 e1) (Act t2 e2) = t1 == t2 && cmp c m1 m2 e1 e2
         cmp c m1 m2 (Comp k1 a1 b1) (Comp k2 a2 b2) = k1 == k2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Inv k1 e1) (Inv k2 e2) = k1 == k2 && cmp c m1 m2 e1 e2
         cmp c m1 m2 (LVar v1) (LVar v2) = v1 == v2
         cmp _ m1 m2 (Var v1) (Var v2) = M.lookup v1 m1 == M.lookup v2 m2
         cmp _ _ _ NoVar NoVar = True
@@ -270,9 +274,10 @@ ppTerm ctx = go ctx False
     go ctx False l (Pair e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <> comma <+> go ctx False l' e2
-    go ctx False l (Comp k e1 e2) =
+    go ctx False l (Comp n e1 e2) =
         let l' = fmap pred l
-        in text "comp" <+> integer k <+> go ctx True l' e1 <+> go ctx True l' e2
+        in text "comp" <> dim n <+> go ctx True l' e1 <+> go ctx True l' e2
+    go ctx False l (Inv n e) = text "inv" <> dim n <+> go ctx True (fmap pred l) e
     go ctx False l (Pmap e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <+> text "<*>" <+> go ctx True l' e2
@@ -338,6 +343,7 @@ simplify (Act t e) | isIdc t = simplify e
 simplify (Act t1 (Act t2 e)) = simplify $ Act (composec t1 t2) e
 simplify (Act t e) = Act t (simplify e)
 simplify (Comp k e1 e2) = Comp k (simplify e1) (simplify e2)
+simplify (Inv k e) = Inv k (simplify e)
 simplify e@(Var _) = e
 simplify e@(LVar _) = e
 simplify NoVar = NoVar

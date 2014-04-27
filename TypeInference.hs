@@ -89,7 +89,7 @@ typeOf (App _ Pcon e) = do
         Sid t x _ ->
             let v = eval 0 (ctxToCtxV ctx) e
                 x' = idp 0 x
-            in return $ Sid (Sid (action (cubeMapd $ conMap 1) t) (unPath x') (unPath v)) x' v
+            in return $ Sid (Sid (action (cubeMapd $ conMap 1) t) x' (unPath v)) (Path x') v
         _ -> fail "typeOf.Pcon"
 typeOf (App _ e1 e2) = do
     t1 <- typeOf e1
@@ -116,6 +116,7 @@ typeOf (NatConst _) = return Snat
 typeOf (Universe l) = return $ Stype (succ l)
 typeOf (Act _ _) = fail "typeOf.Act"
 typeOf (Comp _ _ _) = fail "typeOf.Comp"
+typeOf (Inv _ _) = fail "typeOf.Inv"
 typeOf Idp = fail "typeOf.Idp"
 typeOf Coe = fail "typeOf.Coe"
 typeOf Pcon = fail "typeOf.Pcon"
