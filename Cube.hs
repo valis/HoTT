@@ -8,7 +8,7 @@ module Cube
     , codf, codd, codc
     , liftf, liftd, liftc
     , composef, composed, composefd, composec
-    , cubeMapf, cubeMapd
+    , cubeMapf, cubeMapd, cubeMapc
     , isDeg, signAt, lastFace
     -- , commonDeg
     ) where
@@ -162,6 +162,9 @@ cubeMapf f = CubeMap (idd $ domf f) f
 
 cubeMapd :: DegMap -> CubeMap
 cubeMapd d = CubeMap d (idf $ codd d)
+
+cubeMapc :: DegMap -> FaceMap -> CubeMap
+cubeMapc = CubeMap
 
 isDeg :: DegMap -> Integer -> Bool
 isDeg (DegMap [] _) _ = False

@@ -88,7 +88,16 @@ app n (Slam _ f) a = f (idc n) a
 app _ _ _ = error "Value.app"
 
 fibr :: Bool -> Integer -> Value -> Value -> Value
-fibr d n (Spi a b) (Slam v f) = error "TODO: fibr.Slam"
+fibr d n (Spi a b) (Slam v g) = Slam v $ \m x -> if isDegMap m
+    then error "TODO: fibr.Slam"
+    else case lastFace (faces m) of
+            (f, Zero) -> case fibr d (domf f) (action (cubeMapf f) $ Spi a b) (action (cubeMapf f) $ Slam v g) of
+                Slam _ g' -> g' (cubeMapd $ degs m) x
+                _ -> error "fibr"
+            (f, s) | s == Minus && d || s == Plus && not d -> g (cubeMapc (degs m) f) x
+            (f, s) -> case coe d n (Spi a b) (Slam v g) of
+                Slam _ g' -> g' (cubeMapc (degs m) f) x
+                _ -> error "fibr"
 fibr d n (Ssigma a b) (Spair x y) =
     let x' = fibr d n a x
     in Spair x' $ fibr d n (app (n + 1) b x') y
@@ -99,7 +108,11 @@ fibr d n (Ne _ _ _) _ = error "TODO: fibr.Ne"
 fibr _ _ _ _ = error "fibr"
 
 coe :: Bool -> Integer -> Value -> Value -> Value
-coe d n (Spi a b) (Slam v f) = error "TODO: coe.Slam"
+coe d n (Spi a b) (Slam v f) = Slam v $ \m x ->
+    let a' = action m a
+        b' = action (liftc m) b
+        x' = coe (not d) (domc m) a' x
+    in coe d (domc m) (app (domc m + 1) b' $ fibr (not d) (domc m) a' x) (f m x')
 coe d n (Ssigma a b) (Spair x y) = Spair (coe d n a x) $ coe d n (app (n + 1) b $ fibr d n a x) y
 coe d n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
 coe _ _ Snat x = x
