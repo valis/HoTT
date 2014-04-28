@@ -78,8 +78,8 @@ eval n _ (Universe u) = Stype u
 eval n ctx (Id _ t a b) = Sid (unPath $ eval n ctx t) (eval n ctx a) (eval n ctx b)
 eval n ctx (Act m e) = action m (eval n ctx e)
 eval n ctx Pcon = Slam "p" $ \m -> pcon (domc m)
-eval n ctx (Comp k e1 e2) = comp n k (eval n ctx e1) (eval n ctx e2)
-eval n ctx (Inv k e) = inv n k (eval n ctx e)
+eval n ctx (Comp k e1 e2) = pcomp n k (eval n ctx e1) (eval n ctx e2)
+eval n ctx (Inv k e) = pinv n k (eval n ctx e)
 
 rec :: Integer -> Value -> Value -> Value -> Value -> Value
 rec n p z s = go

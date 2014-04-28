@@ -9,7 +9,7 @@ module Cube
     , liftf, liftd, liftc
     , composef, composed, composefd, composec
     , cubeMapf, cubeMapd, cubeMapc
-    , isDeg, signAt, lastFace
+    , isDeg, signAt, lastFace, getFace
     -- , commonDeg
     ) where
 
@@ -173,6 +173,13 @@ isDeg (DegMap (_:ds) k) n = isDeg (DegMap ds k) (n - 1)
 
 signAt :: FaceMap -> Integer -> Sign
 signAt (FaceMap ds) k = ds `genericIndex` k
+
+getFace :: FaceMap -> Integer -> ([Sign],Sign,[Sign])
+getFace (FaceMap []) _ = error "getFace"
+getFace (FaceMap (s:ss)) 0 = ([], s, ss)
+getFace (FaceMap (s:ss)) n =
+    let (s1, r, s2) = getFace (FaceMap ss) (n - 1)
+    in (s:s1, r, s2)
 
 lastFace :: FaceMap -> (FaceMap,Sign)
 lastFace (FaceMap []) = error "lastFace"

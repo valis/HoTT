@@ -6,7 +6,7 @@ module Value
     , cmpTypes, cmpValues
     , isFreeVar
     , reify, reifyType
-    , proj1, proj2, app, pcoe, pmap, comp, inv
+    , proj1, proj2, app, pcoe, pmap, comp, pcomp, inv, pinv
     , idp, pidp, action, reflect, reflect0
     , pcon
     ) where
@@ -91,7 +91,7 @@ fibr :: Bool -> Integer -> Value -> Value -> Value
 fibr d n (Spi a b) (Slam v g) = Slam v $ \m x -> if isDegMap m
     then error "TODO: fibr.Slam"
     else case lastFace (faces m) of
-            (f, Zero) -> case fibr d (domf f) (action (cubeMapf f) $ Spi a b) (action (cubeMapf f) $ Slam v g) of
+            (f, Zero) -> case fibr d (domf f + 1) (action (cubeMapf $ faces m) $ Spi a b) (action (cubeMapf f) $ Slam v g) of
                 Slam _ g' -> g' (cubeMapd $ degs m) x
                 _ -> error "fibr"
             (f, s) | s == Minus && d || s == Plus && not d -> g (cubeMapc (degs m) f) x
@@ -117,7 +117,7 @@ coe d n (Ssigma a b) (Spair x y) = Spair (coe d n a x) $ coe d n (app (n + 1) b 
 coe d n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
 coe _ _ Snat x = x
 coe _ _ (Stype _) x = x
-coe _ _ (Ne ds _ _) x | isDeg ds 0 = x
+coe _ _ (Ne ds _ _) x | isDeg ds (domd ds - 1) = x
 coe d n (Ne ds fs t) x = Ne ds (Cube $ \m -> coe d (domf m) (unCube fs m) $ action (cubeMapf m) x) $
     \i -> App n (App n Coe $ if d then t i else Inv n (t i))
                 (reify i n x $ unCube fs $ faceMap (Minus : genericReplicate n Zero))
@@ -136,33 +136,58 @@ idp n x = action (cubeMapd $ degMap $ genericReplicate n True ++ [False]) x
 pidp :: Integer -> Value -> Value
 pidp n x = Path (idp n x)
 
+pinv :: Integer -> Integer -> Value -> Value
+pinv n k (Path p) = Path (inv n k p)
+pinv _ _ _ = error "pinv"
+
 inv :: Integer -> Integer -> Value -> Value
-inv _ _ _ = error "TODO: inv"
+inv n k (Slam v g) = Slam v $ \m x -> if isDegMap m
+    then error "TODO: inv.Slam"
+    else case getFace (faces m) k of
+        (f1, Zero, _) ->
+            let g' = action (cubeMapf $ faces m) (Slam v g)
+            in action (cubeMapd $ degs m) $ inv (domf $ faces m) (domf $ faceMap f1) g'
+        (f1, Minus, f2) -> g (cubeMapc (degs m) (faceMap $ f1 ++ [Plus] ++ f2)) x
+        (f1, Plus, f2) -> g (cubeMapc (degs m) (faceMap $ f1 ++ [Minus] ++ f2)) x
+inv n k (Spair a b) = Spair (inv n k a) (inv n k b)
+inv _ _ Szero = Szero
+inv _ _ x@(Ssuc _) = x
+inv n k (Spi a b) = Spi (inv n k a) (inv n k b)
+inv n k (Ssigma a b) = Ssigma (inv n k a) (inv n k b)
+inv _ _ Snat = Snat
+inv _ _ x@(Stype _) = x
+inv n k (Sid t a b) = Sid (inv (n + 1) (k + 1) t) (inv n k a) (inv n k b)
+inv n k (Ne d c e) = error "TODO: inv.Ne"
+inv n k (Path p) = Path $ inv (n + 1) k p
+
+pcomp :: Integer -> Integer -> Value -> Value -> Value
+pcomp n k (Path p) (Path q) = Path (comp n k p q)
+pcomp _ _ _ _ = error "pcomp"
 
 comp :: Integer -> Integer -> Value -> Value -> Value
-comp n k (Path p) (Path q) = Path (go n k p q)
-  where
-    go n k (Slam x f) (Slam _ f') = error $ "TODO: comp.Slam " ++ show (n,k)
-    go _ _ Szero Szero = Szero
-    go _ _ x@(Ssuc _) (Ssuc _) = x
-    go n k (Spair a b) (Spair a' b') = Spair (go n k a a') (go n k b b')
-    go n k (Spi a b) (Spi a' b') = Spi (go n k a a') (go n k b b')
-    go n k (Ssigma a b) (Ssigma a' b') = Ssigma (go n k a a') (go n k b b')
-    go _ _ Snat Snat = Snat
-    go _ _ x@(Stype _) (Stype _) = x
-    go n k (Sid a b c) (Sid a' b' c') = Sid (go (n + 1) (k + 1) a a') (go n k b b') (go n k c c')
-    go n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
-    go n k (Ne d c e) (Ne d' c' e') = error "TODO: comp"
+comp n k (Slam v g) (Slam _ g') = Slam v $ \m x -> if isDegMap m
+    then undefined
+    else undefined
+comp _ _ Szero Szero = Szero
+comp _ _ x@(Ssuc _) (Ssuc _) = x
+comp n k (Spair a b) (Spair a' b') = Spair (comp n k a a') (comp n k b b')
+comp n k (Spi a b) (Spi a' b') = Spi (comp n k a a') (comp n k b b')
+comp n k (Ssigma a b) (Ssigma a' b') = Ssigma (comp n k a a') (comp n k b b')
+comp _ _ Snat Snat = Snat
+comp _ _ x@(Stype _) (Stype _) = x
+comp n k (Sid a b c) (Sid a' b' c') = Sid (comp (n + 1) (k + 1) a a') (comp n k b b') (comp n k c c')
+comp n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
+comp n k (Ne d c e) (Ne d' c' e') = error "TODO: comp.Ne"
 {-
-        let (cd,rd,rd',k') = commonDeg d d' k
-            face f = case signAt f k' of
-                Zero -> error "TODO: comp.1"
-                Minus -> error "TODO: comp.2"
-                Plus -> error "TODO: comp.3"
-        in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
+    let (cd,rd,rd',k') = commonDeg d d' k
+        face f = case signAt f k' of
+            Zero -> error "TODO: comp.1"
+            Minus -> error "TODO: comp.2"
+            Plus -> error "TODO: comp.3"
+    in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
 -}
-    go _ _ _ _ = error "comp"
-comp _ _ _ _ = error "pcomp"
+comp n k (Path p) (Path p') = error "TODO: comp.Path"
+comp _ _ _ _ = error "comp"
 
 pcon :: Integer -> Value -> Value
 pcon n (Path p) = Path $ Path $ action (cubeMapd $ conMap $ n + 1) p
