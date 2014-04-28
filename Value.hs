@@ -8,7 +8,7 @@ module Value
     , reify, reifyType
     , proj1, proj2, app, pcoe, pmap, comp, pcomp, inv, pinv
     , idp, pidp, action, reflect, reflect0
-    , pcon
+    , pcon, fibr, pfibr
     ) where
 
 import qualified Data.Map as M
@@ -104,7 +104,8 @@ fibr d n (Ssigma a b) (Spair x y) =
 fibr d n (Sid t a b) (Path x) = error "TODO: fibr.Sid"
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
-fibr d n (Ne _ _ _) _ = error "TODO: fibr.Ne"
+fibr d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> fibr d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
+    \i -> Fibr d n (t i) (reify i n x $ unCube fs $ faceMap (genericReplicate (n - 1) Zero ++ [Minus]))
 fibr _ _ _ _ = error "fibr"
 
 coe :: Bool -> Integer -> Value -> Value -> Value
@@ -118,10 +119,14 @@ coe d n (Sid t a b) _ = error $ "TODO: coe.Sid " ++ show n
 coe _ _ Snat x = x
 coe _ _ (Stype _) x = x
 coe _ _ (Ne ds _ _) x | isDeg ds (domd ds - 1) = x
-coe d n (Ne ds fs t) x = Ne ds (Cube $ \m -> coe d (domf m) (unCube fs m) $ action (cubeMapf m) x) $
+coe d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> coe d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
     \i -> App n (App n Coe $ if d then t i else Inv n (t i))
-                (reify i n x $ unCube fs $ faceMap (Minus : genericReplicate n Zero))
+                (reify i n x $ unCube fs $ faceMap (genericReplicate (n - 1) Zero ++ [Minus]))
 coe _ _ _ _ = error "coe"
+
+pfibr :: Bool -> Integer -> Value -> Value -> Value
+pfibr d n (Path p) x = Path (fibr d n p x)
+pfibr _ _ _ _ = error "pfibr"
 
 pcoe :: Integer -> Value -> Value -> Value
 pcoe n = coe True n . unPath

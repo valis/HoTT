@@ -149,10 +149,10 @@ composec (CubeMap d1 f1) (CubeMap d2 f2) =
     in CubeMap (composed d1 d) (composef f f2)
 
 liftf :: FaceMap -> FaceMap
-liftf (FaceMap f) = FaceMap (Zero:f)
+liftf (FaceMap f) = FaceMap (f ++ [Zero])
 
 liftd :: DegMap -> DegMap
-liftd (DegMap d n) = DegMap (True:d) n
+liftd (DegMap d n) = DegMap (d ++ [True]) n
 
 liftc :: CubeMap -> CubeMap
 liftc (CubeMap d f) = CubeMap (liftd d) (liftf f)

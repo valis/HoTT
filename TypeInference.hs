@@ -117,6 +117,7 @@ typeOf (Universe l) = return $ Stype (succ l)
 typeOf (Act _ _) = fail "typeOf.Act"
 typeOf (Comp _ _ _) = fail "typeOf.Comp"
 typeOf (Inv _ _) = fail "typeOf.Inv"
+typeOf (Fibr _ _ _ _) = fail "typeOf.Fibr"
 typeOf Idp = fail "typeOf.Idp"
 typeOf Coe = fail "typeOf.Coe"
 typeOf Pcon = fail "typeOf.Pcon"

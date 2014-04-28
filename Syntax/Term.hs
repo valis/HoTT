@@ -45,6 +45,7 @@ data Term
     | Act CubeMap Term
     | Comp Integer Term Term
     | Inv Integer Term
+    | Fibr Bool Integer Term Term
 
 freeLVarsDef :: Def -> [DBIndex]
 freeLVarsDef (Def _ Nothing e) = freeLVars e
@@ -77,6 +78,7 @@ freeLVars (Universe _) = []
 freeLVars (Act _ t) = freeLVars t
 freeLVars (Comp _ e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (Inv _ e) = freeLVars e
+freeLVars (Fibr _ _ e1 e2) = freeLVars e1 `union` freeLVars e2
 
 freeLVarsDep :: [([String],Term)] -> Term -> [DBIndex]
 freeLVarsDep [] e = freeLVars e
@@ -109,6 +111,7 @@ liftTermDB' n k (Pmap e1 e2) = Pmap (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Act t e) = Act t (liftTermDB' n k e)
 liftTermDB' n k (Comp m e1 e2) = Comp m (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Inv m e) = Inv m (liftTermDB' n k e)
+liftTermDB' n k (Fibr d m e1 e2) = Fibr d m (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' _ _ Coe = Coe
 liftTermDB' _ _ Proj1 = Proj1
 liftTermDB' _ _ Proj2 = Proj2
@@ -153,6 +156,7 @@ instance Eq Term where
         cmp c m1 m2 (Act t1 e1) (Act t2 e2) = t1 == t2 && cmp c m1 m2 e1 e2
         cmp c m1 m2 (Comp k1 a1 b1) (Comp k2 a2 b2) = k1 == k2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Inv k1 e1) (Inv k2 e2) = k1 == k2 && cmp c m1 m2 e1 e2
+        cmp c m1 m2 (Fibr d1 n1 a1 b1) (Fibr d2 n2 a2 b2) = d1 == d2 && n1 == n2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (LVar v1) (LVar v2) = v1 == v2
         cmp _ m1 m2 (Var v1) (Var v2) = M.lookup v1 m1 == M.lookup v2 m2
         cmp _ _ _ NoVar NoVar = True
@@ -278,6 +282,9 @@ ppTerm ctx = go ctx False
         let l' = fmap pred l
         in text "comp" <> dim n <+> go ctx True l' e1 <+> go ctx True l' e2
     go ctx False l (Inv n e) = text "inv" <> dim n <+> go ctx True (fmap pred l) e
+    go ctx False l (Fibr d n e1 e2) =
+        let l' = fmap pred l
+        in text (if d then "opfibr" else "fibr") <> dim n <+> go ctx True l' e1 <+> go ctx True l' e2
     go ctx False l (Pmap e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <+> text "<*>" <+> go ctx True l' e2
@@ -344,6 +351,7 @@ simplify (Act t1 (Act t2 e)) = simplify $ Act (composec t1 t2) e
 simplify (Act t e) = Act t (simplify e)
 simplify (Comp k e1 e2) = Comp k (simplify e1) (simplify e2)
 simplify (Inv k e) = Inv k (simplify e)
+simplify (Fibr d n e1 e2) = Fibr d n (simplify e1) (simplify e2)
 simplify e@(Var _) = e
 simplify e@(LVar _) = e
 simplify NoVar = NoVar
