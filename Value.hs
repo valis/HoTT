@@ -147,7 +147,7 @@ pinv _ _ _ = error "pinv"
 
 inv :: Integer -> Integer -> Value -> Value
 inv n k (Slam v g) = Slam v $ \m x -> if isDegMap m
-    then error "TODO: inv.Slam"
+    then inv (domc m) k $ g m (inv (domc m) k x)
     else case getFace (faces m) k of
         (f1, Zero, _) ->
             let g' = action (cubeMapf $ faces m) (Slam v g)
@@ -162,7 +162,14 @@ inv n k (Ssigma a b) = Ssigma (inv n k a) (inv n k b)
 inv _ _ Snat = Snat
 inv _ _ x@(Stype _) = x
 inv n k (Sid t a b) = Sid (inv (n + 1) (k + 1) t) (inv n k a) (inv n k b)
-inv n k (Ne d c e) = error "TODO: inv.Ne"
+inv n k x@(Ne d c e)
+    | isDeg d k = x
+    | otherwise =
+        let face f = case getFace f k of
+                        (f1, Zero, f2) -> inv (domf f) (domf $ faceMap f1) $ unCube c $ faceMap $ f1 ++ [Zero] ++ f2
+                        (f1, Minus, f2) -> unCube c $ faceMap $ f1 ++ [Plus] ++ f2
+                        (f1, Plus, f2) -> unCube c $ faceMap $ f1 ++ [Minus] ++ f2
+        in Ne d (Cube face) $ \i -> Inv k (e i)
 inv n k (Path p) = Path $ inv (n + 1) k p
 
 pcomp :: Integer -> Integer -> Value -> Value -> Value
