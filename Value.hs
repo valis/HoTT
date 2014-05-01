@@ -166,7 +166,7 @@ inv n k x@(Ne d c e)
     | isDeg d k = x
     | otherwise =
         let face f = case getFace f k of
-                        (f1, Zero, f2) -> inv (domf f) (domf $ faceMap f1) $ unCube c $ faceMap $ f1 ++ [Zero] ++ f2
+                        (f1, Zero, _) -> inv (domf f) (domf $ faceMap f1) (unCube c f)
                         (f1, Minus, f2) -> unCube c $ faceMap $ f1 ++ [Plus] ++ f2
                         (f1, Plus, f2) -> unCube c $ faceMap $ f1 ++ [Minus] ++ f2
         in Ne d (Cube face) $ \i -> Inv k (e i)
@@ -177,9 +177,19 @@ pcomp n k (Path p) (Path q) = Path (comp n k p q)
 pcomp _ _ _ _ = error "pcomp"
 
 comp :: Integer -> Integer -> Value -> Value -> Value
-comp n k (Slam v g) (Slam _ g') = Slam v $ \m x -> if isDegMap m
-    then undefined
-    else undefined
+comp n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
+    then let m' = cubeMapc (degMap $ gen (domc m) k True False) (faceMap $ gen (domc m) k Zero Minus)
+         in comp (domc m) k (g m $ action m' x) (g' m x)
+    else case getFace (faces m) k of
+        (f1, Zero, _) ->
+            let g1 = action (cubeMapf $ faces m) (Slam v g)
+                g1' = action (cubeMapf $ faces m) (Slam v' g')
+            in action (cubeMapd $ degs m) $ comp (domf $ faces m) (domf $ faceMap f1) g1 g1'
+        (_, Minus, _) -> g m x
+        (_, Plus, _) -> g' m x
+  where
+    gen :: Integer -> Integer -> a -> a -> [a]
+    gen n k x y = genericReplicate k x ++ [y] ++ genericReplicate (n - k - 1) x
 comp _ _ Szero Szero = Szero
 comp _ _ x@(Ssuc _) (Ssuc _) = x
 comp n k (Spair a b) (Spair a' b') = Spair (comp n k a a') (comp n k b b')
@@ -189,16 +199,14 @@ comp _ _ Snat Snat = Snat
 comp _ _ x@(Stype _) (Stype _) = x
 comp n k (Sid a b c) (Sid a' b' c') = Sid (comp (n + 1) (k + 1) a a') (comp n k b b') (comp n k c c')
 comp n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
-comp n k (Ne d c e) (Ne d' c' e') = error "TODO: comp.Ne"
-{-
+comp n k (Ne d c e) (Ne d' c' e') =
     let (cd,rd,rd',k') = commonDeg d d' k
-        face f = case signAt f k' of
-            Zero -> error "TODO: comp.1"
-            Minus -> error "TODO: comp.2"
-            Plus -> error "TODO: comp.3"
+        face f = case getFace f k' of
+            (f1, Zero, _) -> comp (domf f) (domf $ faceMap f1) (unCube c f) (unCube c' f)
+            (_, Minus, _) -> unCube c f
+            (_, Plus, _) -> unCube c' f
     in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
--}
-comp n k (Path p) (Path p') = error "TODO: comp.Path"
+comp n k (Path p) (Path p') = Path $ comp (n + 1) k p p'
 comp _ _ _ _ = error "comp"
 
 pcon :: Integer -> Value -> Value

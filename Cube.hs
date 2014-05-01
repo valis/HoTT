@@ -9,8 +9,8 @@ module Cube
     , liftf, liftd, liftc
     , composef, composed, composefd, composec
     , cubeMapf, cubeMapd, cubeMapc
-    , isDeg, signAt, lastFace, getFace
-    -- , commonDeg
+    , isDeg, lastFace, getFace
+    , commonDeg
     ) where
 
 import Data.List
@@ -171,9 +171,6 @@ isDeg (DegMap [] _) _ = False
 isDeg (DegMap (d:_) _) 0 = not d
 isDeg (DegMap (_:ds) k) n = isDeg (DegMap ds k) (n - 1)
 
-signAt :: FaceMap -> Integer -> Sign
-signAt (FaceMap ds) k = ds `genericIndex` k
-
 getFace :: FaceMap -> Integer -> ([Sign],Sign,[Sign])
 getFace (FaceMap []) _ = error "getFace"
 getFace (FaceMap (s:ss)) 0 = ([], s, ss)
@@ -188,15 +185,13 @@ lastFace (FaceMap (s:ss)) =
     let (FaceMap ss', l) = lastFace (FaceMap ss)
     in (FaceMap (s:ss'), l)
 
-{-
 -- commonDeg (x : a -> c) (y : a -> d) (k < a) : (r : a -> b, t : b -> c, s : b -> d, k' < b)
 -- composed r t == x, composed r s == y
 commonDeg :: DegMap -> DegMap -> Integer -> (DegMap, DegMap, DegMap, Integer)
-commonDeg (DegMap []) (DegMap []) k = (DegMap [], DegMap [], DegMap [], k)
-commonDeg (DegMap (d:ds)) (DegMap (d':ds')) k =
-    let (DegMap r, DegMap t, DegMap s, k') = commonDeg (DegMap ds) (DegMap ds') (k - 1)
+commonDeg (DegMap [] n) (DegMap [] n') k = (DegMap [] 0, DegMap [] n, DegMap [] n', k)
+commonDeg (DegMap (d:ds) n) (DegMap (d':ds') n') k =
+    let (DegMap r rn, DegMap t tn, DegMap s sn, k') = commonDeg (DegMap ds n) (DegMap ds' n') (k - 1)
     in if d || d'
-        then (DegMap (True:r), DegMap (d:t), DegMap (d':s), if k == 0 then 0 else k' + 1)
-        else (DegMap (False:r), DegMap t, DegMap s, if k == 0 then 0 else k')
+        then (DegMap (True:r) rn, DegMap (d:t) tn, DegMap (d':s) sn, if k == 0 then 0 else k' + 1)
+        else (DegMap (False:r) rn, DegMap t tn, DegMap s sn, if k == 0 then 0 else k')
 commonDeg _ _ _ = error "commonDeg"
--}
