@@ -89,7 +89,7 @@ typeOf (App _ Pcon e) = do
         Sid t x _ ->
             let v = eval 0 (ctxToCtxV ctx) e
                 x' = idp 0 x
-            in return $ Sid (Sid (action (cubeMapd $ conMap 1) t) x' (unPath v)) (Path x') v
+            in return $ Sid (Sid (action (cubeMapd $ conMap 1) t) x' (unPath v)) (Spath x') v
         _ -> fail "typeOf.Pcon"
 typeOf (App _ e1 e2) = do
     t1 <- typeOf e1
