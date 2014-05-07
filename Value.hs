@@ -9,6 +9,7 @@ module Value
     , proj1, proj2, app, pcoe, pmap, comp, pcomp, inv, pinv
     , idp, pidp, action, reflect, reflect0
     , pcon, fibr, pfibr
+    , path, unPath
     ) where
 
 import qualified Data.Map as M
@@ -25,7 +26,7 @@ data Value
     | Spi Value Value | Ssigma Value Value | Snat | Stype Level -- Constructors for Type_k
     | Sid Value Value Value
     | Ne DegMap (Cube Value) ITerm
-    | Spath { unPath :: Value } -- Constructor for Id-types
+    | Spath Value | SpathLam Value Value -- Constructor for Id-types
 type Ctx  = (M.Map String (Value,Value), [(Value,Value)])
 type CtxV = (M.Map String Value, [Value])
 
@@ -53,6 +54,7 @@ isFreeVar _ _ (Stype _) = False
 isFreeVar k i (Sid t a b) = isFreeVar k i t || isFreeVar k i a || isFreeVar k i b
 isFreeVar k i (Ne _ _ t) = elem k $ freeLVars (t i)
 isFreeVar k i (Spath t) = isFreeVar k i t
+isFreeVar k i (SpathLam t _) = isFreeVar k i t
 
 cmpTypes :: DBIndex -> Integer -> Value -> Value -> Bool
 cmpTypes i n (Spi a b) (Spi a' b') =
@@ -99,7 +101,8 @@ fibr d n (Spi a b) (Slam v g) = Slam v $ \m x -> if isDegMap m
 fibr d n (Ssigma a b) (Spair x y) =
     let x' = fibr d n a x
     in Spair x' $ fibr d n (app (n + 1) b x') y
-fibr d n (Sid t a b) (Spath x) = error "TODO: fibr.Sid"
+fibr d n (Sid t a b) (Spath x) = error "TODO: fibr.Spath"
+fibr d n (Sid t a b) (SpathLam x f) = error "TODO: fibr.SpathLam"
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
 fibr d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> fibr d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
@@ -123,6 +126,8 @@ coe d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> coe d (domf f) (unCube fs $ lif
 coe _ _ _ _ = error "coe"
 
 pfibr :: Bool -> Integer -> Value -> Value -> Value
+pfibr d n (Spath p) x@(Slam v f) = SpathLam (fibr d n p x) (coe d n p x)
+pfibr d n (Spath p) x@(SpathLam q f) = SpathLam (fibr d n p x) (coe d n p x)
 pfibr d n (Spath p) x = Spath (fibr d n p x)
 pfibr _ _ _ _ = error "pfibr"
 
@@ -130,17 +135,29 @@ pcoe :: Integer -> Value -> Value -> Value
 pcoe n = coe True n . unPath
 
 pmap :: Integer -> Value -> Value -> Value
-pmap n (Spath f) (Spath a) = Spath $ app (n + 1) f a
+-- pmap n (SpathLam f _) (Spath a) = Spath $ app (n + 1) f a
+pmap n (SpathLam f _) _ = error "TODO: pmap"
 pmap _ _ _ = error "pmap"
 
 idp :: Integer -> Value -> Value
 idp n x = action (cubeMapd $ degMap $ genericReplicate n True ++ [False]) x
 
 pidp :: Integer -> Value -> Value
-pidp n x = Spath (idp n x)
+pidp n x = path (idp n x) x
+
+path :: Value -> Value -> Value
+path x@(Slam _ _) y = SpathLam x y
+path x@(SpathLam _ _) y = SpathLam x y
+path x _ = Spath x
+
+unPath :: Value -> Value
+unPath (Spath p) = p
+unPath (SpathLam p f) = error "TODO: unPath"
+unPath _ = error "unPath"
 
 pinv :: Integer -> Integer -> Value -> Value
 pinv n k (Spath p) = Spath (inv n k p)
+pinv _ _ (SpathLam _ _) = error "TODO: pinv"
 pinv _ _ _ = error "pinv"
 
 inv :: Integer -> Integer -> Value -> Value
@@ -169,9 +186,11 @@ inv n k x@(Ne d c e)
                         (f1, Plus, f2) -> unCube c $ faceMap $ f1 ++ [Minus] ++ f2
         in Ne d (Cube face) $ \i -> Inv k (e i)
 inv n k (Spath p) = Spath $ inv (n + 1) k p
+inv n k (SpathLam _ _) = error "TODO: inv"
 
 pcomp :: Integer -> Integer -> Value -> Value -> Value
 pcomp n k (Spath p) (Spath q) = Spath (comp n k p q)
+pcomp _ _ (SpathLam _ _) _ = error "TODO: pcomp"
 pcomp _ _ _ _ = error "pcomp"
 
 comp :: Integer -> Integer -> Value -> Value -> Value
@@ -205,10 +224,12 @@ comp n k (Ne d c e) (Ne d' c' e') =
             (_, Plus, _) -> unCube c' f
     in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
 comp n k (Spath p) (Spath p') = Spath $ comp (n + 1) k p p'
+comp n k (SpathLam _ _) (SpathLam _ _) = error "TODO: comp"
 comp _ _ _ _ = error "comp"
 
 pcon :: Integer -> Value -> Value
 pcon n (Spath p) = Spath $ Spath $ action (cubeMapd $ conMap $ n + 1) p
+pcon _ (SpathLam _ _) = error "TODO: pcon"
 pcon _ _ = error "pcon"
 
 action :: CubeMap -> Value -> Value
@@ -228,9 +249,10 @@ action m Snat = Snat
 action m (Sid t a b) = Sid (action (liftc m) t) (action m a) (action m b)
 action m v@(Stype _) = v
 action m (Spath t) = Spath $ action (liftc m) t
+action m (SpathLam _ _) = error "TODO: action"
 
 reflect :: Integer -> Cube Value -> ITerm -> Value -> Value
-reflect n (Cube c) e (Sid t a a') = Spath $ reflect (n + 1) (Cube face) e t
+reflect n (Cube c) e (Sid t a a') = Spath $ reflect (n + 1) (Cube face) e t -- TODO
   where
     face f = case lastFace f of
                 (f',Minus) -> action (cubeMapf f') a
@@ -252,6 +274,8 @@ reflect0 = reflect 0 (error "reflect0")
 reify :: DBIndex -> Integer -> Value -> Value -> Term
 reify i n (Spath v) (Sid t _ _) = reify i (n + 1) v t
 reify i n (Spath _) _ = error "reify.Spath"
+reify i n (SpathLam v _) (Sid t _ _) = reify i (n + 1) v t -- TODO
+reify i n (SpathLam _ _) _ = error "reify.SpathLam"
 reify i n (Slam x f) (Spi a b) =
     let v = svar i n a
     in Lam n [x] $ reify (i + 1) n (f (idc n) v) (app n b v)
