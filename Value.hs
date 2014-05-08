@@ -135,9 +135,7 @@ pcoe :: Integer -> Value -> Value -> Value
 pcoe n = coe True n . unPath
 
 pmap :: Integer -> Value -> Value -> Value
--- pmap n (SpathLam f _) (Spath a) = Spath $ app (n + 1) f a
-pmap n (SpathLam f _) _ = error "TODO: pmap"
-pmap _ _ _ = error "pmap"
+pmap n p a = path1 n $ app (n + 1) (unPath p) (unPath a)
 
 idp :: Integer -> Value -> Value
 idp n x = action (cubeMapd $ degMap $ genericReplicate n True ++ [False]) x
@@ -149,6 +147,9 @@ path :: Value -> Value -> Value
 path x@(Slam _ _) y = SpathLam x y
 path x@(SpathLam _ _) y = SpathLam x y
 path x _ = Spath x
+
+path1 :: Integer -> Value -> Value
+path1 n x = path x $ action (cubeMapf $ faceMap $ genericReplicate n Zero ++ [Plus]) x
 
 unPath :: Value -> Value
 unPath (Spath p) = p
@@ -252,7 +253,7 @@ action m (Spath t) = Spath $ action (liftc m) t
 action m (SpathLam _ _) = error "TODO: action"
 
 reflect :: Integer -> Cube Value -> ITerm -> Value -> Value
-reflect n (Cube c) e (Sid t a a') = Spath $ reflect (n + 1) (Cube face) e t -- TODO
+reflect n (Cube c) e (Sid t a a') = path1 n $ reflect (n + 1) (Cube face) e t
   where
     face f = case lastFace f of
                 (f',Minus) -> action (cubeMapf f') a
