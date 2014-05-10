@@ -10,6 +10,9 @@ coeTest2 A = idp (\a -> a)
 transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' | A -> B a -> B a'
 transport A B a a' p = coe (idp B <*> p)
 
+comp : (A : Type) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A) -> a1 = a3 | A
+comp A a1 a2 a3 p q = transport A (\a3 -> a1 = a3 | A) a2 a3 q p
+
 ofType : (A : Type) -> A -> A
 ofType _ a = a
 
@@ -51,6 +54,12 @@ depTest3 A B C a a' p f b' =
 J : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> ((a : A) -> B a a (idp a))
     -> (a a' : A) (p : a = a' | A) -> B a a' p
 J A B d a a' p = coe (idp (B a) <*> p <*> pcon p) (d a)
+
+fcomp : (A B : Type10) (f : A -> B) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A)
+    -> idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B
+fcomp A B f a1 a2 a3 p q = J A (\a2 a3 q -> (a1 : A) (p : a1 = a2 | A) ->
+    idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
+    (\_ _ p -> idp (idp f <*> p)) q a1 p
 
 depmap : (A : Type10) (B : A -> Type10) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
 -- depmap A B f = J A (\a a' p -> transport A B a a' p (f a) = f a') (\a -> idp (f a))
