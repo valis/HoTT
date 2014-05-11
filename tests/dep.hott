@@ -51,17 +51,17 @@ depTest3 A B C a a' p f b' =
     in transport ((a : A) * B a) (\e -> C (proj1 e) (proj2 e)) (a,b) (a',b') (p,?) (f b)
 -}
 
-J : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> ((a : A) -> B a a (idp a))
+J : (A : Type) (B : (a a' : A) -> a = a' | A -> Type) -> ((a : A) -> B a a (idp a))
     -> (a a' : A) (p : a = a' | A) -> B a a' p
 J A B d a a' p = coe (idp (B a) <*> p <*> pcon p) (d a)
 
-fcomp : (A B : Type10) (f : A -> B) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A)
+fcomp : (A B : Type) (f : A -> B) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A)
     -> idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B
 fcomp A B f a1 a2 a3 p q = J A (\a2 a3 q -> (a1 : A) (p : a1 = a2 | A) ->
     idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
     (\_ _ p -> idp (idp f <*> p)) a2 a3 q a1 p
 
-depmap : (A : Type10) (B : A -> Type10) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
+depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
 -- depmap A B f = J A (\a a' p -> transport A B a a' p (f a) = f a') (\a -> idp (f a))
 depmap A B f = J A (\a a' p -> coe (idp B <*> p) (f a) = f a' | B a') (\a -> idp (f a))
 -- = [f p]
@@ -82,16 +82,16 @@ J'dep A B a a' p = deppmap (a = a') (\_ -> Type1) (transport A (\a' -> a = a' ->
 inv : (A : Type) (a a' : A) -> a = a' | A -> a' = a | A
 inv A a a' p = transport A (\a' -> a' = a | A) a a' p (idp a)
 
-invIdpTest1 : (A : Type10) (a a' : A) (p : a = a' | A) -> comp A a' a a' (inv A a a' p) p = idp a' | a' = a' | A
+invIdpTest1 : (A : Type) (a a' : A) (p : a = a' | A) -> comp A a' a a' (inv A a a' p) p = idp a' | a' = a' | A
 invIdpTest1 A = J A (\a a' p -> comp A a' a a' (inv A a a' p) p = idp a' | a' = a' | A) (\a -> idp (idp a))
 
-invIdpTest2 : (A : Type10) (a a' : A) (p : a = a' | A) -> comp A a a' a p (inv A a a' p) = idp a | a = a | A
+invIdpTest2 : (A : Type) (a a' : A) (p : a = a' | A) -> comp A a a' a p (inv A a a' p) = idp a | a = a | A
 invIdpTest2 A = J A (\a a' p -> comp A a a' a p (inv A a a' p) = idp a | a = a | A) (\a -> idp (idp a))
 
-invIdpTest3 : (A : Type10) (a a' : A) (p : a = a' | A) -> idp a' = comp A a' a a' (inv A a a' p) p | a' = a' | A
+invIdpTest3 : (A : Type) (a a' : A) (p : a = a' | A) -> idp a' = comp A a' a a' (inv A a a' p) p | a' = a' | A
 invIdpTest3 A = J A (\a a' p -> idp a' = comp A a' a a' (inv A a a' p) p | a' = a' | A) (\a -> idp (idp a))
 
-invIdpTest4 : (A : Type10) (a a' : A) (p : a = a' | A) -> idp a = comp A a a' a p (inv A a a' p) | a = a | A
+invIdpTest4 : (A : Type) (a a' : A) (p : a = a' | A) -> idp a = comp A a a' a p (inv A a a' p) | a = a | A
 invIdpTest4 A = J A (\a a' p -> idp a = comp A a a' a p (inv A a a' p) | a = a | A) (\a -> idp (idp a))
 
 depmap'fail : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'

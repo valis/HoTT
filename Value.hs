@@ -188,8 +188,10 @@ compl n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
   where
     gen :: Integer -> Integer -> a -> a -> [a]
     gen n k x y = genericReplicate k x ++ [y] ++ genericReplicate (n - k - 1) x
-compl _ _ Szero Szero = Szero
-compl _ _ x@(Ssuc _) (Ssuc _) = x
+compl _ _ Szero x = x
+compl _ _ x Szero = x
+compl _ _ (Ssuc _) x = x
+compl _ _ x (Ssuc _) = x
 compl n k (Spair a b) (Spair a' b') = Spair (compl n k a a') (compl n k b b')
 compl n k (Spi a b) (Spi a' b') = Spi (compl n k a a') (compl n k b b')
 compl n k (Ssigma a b) (Ssigma a' b') = Ssigma (compl n k a a') (compl n k b b')
@@ -221,8 +223,10 @@ compr n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
   where
     gen :: Integer -> Integer -> a -> a -> [a]
     gen n k x y = genericReplicate k x ++ [y] ++ genericReplicate (n - k - 1) x
-compr _ _ Szero Szero = Szero
-compr _ _ x@(Ssuc _) (Ssuc _) = x
+compr _ _ Szero x = x
+compr _ _ x Szero = x
+compr _ _ (Ssuc _) x = x
+compr _ _ x (Ssuc _) = x
 compr n k (Spair a b) (Spair a' b') = Spair (compr n k a a') (compr n k b b')
 compr n k (Spi a b) (Spi a' b') = Spi (compr n k a a') (compr n k b b')
 compr n k (Ssigma a b) (Ssigma a' b') = Ssigma (compr n k a a') (compr n k b b')
@@ -307,10 +311,12 @@ reify i n (Spair e1 e2) (Ssigma a b) = Pair (reify i n e1 a) (reify i n e2 $ app
 reify _ _ (Spair _ _) _ = error "reify.Spair"
 reify _ n Szero Snat = iterate (App 0 Idp) (NatConst 0) `genericIndex` n
 reify _ _ Szero _ = error "reify.Szero"
-reify i n (Ssuc e) Snat = iidp n $ case reify i n e Snat of
-    NatConst k -> NatConst (k + 1)
-    t -> App 0 Suc t
+reify i n (Ssuc e) Snat = case dropIdps n (reify i n e Snat) of
+    NatConst k -> iidp n $ NatConst (k + 1)
+    t -> App n Suc t
   where iidp k x = iterate (App 0 Idp) x `genericIndex` k
+        dropIdps n (App 0 Idp r) = dropIdps (n - 1) r
+        dropIdps _ r = r
 reify _ _ (Ssuc _) _ = error "reify.Ssuc"
 reify i n (Spi a (Slam x b)) u@(Stype _) =
     Pi n [([x],reify i n a u)] $ reify (i + 1) n (b (idc n) $ svar i n a) u

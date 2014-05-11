@@ -18,3 +18,68 @@ succ = idp sht
 
 fail : sht = 120 | Nat
 fail = idp 121
+
+J : (A : Type) (B : (a a' : A) -> a = a' | A -> Type) -> ((a : A) -> B a a (idp a))
+    -> (a a' : A) (p : a = a' | A) -> B a a' p
+J A B d a a' p = coe (idp (B a) <*> p <*> pcon p) (d a)
+
+assoc : (x y z : Nat) -> plus (plus x y) z = plus x (plus y z) | Nat
+assoc x y z = R (\x -> plus (plus x y) z = plus x (plus y z) | Nat) (idp (plus y z)) (\_ r -> idp suc <*> r) x
+
+transport : (A : Type) (B : A -> Type) (a a' : A) -> a = a' | A -> B a -> B a'
+transport A B a a' p = coe (idp B <*> p)
+
+comp : (A : Type) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A) -> a1 = a3 | A
+comp A a1 a2 a3 p q = transport A (\a3 -> a1 = a3 | A) a2 a3 q p
+
+inv : (A : Type) (a a' : A) -> a = a' | A -> a' = a | A
+inv A a a' p = transport A (\a' -> a' = a | A) a a' p (idp a)
+
+ofType : (A : Type) -> A -> A
+ofType _ a = a
+
+plus0 : (n : Nat) -> plus n 0 = n | Nat
+plus0 = R (\n -> plus n 0 = n | Nat) (idp 0) (\_ r -> idp suc <*> r)
+
+plus_suc : (n m : Nat) -> plus n (suc m) = suc (plus n m) | Nat
+plus_suc n m = R (\n -> plus n (suc m) = suc (plus n m) | Nat) (idp (suc m)) (\_ r -> idp suc <*> r) n
+
+plus_comm_fail : (n m : Nat) -> plus n m = plus m n | Nat
+plus_comm_fail n = R (\m -> plus n m = plus m n | Nat) (idp 0) (\m r -> comp Nat (plus n (suc m)) (suc (plus n m)) (suc (plus m n)) (plus_suc n m) (idp suc <*> r))
+
+plus_comm : (n m : Nat) -> plus n m = plus m n | Nat
+plus_comm n = R (\m -> plus n m = plus m n | Nat) (plus0 n) (\m r -> comp Nat (plus n (suc m)) (suc (plus n m)) (suc (plus m n)) (plus_suc n m) (idp suc <*> r))
+
+mul0 : (n : Nat) -> 0 = mul n 0 | Nat
+mul0 = R (\n -> 0 = mul n 0 | Nat) (idp 0) (\_ r -> r)
+
+plus_plus : (x y z : Nat) -> plus x (plus y z) = plus y (plus x z) | Nat
+plus_plus x y z = comp Nat (plus x (plus y z)) (plus (plus x y) z) (plus y (plus x z))
+    (inv Nat (plus (plus x y) z) (plus x (plus y z)) (assoc x y z))
+    (comp Nat (plus (plus x y) z) (plus (plus y x) z) (plus y (plus x z))
+        (idp (ofType (Nat -> Nat) (\t -> plus t z)) <*> plus_comm x y)
+        (assoc y x z))
+
+mul_suc : (n m : Nat) -> plus n (mul n m) = mul n (suc m) | Nat
+mul_suc n m = R (\n -> plus n (mul n m) = mul n (suc m) | Nat) (idp 0) (\n r ->
+    idp suc <*> (comp Nat (plus n (plus m (mul n m))) (plus m (plus n (mul n m))) (plus m (mul n (suc m)))
+                    (plus_plus n m (mul n m))
+                    (idp (plus m) <*> r))) n
+
+mul_comm : (n m : Nat) -> mul n m = mul m n | Nat
+mul_comm n m = R (\n -> mul n m = mul m n | Nat) (mul0 m)
+    (\n r -> comp Nat (plus m (mul n m)) (plus m (mul m n)) (mul m (suc n))
+                (idp (plus m) <*> r)
+                (mul_suc m n)) n
+
+distrib : (x y z : Nat) -> plus (mul x z) (mul y z) = mul (plus x y) z | Nat
+distrib x y z = R (\x -> plus (mul x z) (mul y z) = mul (plus x y) z | Nat) (idp (mul y z))
+    (\x r -> comp Nat (plus (plus z (mul x z)) (mul y z)) (plus z (plus (mul x z) (mul y z))) (plus z (mul (plus x y) z))
+        (assoc z (mul x z) (mul y z))
+        (idp (plus z) <*> r)) x
+
+mul_assoc : (x y z : Nat) -> mul x (mul y z) = mul (mul x y) z | Nat
+mul_assoc x y z = R (\x -> mul x (mul y z) = mul (mul x y) z | Nat) (idp 0)
+    (\x r -> comp Nat (plus (mul y z) (mul x (mul y z))) (plus (mul y z) (mul (mul x y) z)) (mul (plus y (mul x y)) z)
+        (idp (plus (mul y z)) <*> r)
+        (distrib y (mul x y) z)) x
