@@ -188,7 +188,7 @@ lastFace (FaceMap (s:ss)) =
 -- commonDeg (x : a -> c) (y : a -> d) (k < a) : (r : a -> b, t : b -> c, s : b -> d, k' < b)
 -- composed r t == x, composed r s == y
 commonDeg :: DegMap -> DegMap -> Integer -> (DegMap, DegMap, DegMap, Integer)
-commonDeg (DegMap [] n) (DegMap [] n') k = (DegMap [] 0, DegMap [] n, DegMap [] n', k)
+commonDeg (DegMap [] n) (DegMap ds' n') k = (DegMap [] 0, DegMap [] n, DegMap ds' n', k)
 commonDeg (DegMap (d:ds) n) (DegMap (d':ds') n') k =
     let (DegMap r rn, DegMap t tn, DegMap s sn, k') = commonDeg (DegMap ds n) (DegMap ds' n') (k - 1)
     in if d || d'

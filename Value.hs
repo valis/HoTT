@@ -272,12 +272,23 @@ reflect n (Cube c) e (Sid t a a') = Spath $ reflect (n + 1) (Cube face) e t
 reflect _ (Cube c) e (Spi a (Slam x b)) = Slam x go
   where
     go m v | isDegMap m = reflect (domc m) (Cube $ \f -> go (composefd f $ degs m) (action (cubeMapf f) v))
-                                           (\i -> App (domc m) (e i) $ reify i (domc m) v $ action m a) (b m v)
+                                           (\i -> appidp (degs m) (e i) $ reify i (domc m) v $ action m a) (b m v)
            | otherwise = app (domc m) (action (cubeMapd $ degs m) $ c $ faces m) v
+    
+    appidp :: DegMap -> Term -> Term -> Term
+    appidp m x (Act m1 (Act m2 y)) = appidp m x $ Act (composec m1 m2) y
+    appidp m x (Act m' y) =
+        let (cm,_,rm,_) = commonDeg m (degs m') 0
+        in Act (cubeMapd cm) $ App (domd rm) x $ Act (cubeMapc rm $ faces m') y
+    appidp m x y = App (domd m) x y
 reflect n (Cube c) e (Ssigma a b) =
     let e1 = reflect n (Cube $ \f -> proj1 (c f)) (\i -> App n Proj1 (e i)) a
     in Spair e1 $ reflect n (Cube $ \f -> proj2 (c f)) (\i -> App n Proj2 (e i)) (app n b e1)
-reflect n c e _ = Ne (idd n) c e
+reflect n c e _ = case e 0 of
+    Act m _ -> Ne (degs m) c $ \i -> case e i of
+        Act m' e' -> Act (cubeMapf $ faces m') e'
+        _ -> error "reflect"
+    _ -> Ne (idd n) c e
 
 reflect0 :: ITerm -> Value -> Value
 reflect0 = reflect 0 (error "reflect0")
