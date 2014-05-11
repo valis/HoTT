@@ -33,7 +33,7 @@ conMap n = DegMap (genericReplicate (n + 1) True) 1
 signToChar :: Sign -> Char
 signToChar Plus = '+'
 signToChar Minus = '-'
-signToChar Zero = '0'
+signToChar Zero = '*'
 
 instance Show Sign where
     show s = [signToChar s]

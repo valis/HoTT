@@ -8,7 +8,7 @@ module Value
     , reify, reifyType
     , proj1, proj2, app, pcoe, pmap, compl, compr, pcomp, inv, pinv
     , idp, pidp, action, reflect, reflect0
-    , pcon, fibr, pfibr
+    , ppcon, fibr, pfibr
     ) where
 
 import qualified Data.Map as M
@@ -99,10 +99,10 @@ fibr d n (Spi a b) (Slam v g) = Slam v $ \m x -> if isDegMap m
 fibr d n (Ssigma a b) (Spair x y) =
     let x' = fibr d n a x
     in Spair x' $ fibr d n (app (n + 1) b x') y
-fibr d n (Sid t a b) (Spath x) = error "TODO: fibr.Sid"
+fibr d n (Sid t a b) (Spath x) = Spath $ compr (n + 1) (n + 1) (compl (n + 1) (n + 1) (inv (n + 1) (n + 1) $ pcon n a) (idp (n + 1) x)) (pcon n b)
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
-fibr d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> fibr d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
+fibr d n (Ne _ fs t) x = Ne (idd $ n + 1) (Cube $ \f -> fibr d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
     \i -> Fibr d n (t i) (reify i n x $ unCube fs $ faceMap (genericReplicate (n - 1) Zero ++ [Minus]))
 fibr _ _ _ _ = error "fibr"
 
@@ -241,8 +241,11 @@ compr n k (Spath p) (Spath p') = Spath $ compr (n + 1) k p p'
 compr _ _ _ _ = error "compr"
 
 pcon :: Integer -> Value -> Value
-pcon n (Spath p) = Spath $ Spath $ action (cubeMapd $ conMap $ n + 1) p
-pcon _ _ = error "pcon"
+pcon n p = action (cubeMapd $ conMap $ n + 1) p
+
+ppcon :: Integer -> Value -> Value
+ppcon n (Spath p) = Spath $ Spath (pcon n p)
+ppcon _ _ = error "pcon"
 
 action :: CubeMap -> Value -> Value
 action m v | isIdc m = v
