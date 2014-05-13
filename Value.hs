@@ -59,7 +59,7 @@ cmpTypes i n (Spi a b) (Spi a' b') =
     cmpTypes i n a' a && cmpTypes (i + 1) n (app n b $ svar i n a) (app n b' $ svar i n a')
 cmpTypes i n (Ssigma a b) (Ssigma a' b') =
     cmpTypes i n a a' && cmpTypes (i + 1) n (app n b $ svar i n a) (app n b' $ svar i n a')
-cmpTypes i n (Sid t a b) (Sid t' a' b') = cmpTypes i (n + 1) t t' && cmpValues i n a a' t && cmpValues i n b b' t
+cmpTypes i n (Sid t a b) (Sid t' a' b') = cmpTypes i (n + 1) t t' && cmpValues i n a a' (leftFace n t) && cmpValues i n b b' (rightFace n t)
 cmpTypes _ _ Snat Snat = True
 cmpTypes _ _ (Stype k) (Stype k') = k <= k'
 cmpTypes i _ (Ne d _ e) (Ne d' _ e') = d == d' && e i == e' i
@@ -99,11 +99,12 @@ fibr d n (Spi a b) (Slam v g) = Slam v $ \m x -> if isDegMap m
 fibr d n (Ssigma a b) (Spair x y) =
     let x' = fibr d n a x
     in Spair x' $ fibr d n (app (n + 1) b x') y
-fibr d n (Sid t a b) (Spath x) = Spath $ compr (n + 1) (n + 1) (compl (n + 1) (n + 1) (inv (n + 1) (n + 1) $ pcon n a) (idp (n + 1) x)) (pcon n b)
+fibr d n (Sid _ a b) (Spath x) =
+    Spath $ compr (n + 1) (n + 1) (compl (n + 1) (n + 1) (inv (n + 1) (n + 1) $ pcon n a) (idp (n + 1) x)) (pcon n b)
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
-fibr d n (Ne _ fs t) x = Ne (idd $ n + 1) (Cube $ \f -> fibr d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
-    \i -> Fibr d n (t i) (reify i n x $ unCube fs $ faceMap (genericReplicate (n - 1) Zero ++ [Minus]))
+fibr d n t'@(Ne _ _ t) x = Ne (idd $ n + 1) (Cube $ \f -> fibr d (domf f) (action (cubeMapf $ liftf f) t') $ action (cubeMapf f) x) $
+    \i -> Fibr d n (t i) (reify i n x $ leftFace n t')
 fibr _ _ _ _ = error "fibr"
 
 coe :: Bool -> Integer -> Value -> Value -> Value
@@ -117,9 +118,8 @@ coe d n (Sid _ a b) (Spath x) = Spath $ compr n n (compl n n (inv n n a) x) b
 coe _ _ Snat x = x
 coe _ _ (Stype _) x = x
 coe _ _ (Ne ds _ _) x | isDeg ds (domd ds - 1) = x
-coe d n (Ne _ fs t) x = Ne (idd n) (Cube $ \f -> coe d (domf f) (unCube fs $ liftf f) $ action (cubeMapf f) x) $
-    \i -> App n (App n Coe $ if d then t i else Inv n (t i))
-                (reify i n x $ unCube fs $ faceMap (genericReplicate (n - 1) Zero ++ [Minus]))
+coe d n t'@(Ne _ _ t) x = Ne (idd n) (Cube $ \f -> coe d (domf f) (action (cubeMapf $ liftf f) t') $ action (cubeMapf f) x) $
+    \i -> App n (App n Coe $ if d then t i else Inv n (t i)) (reify i n x $ leftFace n t')
 coe _ _ _ _ = error "coe"
 
 pfibr :: Bool -> Integer -> Value -> Value -> Value
@@ -145,7 +145,7 @@ pinv _ _ _ = error "pinv"
 
 inv :: Integer -> Integer -> Value -> Value
 inv n k (Slam v g) = Slam v $ \m x -> if isDegMap m
-    then inv (domc m) k $ g m (inv (domc m) k x)
+    then inv (domc m - 1) k $ g m (inv (domc m - 1) k x)
     else case getFace (faces m) k of
         (f1, Zero, _) ->
             let g' = action (cubeMapf $ faces m) (Slam v g)
@@ -177,7 +177,7 @@ pcomp _ _ _ _ = error "pcomp"
 compl :: Integer -> Integer -> Value -> Value -> Value
 compl n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
     then let m' = cubeMapc (degMap $ gen (domc m) k True False) (faceMap $ gen (domc m) k Zero Minus)
-         in compl (domc m) k (g m $ action m' x) (g' m x)
+         in compl (domc m - 1) k (g m $ action m' x) (g' m x)
     else case getFace (faces m) k of
         (f1, Zero, _) ->
             let g1 = action (cubeMapf $ faces m) (Slam v g)
@@ -212,7 +212,7 @@ compl _ _ _ _ = error "compl"
 compr :: Integer -> Integer -> Value -> Value -> Value
 compr n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
     then let m' = cubeMapc (degMap $ gen (domc m) k True False) (faceMap $ gen (domc m) k Zero Plus)
-         in compr (domc m) k (g m x) (g' m $ action m' x)
+         in compr (domc m - 1) k (g m x) (g' m $ action m' x)
     else case getFace (faces m) k of
         (f1, Zero, _) ->
             let g1 = action (cubeMapf $ faces m) (Slam v g)
@@ -269,6 +269,12 @@ action m (Sid t a b) = Sid (action (liftc m) t) (action m a) (action m b)
 action m v@(Stype _) = v
 action m (Spath t) = Spath $ action (liftc m) t
 
+leftFace :: Integer -> Value -> Value
+leftFace n = action $ cubeMapf $ faceMap $ genericReplicate n Zero ++ [Minus]
+
+rightFace :: Integer -> Value -> Value
+rightFace n = action $ cubeMapf $ faceMap $ genericReplicate n Zero ++ [Plus]
+
 reflect :: Integer -> Cube Value -> ITerm -> Value -> Value
 reflect n (Cube c) e (Sid t a a') = Spath $ reflect (n + 1) (Cube face) e t
   where
@@ -324,7 +330,7 @@ reify _ _ (Spi _ _) _ = error "reify.Spi"
 reify i n (Ssigma a (Slam x b)) u@(Stype _) =
     Sigma n [([x],reify i n a u)] $ reify (i + 1) n (b (idc n) $ svar i n a) u
 reify _ _ (Ssigma _ _) _ = error "reify.Ssigma"
-reify i n (Sid t a b) u@(Stype _) = Id n (reify i (n + 1) t u) (reify i n a t) (reify i n b t)
+reify i n (Sid t a b) u@(Stype _) = Id n (reify i (n + 1) t u) (reify i n a $ leftFace n t) (reify i n b $ rightFace n t)
 reify _ _ (Sid _ _ _) _ = error "reify.Sid"
 reify _ n (Stype u) (Stype _) = iterate (App 0 Idp) (Universe u) `genericIndex` n
 reify _ _ (Stype _) _ = error "reify.Stype"

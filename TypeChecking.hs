@@ -113,7 +113,7 @@ typeCheck (Idp (PIdp (lc,_))) (Just ty) = do
     errorTCM $ emsgLC lc "" $ expType i c 1 ty $$ etext "But idp has pi type"
 typeCheck e@(Coe (PCoe (lc,_))) (Just ty@(Spi a@(Sid (Stype _) x y) b)) = do
     i <- askIndex
-    case app 0 b $ unPath (svar i 0 a) of
+    case app 0 b (svar i 0 a) of
         Spi x' y' | cmpTypes i 0 x x' && cmpTypes (i + 1) 0 y (app 0 y' $ svar i 0 x') -> return T.Coe
         _ -> coeErrorMsg lc ty
 typeCheck (Coe (PCoe (lc,_))) (Just ty) = coeErrorMsg lc ty

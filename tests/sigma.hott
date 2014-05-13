@@ -5,3 +5,6 @@ sigma'elim A B P d x = d (proj1 x) (proj2 x)
 sigma'elim2 : (A : Type) (B : A -> Type) (P : (a : A) -> B a -> Type)
     -> ((a : A) (b : B a) -> P a b) -> (x : (a : A) * B a) -> P (proj1 x) (proj2 x)
 sigma'elim2 A B P d x = d (proj1 x) (proj2 x)
+
+test : (A : Type) -> (a a' : A) -> a = a | A -> a = a' | A -> Type
+test A a a' b b' = a,b = a',b' | ((x : A) * (a = x | A))

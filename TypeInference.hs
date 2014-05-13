@@ -68,7 +68,7 @@ typeOf (App _ Idp e) = do
     ctx <- askCtx
     let v = eval 0 (ctxToCtxV ctx) e
     t <- typeOf e
-    return (Sid (action (cubeMapd $ degMap [False]) t) v v)
+    return (Sid (idp 0 t) v v)
 typeOf (Pmap e1 e2) = do
     t1 <- typeOf e1
     t2 <- typeOf e2
