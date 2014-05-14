@@ -21,7 +21,6 @@ ofType _ a = a
 
 Jx : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> (a a' : A) (p : a = a' | A) -> B a a (idp a) = B a a' p | Type10
 Jx A B a a' p = idp (B a) <*> p <*> pcon p
-             -- [ (B a) p (pcon p) ]
 
 Jy : (A : Type10) (B : (a a' : A) -> a = a' | A -> Type10) -> (a a' : A) (p : a = a' | A) -> B a a (idp a) -> B a a' p
 Jy A B a a' p = coe (Jx A B a a' p)
@@ -53,10 +52,9 @@ fcomp A B f a1 a2 a3 p q = J A (\a2 a3 q -> (a1 : A) (p : a1 = a2 | A) ->
     idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
     (\_ _ p -> idp (idp f <*> p)) a2 a3 q a1 p
 
-depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A) -> transport A B a a' p (f a) = f a' | B a'
--- depmap A B f = J A (\a a' p -> transport A B a a' p (f a) = f a') (\a -> idp (f a))
-depmap A B f = J A (\a a' p -> coe (idp B <*> p) (f a) = f a' | B a') (\a -> idp (f a))
--- = [f p]
+depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A)
+    -> transport A B a a' p (f a) = f a' | B a'
+depmap A B f = J A (\a a' p -> transport A B a a' p (f a) = f a' | B a') (\a -> idp (f a))
 
 deppmap : (A : Type) (B : A -> Type) (f g : (a : A) -> B a) -> f = g | ((a : A) -> B a) -> (a a' : A) (p : a = a' | A)
     -> transport A B a a' p (f a) = g a' | B a'
@@ -64,10 +62,15 @@ deppmap A B f g q a a' p = comp (B a') (transport A B a a' p (f a)) (f a') (g a'
     (depmap A B f a a' p)
     (transport ((a : A) -> B a) (\g -> f a' = g a' | B a') f g q (idp (f a')))
 
+comp_idp : (A : Type) (a1 a2 : A) (p : a1 = a2 | A) -> comp A a1 a2 a2 p (idp a2) = p | a1 = a2 | A
+comp_idp A a1 a2 p = idp p
+
+{-
 J'dep : (A : Type) (B : (a a' : A) -> a = a' | A -> Type10) -> (a a' : A) (p : a = a' | A)
     -> B a a (comp A a a' a p (inv A a a' p)) = B a a' p | Type11
 J'dep A B a a' p = deppmap (a = a' | A) (\_ -> Type11) (transport A (\a' -> a = a' | A -> Type10) a a' p (B a a)) (B a a')
     (depmap A (\a' -> a = a' | A -> Type10) (B a) a a' p) p p (idp p)
+-}
 
 invIdpTest1 : (A : Type) (a a' : A) (p : a = a' | A) -> comp A a' a a' (inv A a a' p) p = idp a' | a' = a' | A
 invIdpTest1 A = J A (\a a' p -> comp A a' a a' (inv A a a' p) p = idp a' | a' = a' | A) (\a -> idp (idp a))

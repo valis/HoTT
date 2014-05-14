@@ -78,7 +78,7 @@ eval n _ (Universe u) = Stype u
 eval n ctx (Id _ t a b) = Sid (unPath $ eval n ctx t) (eval n ctx a) (eval n ctx b)
 eval n ctx (Act m e) = action m (eval n ctx e)
 eval n ctx Pcon = Slam "p" $ \m -> ppcon (domc m)
-eval n ctx (Comp k e1 e2) = pcomp n k (eval n ctx e1) (eval n ctx e2)
+eval n ctx (Comp k b e1 e2) = pcomp n k b (eval n ctx e1) (eval n ctx e2)
 eval n ctx (Inv k e) = pinv n k (eval n ctx e)
 eval n ctx (Fibr d k e1 e2) = pfibr d k (eval n ctx e1) (eval n ctx e2)
 

@@ -6,7 +6,7 @@ module Value
     , cmpTypes, cmpValues
     , isFreeVar
     , reify, reifyType
-    , proj1, proj2, app, pcoe, pmap, compl, compr, pcomp, inv, pinv
+    , proj1, proj2, app, pcoe, pmap, comp, pcomp, inv, pinv
     , idp, pidp, action, reflect, reflect0
     , ppcon, fibr, pfibr
     ) where
@@ -100,7 +100,9 @@ fibr d n (Ssigma a b) (Spair x y) =
     let x' = fibr d n a x
     in Spair x' $ fibr d n (app (n + 1) b x') y
 fibr d n (Sid _ a b) (Spath x) =
-    Spath $ compr (n + 1) (n + 1) (compl (n + 1) (n + 1) (inv (n + 1) (n + 1) $ pcon n a) (idp (n + 1) x)) (pcon n b)
+    Spath $ comp False (n + 1) (n + 1) (comp True (n + 1) (n + 1) (if d then inv (n + 1) (n + 1) (pcon n a) else pcon n a)
+                                                                  (idp (n + 1) x))
+                                       (if d then pcon n b else inv (n + 1) (n + 1) (pcon n b))
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
 fibr d n t'@(Ne _ _ t) x = Ne (idd $ n + 1) (Cube $ \f -> fibr d (domf f) (action (cubeMapf $ liftf f) t') $ action (cubeMapf f) x) $
@@ -114,7 +116,8 @@ coe d n (Spi a b) (Slam v f) = Slam v $ \m x ->
         x' = coe (not d) (domc m) a' x
     in coe d (domc m) (app (domc m + 1) b' $ fibr (not d) (domc m) a' x) (f m x')
 coe d n (Ssigma a b) (Spair x y) = Spair (coe d n a x) $ coe d n (app (n + 1) b $ fibr d n a x) y
-coe d n (Sid _ a b) (Spath x) = Spath $ compr n n (compl n n (inv n n a) x) b
+coe d n (Sid _ a b) (Spath x) = Spath $ comp False n n (comp True n n (if d then inv n n a else a) x)
+                                                       (if d then b else inv n n b)
 coe _ _ Snat x = x
 coe _ _ (Stype _) x = x
 coe _ _ (Ne ds _ _) x | isDeg ds (domd ds - 1) = x
@@ -170,79 +173,49 @@ inv n k x@(Ne d c e)
         in Ne d (Cube face) $ \i -> Inv k (e i)
 inv n k (Spath p) = Spath $ inv (n + 1) k p
 
-pcomp :: Integer -> Integer -> Value -> Value -> Value
-pcomp n k (Spath p) (Spath q) = Spath (compl n k p q)
-pcomp _ _ _ _ = error "pcomp"
+pcomp :: Integer -> Integer -> Bool -> Value -> Value -> Value
+pcomp n k b (Spath p) (Spath q) = Spath (comp b n k p q)
+pcomp _ _ _ _ _ = error "pcomp"
 
-compl :: Integer -> Integer -> Value -> Value -> Value
-compl n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
-    then let m' = cubeMapc (degMap $ gen (domc m) k True False) (faceMap $ gen (domc m) k Zero Minus)
-         in compl (domc m - 1) k (g m $ action m' x) (g' m x)
+comp :: Bool -> Integer -> Integer -> Value -> Value -> Value
+comp d n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
+    then let m' = cubeMapc (degMap $ gen (domc m) k True False) $ faceMap $ gen (domc m) k Zero (if d then Minus else Plus)
+         in if d then comp True  (domc m - 1) k (g m $ action m' x) (g' m x)
+                 else comp False (domc m - 1) k (g m x) (g' m $ action m' x)
     else case getFace (faces m) k of
         (f1, Zero, _) ->
             let g1 = action (cubeMapf $ faces m) (Slam v g)
                 g1' = action (cubeMapf $ faces m) (Slam v' g')
-            in action (cubeMapd $ degs m) $ compl (domf $ faces m) (domf $ faceMap f1) g1 g1'
+            in action (cubeMapd $ degs m) $ comp d (domf $ faces m) (domf $ faceMap f1) g1 g1'
         (_, Minus, _) -> g m x
         (_, Plus, _) -> g' m x
   where
     gen :: Integer -> Integer -> a -> a -> [a]
     gen n k x y = genericReplicate k x ++ [y] ++ genericReplicate (n - k - 1) x
-compl _ _ Szero x = x
-compl _ _ x Szero = x
-compl _ _ (Ssuc _) x = x
-compl _ _ x (Ssuc _) = x
-compl n k (Spair a b) (Spair a' b') = Spair (compl n k a a') (compl n k b b')
-compl n k (Spi a b) (Spi a' b') = Spi (compl n k a a') (compl n k b b')
-compl n k (Ssigma a b) (Ssigma a' b') = Ssigma (compl n k a a') (compl n k b b')
-compl _ _ Snat Snat = Snat
-compl _ _ x@(Stype _) (Stype _) = x
-compl n k (Sid a b c) (Sid a' b' c') = Sid (compl (n + 1) (k + 1) a a') (compl n k b b') (compl n k c c')
-compl n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
-compl n k (Ne d c e) (Ne d' c' e') =
+comp d _ _ Szero x = x
+comp d _ _ x Szero = x
+comp d _ _ (Ssuc _) x = x
+comp d _ _ x (Ssuc _) = x
+comp d n k (Spair a b) (Spair a' b') = Spair (comp d n k a a') (comp d n k b b')
+comp d n k (Spi a b) (Spi a' b') = Spi (comp d n k a a') (comp d n k b b')
+comp d n k (Ssigma a b) (Ssigma a' b') = Ssigma (comp d n k a a') (comp d n k b b')
+comp d _ _ x Snat = x
+comp d _ _ Snat x = x
+comp d _ _ (Stype u1) (Stype u2) = Stype (max u1 u2)
+comp d _ _ x (Stype _) = x
+comp d _ _ (Stype _) x = x
+comp d n k (Sid a b c) (Sid a' b' c') = Sid (comp d (n + 1) (k + 1) a a') (comp d n k b b') (comp d n k c c')
+comp True n k (Ne d _ _) x@(Ne _ _ _) | isDeg d k = x
+comp False n k x@(Ne _ _ _) (Ne d _ _) | isDeg d k = x
+comp b n k (Ne d c e) (Ne d' c' e') =
     let (cd,rd,rd',k') = commonDeg d d' k
         face f = case getFace f k' of
-            (f1, Zero, _) -> compl (domf f) (domf $ faceMap f1) (unCube c f) (unCube c' f)
+            (f1, Zero, _) -> comp b (domf f) (domf $ faceMap f1) (unCube c f) (unCube c' f)
             (_, Minus, _) -> unCube c f
             (_, Plus, _) -> unCube c' f
-    in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
-compl n k (Spath p) (Spath p') = Spath $ compl (n + 1) k p p'
-compl _ _ _ _ = error "compl"
-
-compr :: Integer -> Integer -> Value -> Value -> Value
-compr n k (Slam v g) (Slam v' g') = Slam v $ \m x -> if isDegMap m
-    then let m' = cubeMapc (degMap $ gen (domc m) k True False) (faceMap $ gen (domc m) k Zero Plus)
-         in compr (domc m - 1) k (g m x) (g' m $ action m' x)
-    else case getFace (faces m) k of
-        (f1, Zero, _) ->
-            let g1 = action (cubeMapf $ faces m) (Slam v g)
-                g1' = action (cubeMapf $ faces m) (Slam v' g')
-            in action (cubeMapd $ degs m) $ compr (domf $ faces m) (domf $ faceMap f1) g1 g1'
-        (_, Minus, _) -> g m x
-        (_, Plus, _) -> g' m x
-  where
-    gen :: Integer -> Integer -> a -> a -> [a]
-    gen n k x y = genericReplicate k x ++ [y] ++ genericReplicate (n - k - 1) x
-compr _ _ Szero x = x
-compr _ _ x Szero = x
-compr _ _ (Ssuc _) x = x
-compr _ _ x (Ssuc _) = x
-compr n k (Spair a b) (Spair a' b') = Spair (compr n k a a') (compr n k b b')
-compr n k (Spi a b) (Spi a' b') = Spi (compr n k a a') (compr n k b b')
-compr n k (Ssigma a b) (Ssigma a' b') = Ssigma (compr n k a a') (compr n k b b')
-compr _ _ Snat Snat = Snat
-compr _ _ x@(Stype _) (Stype _) = x
-compr n k (Sid a b c) (Sid a' b' c') = Sid (compr (n + 1) (k + 1) a a') (compr n k b b') (compr n k c c')
-compr n k x@(Ne _ _ _) (Ne d _ _) | isDeg d k = x
-compr n k (Ne d c e) (Ne d' c' e') =
-    let (cd,rd,rd',k') = commonDeg d d' k
-        face f = case getFace f k' of
-            (f1, Zero, _) -> compr (domf f) (domf $ faceMap f1) (unCube c f) (unCube c' f)
-            (_, Minus, _) -> unCube c f
-            (_, Plus, _) -> unCube c' f
-    in Ne cd (Cube face) $ \i -> Comp k' (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
-compr n k (Spath p) (Spath p') = Spath $ compr (n + 1) k p p'
-compr _ _ _ _ = error "compr"
+    in Ne cd (Cube face) $ \i -> Comp k' True (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
+comp b n k (Spath p) (Spath p') = Spath $ comp b (n + 1) k p p'
+comp _ _ _ _ _ = error "comp"
 
 pcon :: Integer -> Value -> Value
 pcon n p = action (cubeMapd $ conMap $ n + 1) p

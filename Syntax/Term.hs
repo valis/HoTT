@@ -43,7 +43,7 @@ data Term
     | Universe Level
     | Pair Term Term
     | Act CubeMap Term
-    | Comp Integer Term Term
+    | Comp Integer Bool Term Term
     | Inv Integer Term
     | Fibr Bool Integer Term Term
 
@@ -76,7 +76,7 @@ freeLVars Pcon = []
 freeLVars (NatConst _) = []
 freeLVars (Universe _) = []
 freeLVars (Act _ t) = freeLVars t
-freeLVars (Comp _ e1 e2) = freeLVars e1 `union` freeLVars e2
+freeLVars (Comp _ _ e1 e2) = freeLVars e1 `union` freeLVars e2
 freeLVars (Inv _ e) = freeLVars e
 freeLVars (Fibr _ _ e1 e2) = freeLVars e1 `union` freeLVars e2
 
@@ -109,7 +109,7 @@ liftTermDB' _ _ Rec = Rec
 liftTermDB' _ _ Idp = Idp
 liftTermDB' n k (Pmap e1 e2) = Pmap (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Act t e) = Act t (liftTermDB' n k e)
-liftTermDB' n k (Comp m e1 e2) = Comp m (liftTermDB' n k e1) (liftTermDB' n k e2)
+liftTermDB' n k (Comp m b e1 e2) = Comp m b (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' n k (Inv m e) = Inv m (liftTermDB' n k e)
 liftTermDB' n k (Fibr d m e1 e2) = Fibr d m (liftTermDB' n k e1) (liftTermDB' n k e2)
 liftTermDB' _ _ Coe = Coe
@@ -154,7 +154,7 @@ instance Eq Term where
         cmp c m1 m2 (Pair a1 b1) (Pair a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Pmap a1 b1) (Pmap a2 b2) = cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Act t1 e1) (Act t2 e2) = t1 == t2 && cmp c m1 m2 e1 e2
-        cmp c m1 m2 (Comp k1 a1 b1) (Comp k2 a2 b2) = k1 == k2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
+        cmp c m1 m2 (Comp k1 d1 a1 b1) (Comp k2 d2 a2 b2) = k1 == k2 && d1 == d2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (Inv k1 e1) (Inv k2 e2) = k1 == k2 && cmp c m1 m2 e1 e2
         cmp c m1 m2 (Fibr d1 n1 a1 b1) (Fibr d2 n2 a2 b2) = d1 == d2 && n1 == n2 && cmp c m1 m2 a1 a2 && cmp c m1 m2 b1 b2
         cmp c m1 m2 (LVar v1) (LVar v2) = v1 == v2
@@ -278,9 +278,9 @@ ppTerm ctx = go ctx False
     go ctx False l (Pair e1 e2) =
         let l' = fmap pred l
         in go ctx False l' e1 <> comma <+> go ctx False l' e2
-    go ctx False l (Comp n e1 e2) =
+    go ctx False l (Comp n b e1 e2) =
         let l' = fmap pred l
-        in text "comp" <> dim n <+> go ctx True l' e1 <+> go ctx True l' e2
+        in text (if b then "compl" else "compr") <> dim n <+> go ctx True l' e1 <+> go ctx True l' e2
     go ctx False l (Inv n e) = text "inv" <> dim n <+> go ctx True (fmap pred l) e
     go ctx False l (Fibr d n e1 e2) =
         let l' = fmap pred l
@@ -349,7 +349,7 @@ simplify (Pmap e1 e2) = Pmap (simplify e1) (simplify e2)
 simplify (Act t e) | isIdc t = simplify e
 simplify (Act t1 (Act t2 e)) = simplify $ Act (composec t1 t2) e
 simplify (Act t e) = Act t (simplify e)
-simplify (Comp k e1 e2) = Comp k (simplify e1) (simplify e2)
+simplify (Comp k b e1 e2) = Comp k b (simplify e1) (simplify e2)
 simplify (Inv k e) = Inv k (simplify e)
 simplify (Fibr d n e1 e2) = Fibr d n (simplify e1) (simplify e2)
 simplify e@(Var _) = e
