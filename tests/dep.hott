@@ -52,6 +52,13 @@ fcomp A B f a1 a2 a3 p q = J A (\a2 a3 q -> (a1 : A) (p : a1 = a2 | A) ->
     idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
     (\_ _ p -> idp (idp f <*> p)) a2 a3 q a1 p
 
+fcomp1 : (A B : Type10) (f : A -> B) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A)
+    -> idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B
+fcomp1 A B f a1 a2 a3 p q = coe (idp (ofType ((a3 : A) -> a2 = a3 | A -> Type10)
+    (\a3 q -> idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
+    ) <*> q <*> pcon q)
+    (idp (idp f <*> p))
+
 depmap : (A : Type) (B : A -> Type) (f : (a : A) -> B a) (a a' : A) (p : a = a' | A)
     -> transport A B a a' p (f a) = f a' | B a'
 depmap A B f = J A (\a a' p -> transport A B a a' p (f a) = f a' | B a') (\a -> idp (f a))
@@ -99,6 +106,12 @@ contrPathSpace A a a' p = ext'sigma A (\a' -> a = a' | A) a a' (idp a) p p (pcon
 J2 : (A : Type) (B : (a a' : A) -> a = a' | A -> Type) -> ((a : A) -> B a a (idp a)) -> (a a' : A) (p : a = a' | A) -> B a a' p
 J2 A B d a a' p =
     transport ((x : A) * a = x | A) (\e -> B a (proj1 e) (proj2 e)) (a, idp a) (a', p) (contrPathSpace A a a' p) (d a)
+
+fcomp2 : (A B : Type) (f : A -> B) (a1 a2 a3 : A) (p : a1 = a2 | A) (q : a2 = a3 | A)
+    -> idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B
+fcomp2 A B f a1 a2 a3 p q = J2 A (\a2 a3 q -> (a1 : A) (p : a1 = a2 | A) ->
+    idp f <*> comp A a1 a2 a3 p q = comp B (f a1) (f a2) (f a3) (idp f <*> p) (idp f <*> q) | f a1 = f a3 | B)
+    (\_ _ p -> idp (idp f <*> p)) a2 a3 q a1 p
 
 fibrTest : (A : Type) (B : A -> Type) (a a' : A) (p : a = a' | A) (b' : B a')
     -> transport A B a' a (inv A a a' p) b' = b' | idp B <*> p

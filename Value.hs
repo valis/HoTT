@@ -105,6 +105,7 @@ fibr d n (Sid _ a b) (Spath x) =
                                        (if d then pcon n b else inv (n + 1) (n + 1) (pcon n b))
 fibr _ n Snat x = idp n x
 fibr _ n (Stype _) x = idp n x
+fibr _ n (Ne ds _ _) x | isDeg ds (domd ds - 1) = idp n x
 fibr d n t'@(Ne _ _ t) x = Ne (idd $ n + 1) (Cube $ \f -> fibr d (domf f) (action (cubeMapf $ liftf f) t') $ action (cubeMapf f) x) $
     \i -> Fibr d n (t i) (reify i n x $ leftFace n t')
 fibr _ _ _ _ = error "fibr"
@@ -213,7 +214,7 @@ comp b n k (Ne d c e) (Ne d' c' e') =
             (f1, Zero, _) -> comp b (domf f) (domf $ faceMap f1) (unCube c f) (unCube c' f)
             (_, Minus, _) -> unCube c f
             (_, Plus, _) -> unCube c' f
-    in Ne cd (Cube face) $ \i -> Comp k' True (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
+    in Ne cd (Cube face) $ \i -> Comp k' b (Act (cubeMapd rd) $ e i) (Act (cubeMapd rd') $ e' i)
 comp b n k (Spath p) (Spath p') = Spath $ comp b (n + 1) k p p'
 comp _ _ _ _ _ = error "comp"
 

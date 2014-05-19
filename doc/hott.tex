@@ -65,104 +65,58 @@ In this paper, we give a description of an evaluation algorithm for homotopy typ
 
 \section{Introduction}
 
-\section{Cellular sets}
+\section{Cubical sets}
 
-In this section, we will recall the definition of cellular sets.
+In this section, we will recall the definition of cubical sets.
+We use cubical sets with connections, but call them simply cubical sets.
 
-\begin{defn}
-A \emph{globular set} is a presheaf on the category $\bbG$, whose objects are natural numbers and morphisms are generated from
-$\sigma_n,\tau_n : n \to n + 1$ subject to the equations
-$\sigma_{n+1} \circ \sigma_n = \tau_{n+1} \circ \sigma_n$, $\sigma_{n+1} \circ \tau_n = \tau_{n+1} \circ \tau_n$.
-A morphism of globular sets is a morphism of presheaves.
-\end{defn}
+Let $\Box$ be the following category. Its objects are natural numbers, and morphisms are generated from
+\[ \partial^\alpha_i : n \to n + 1, \]
+\[ \epsilon_i : n + 1 \to n, \]
+\[ \Gamma^\alpha_j : n + 1 \to n, \]
+for each $n \in \nats$, $0 \leq i \leq n$, $0 \leq j < n$, and $\alpha = \pm$.
+These maps satisfy the following equations:
+\[ \partial^\alpha_j \partial^\beta_i = \partial^\beta_i \partial^\alpha_{j-1} \text{ if $i < j$}, \]
+\[ \epsilon_j \epsilon_i = \epsilon_i \epsilon_{j+1} \text{ if $i \leq j$}, \]
+\[ \Gamma^\alpha_j \Gamma^\beta_i = \Gamma^\beta_i \Gamma^\alpha_{j+1} \text{ if $i < j$}, \]
+\[ \Gamma^\alpha_i \Gamma^\alpha_i = \Gamma^\alpha_i \Gamma^\alpha_{i+1}, \]
+\[ \epsilon_j \partial^\alpha_i = \left\{ \begin{array}{l l}
+            \partial^\alpha_i \epsilon_{j-1} & \text{if $i < j$} \\
+            id                               & \text{if $i = j$} \\
+            \partial^\alpha_{i-1} \epsilon_j & \text{if $i > j$},
+    \end{array} \right. \]
+\[ \epsilon_j \Gamma^\alpha_i = \left\{ \begin{array}{l l}
+            \Gamma^\alpha_i \epsilon_{j+1} & \text{if $i < j$} \\
+            \epsilon_j \epsilon_j         & \text{if $i = j$} \\
+            \Gamma^\alpha_{i-1} \epsilon_j & \text{if $i > j$},
+    \end{array} \right. \]
+\[ \Gamma^\beta_j \partial^\alpha_i = \left\{ \begin{array}{l l}
+            \partial^\alpha_i \Gamma^\beta_{j-1} & \text{if $i < j$} \\
+            id                                   & \text{if $j \leq i \leq j + 1$ and $\alpha = \beta$} \\
+            \partial^\alpha_j \epsilon_j         & \text{if $j \leq i \leq j + 1$ and $\alpha = -\beta$} \\
+            \partial^\alpha_{i-1} \Gamma^\beta_j & \text{if $i > j + 1$}.
+    \end{array} \right. \]
 
-Explicitly, a globular set is a sequence of sets $X_n$ together with maps $s_k,t_k : X_n \to X_k$ for each $k < n$ subject to equations.
-Elements of $X_n$ are called $n$-cells. Given $n$-cell $x$, cells $s_k(x)$ and $t_k(x)$
-are called the ($k$-dimensional) source and the target of $x$ respectively.
-A pair of $n$-cells $x$ and $y$ are \emph{parallel} if $s_k(x) = s_k(y)$ and $t_k(x) = t_k(y)$ for each $k < n$.
-The expression $x : a \to b$ stands for the following:
-there is $n \in \nats$ such that $a$ and $b$ are (necessarily parallel) $n$-cells,
-$x$ is an $(n+1)$-cell, $s_n(x) = a$, and $t_n(x) = b$.
+A cubical set is a presheaf on the category $\Box$.
 
-For each $n \in \nats$, the globular set $\bbG(-,n)$ is denoted by $\Dn$.
-The globular sets $\dDn$ together with the maps $\dDn \to \Dn$ are defined by induction on $n$.
-$\dDn[0]$ is the initial object, and $\dDn[0] \to \Dn[0]$ is the unique morphism.
-$\dDn[n+1]$ is the pushout $\Dn \amalg_{\dDn} \Dn$, and $\dDn[n+1] \to \Dn[n+1]$
-is induced by the maps $(\sigma_n \circ -)$ and $(\tau_n \circ -)$.
+\section{Cubical syntax}
 
-\begin{defn}
-A \emph{strict $\omega$-category} is a globular set equipped with the following operations.
-\begin{itemize}
-\item For each $n$-cell $x$, an $(n+1)$-cell $id_x : x \to x$ called the \emph{identity} on $x$.
-\item For each $n,k \in \nats$ and for each pair of $n$-cells $x$,$y$ such that
-$t_k(x) = s_k(y)$ (in this case we say $x$ and $y$ are \emph{$k$-composable}),
-an $n$-cell $y *_k x$ called \emph{k-composite} of $x$ and $y$.
-\end{itemize}
-We often regard an $n$-cell $x$ as a cell of a dimension higher than $n$ iteratively applying $id$ to $x$.
+In this section, we will define cubical terms and inference rules for them.
+For now, we define only $\Pi$ and $\Sigma$ types.
+Later, we will extend syntax by adding path types, universes, and (higher) inductive types.
 
-The operations above must satisfy the following properties.
-\begin{itemize}
-\item If $x : a \to b$, $y : b \to c$ is a pair of $n$-composable $(n+1)$-cells, then $y *_n x : a \to c$.
-\item If $k < n$ and $x : a \to b$, $y : c \to d$ is a pair of $k$-composable $(n+1)$-cells, then $y *_k x : c *_k a \to d *_k b$.
-\item If $x,y,z$ are $n$-cells, then $(z *_k y) *_k x = z *_k (y *_k x)$, whenever it makes sense.
-\item If $k < n$ and $x$ is an $n$-cell, then $t_k(x) *_k x = x = x *_k s_k(x)$.
-\item If $k < n$ and $x$,$y$ is a pair of $k$-composable $n$-cells, then $id_y *_k id_x = id_{y *_k x}$.
-\item If $x$,$y$,$z$,$u$ are $n$-cells and $m < k < n$, then $(x *_k y) *_m (z *_k u) = (x *_m z) *_k (y *_m u)$, whenever it makes sense.
-\end{itemize}
-
-An $\omega$-functor between a pair of $\omega$-categories is a morphism of
-the underlying globular sets commuting with compositions and identities.
-The category $\ocat$ has $\omega$-categories as objects and $\omega$-functors as morphisms.
-\end{defn}
-
-The forgetful functor $U : \ocat \to \glob$ has a left adjoint $F : \glob \to \ocat$.
-Let us denote by $(T : \glob \to \glob, \eta_X : X \to T(X), \mu_X : T T(X) \to T(X))$ the monad $U \circ F$,
-and by $\dDn_T$ and $\Dn_T$ the $\omega$-categories $T(\dDn)$ and $T(\Dn)$.
-
-An \emph{$n$-dimensional pasting diagram} is defined by induction on $n$.
-There is exactly one $0$-dimensional pasting diagram, which is denoted by $\diamond$.
-An $(n+1)$-dimensional pasting diagram is a finite sequence of $n$-dimensional pasting diagrams.
-
-With each $n$-dimensional pasting diagram $\pi$ we associate an $n$-dimensional globular set $\widehat{\pi}$.
-If $\pi$ is the unique $0$-dimensional pasting diagram, then $\widehat{\pi}$ is the terminal $0$-dimensional globular set.
-If $\pi = (\pi^1, \ldots \pi^k)$, then let $\widehat{\pi}_0 = \{0, 1, \ldots k\}$
-and $\widehat{\pi}_{m+1} = \coprod \limits_{i = 1}^k \widehat{\pi^i}_m$.
-For each $k > 0$, the source and the target are defined in the evident way,
-and for each $x \in \widehat{\pi^i}$, we define $s_0(x) = i - 1$ and $t_0(x) = i$.
-
-\begin{defn}
-The category $\Theta$ has pasting diagrams as objects, and the set of morphisms between $\pi_1$ and $\pi_2$
-is the set of morphisms between strict $\omega$-categories $T(\widehat{\pi_1})$ and $T(\widehat{\pi_2})$.
-That is, $\Theta$ is a full subcategory of $\ocat$.
-A cellular set is a presheaf on $\Theta$, a morphism of cellular sets is a morphism of presheaves.
-\end{defn}
-
-\section{Syntax and Inference Rules}
-
-First, let us define the sets of raw terms and contexts:
-\[ Tm ::= v_i\ |\ U_\alpha\ |\ \Pi_n A\,B\ |\ \lambda_n b\ |\ app\ n\ f\ a\ |\ \Sigma_n A\,B\ |\ a , b\ |\ proj_1\ n\ p\ |\ proj_2\ n\ p\ | \]
-\[ Id_n A\,a\,a' \ |\ idp\ a\ |\ pmap\ p\ q\ |\ inv\ n\ p\ |\ comp\ k\ n\ p\ q\ |\ coe\ n\ p, \]
-\[ Ctx ::= \epsilon\ |\ \Gamma, A, \]
-where $i \in \Z$, $\alpha, k, n \in \nats$, $\Gamma \in Ctx$, and $a, a', b, f, p, q, t, A, B \in Tm$.
-Similarly to \cite{norm}, we use de Bruijn's representation of lambda terms.
-We write $\Pi\,A\,B$ for $\Pi_0\,A\,B$, $\Sigma\,A\,B$ for $\Sigma_0\,A\,B$, $a = a' \,|\, A$ for $Id_0 A\,a\,a'$, and $\lambda b$ for $\lambda_0 b$.
-
-The meaning of each term should be clear from the inference rules listed in table \ref{table:inf-rules}.
-Note that we do not use reduction rules, instead we define terms to be computationally equal if their interpretations coincide.
-Thus inference rules depend on the evaluation function $\llbracket - \rrbracket$ that will be defined in section \ref{sec:eval}.
-
-We write $\Pi_0 A\,B$ for $\Pi\,A\,B$, $\Sigma_0 A\,B$ for $\Sigma\,A\,B$, and $Id_0 A\,a\,a'$ for $a = a' | A$.
-Define terms $\Pi_{n+1} A\,B$, $\Sigma_{n+1} A\,B$, and $Id_{n+1} A\,a\,a'$ as follows:
-\[ \Pi_{n+1} A\,B = pmap\,(pmap\,(idp\ (\lambda \lambda \Pi_n\,v_1\,v_1))\,A)\,B, \]
-\[ \Sigma_{n+1} A\,B = pmap\,(pmap\,(idp\ (\lambda \lambda \Sigma_n\,v_1\,v_1))\,A)\,B, \]
-\[ Id_{n+1} A\,a\,a' = pmap\,(pmap\,(pmap\,(idp\ (\lambda \lambda \lambda Id_n\,v_2\,v_1\,v_0))\,A)\,a)\,a'. \]
+Let $Vars$ be a countably infinite set of variables.
+Then we define the sets of raw terms and contexts as follows:
+\[ Tm ::= v\ |\ \Pi A\,B\ |\ \lambda v. b\ |\ f\ a\ |\ \Sigma A\,B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ |\ \alpha \cdot a, \]
+\[ Ctx ::= \varnothing\ |\ \Gamma, A, \]
+where $v \in Vars$, $\Gamma \in Ctx$, $a, b, f, p, A, B \in Tm$, and $\alpha$ is a morphism in the category $\Box$.
 
 \centerAlignProof
 
 \begin{table}
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$\epsilon \vdash$}
+\UnaryInfC{$\varnothing \vdash$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \vdash A : U_\alpha$}
@@ -508,7 +462,7 @@ We define a predicate on contexts $\Gamma \models$ inductively as follows:
 \medskip
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$\epsilon \models$}
+\UnaryInfC{$\varnothing \models$}
 \DisplayProof
 \quad
 \AxiomC{$\Gamma \models$}

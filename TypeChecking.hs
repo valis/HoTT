@@ -164,7 +164,7 @@ typeCheck (App e1 e) Nothing | Pcon (Ppcon (lc,_)) <- dropParens e1 = do
     r <- typeCheck e Nothing
     t <- typeOf r
     case t of
-        Sid _ _ _ -> return (T.App 0 T.Pcon r)
+        Sid t' _ _ -> return (T.App 0 T.Pcon r) -- TODO: Check that t' is degenerate
         _ -> expTypeBut "Id" e t
 typeCheck (App e1 e) Nothing | Proj1 _ <- dropParens e1 = do
     r <- typeCheck e Nothing
