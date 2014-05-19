@@ -103,114 +103,84 @@ A cubical set is a presheaf on the category $\Box$.
 
 In this section, we will define cubical terms and inference rules for them.
 For now, we define only $\Pi$ and $\Sigma$ types.
-Later, we will extend syntax by adding path types, universes, and (higher) inductive types.
+Later, we will extend the syntax by adding path types, (univalent) universes, and (higher) inductive types.
 
 Let $Vars$ be a countably infinite set of variables.
 Then we define the sets of raw terms and contexts as follows:
-\[ Tm ::= v\ |\ \Pi A\,B\ |\ \lambda v. b\ |\ f\ a\ |\ \Sigma A\,B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ |\ \alpha \cdot a, \]
-\[ Ctx ::= \varnothing\ |\ \Gamma, A, \]
-where $v \in Vars$, $\Gamma \in Ctx$, $a, b, f, p, A, B \in Tm$, and $\alpha$ is a morphism in the category $\Box$.
+\[ Tm ::= x\ |\ \Pi (x : A) B\ |\ \lambda x. b\ |\ f\ a\ |\ \Sigma (x : A) B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p, \]
+\[ Ctx ::= \varnothing\ |\ \Gamma, x : A, \]
+where $x \in Vars$, $\Gamma \in Ctx$, and $a, b, f, p, A, B \in Tm$.
 
 \centerAlignProof
 
 \begin{table}
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$\varnothing \vdash$}
+\UnaryInfC{$\varnothing \vdash_n$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash A : U_\alpha$}
-\UnaryInfC{$\Gamma, A \vdash$}
+\AxiomC{$\Gamma \vdash_n A$}
+\RightLabel{, $x \notin \Gamma$}
+\UnaryInfC{$\Gamma, x : A \vdash_n$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash$}
-\RightLabel{, $0 \leq i < | \Gamma |$}
-\UnaryInfC{$\Gamma \vdash v_i : \Gamma(i)$}
-\DisplayProof
-\quad
-\AxiomC{$\Gamma \vdash$}
-\RightLabel{, $\alpha < \beta$}
-\UnaryInfC{$\Gamma \vdash U_\alpha : U_\beta$}
+\AxiomC{$\Gamma \vdash_n$}
+\RightLabel{, $x : A \in \Gamma$}
+\UnaryInfC{$\Gamma \vdash_n x : A$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash A : U_\alpha$}
-\AxiomC{$\Gamma, A \vdash B : U_\beta$}
-\BinaryInfC{$\Gamma \vdash \Pi A B : U_{max(\alpha,\beta)}$}
+\AxiomC{$\Gamma \vdash_n A$}
+\AxiomC{$\Gamma, x : A \vdash_n B$}
+\BinaryInfC{$\Gamma \vdash_n \Pi (x : A) B$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma, A \vdash b : B$}
-\UnaryInfC{$\Gamma \vdash \lambda b : \Pi A B$}
+\AxiomC{$\Gamma \vdash_n A$}
+\AxiomC{$\Gamma, A \vdash_n B$}
+\BinaryInfC{$\Gamma \vdash_n \Sigma (x : A) B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma, x : A \vdash_n b : B$}
+\UnaryInfC{$\Gamma \vdash_n \lambda x. b : \Pi (x : A) B$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash b : \Pi A B$}
-\AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash app\ 0\ b\ a : B[a]$}
+\AxiomC{$\Gamma \vdash_n f : \Pi (x : A) B$}
+\AxiomC{$\Gamma \vdash_n a : A$}
+\BinaryInfC{$\Gamma \vdash_n f\ a : B[x := a]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash A : U_\alpha$}
-\AxiomC{$\Gamma, A \vdash B : U_\beta$}
-\BinaryInfC{$\Gamma \vdash \Sigma\,A\,B : U_{max(\alpha,\beta)}$}
+\AxiomC{$\Gamma \vdash_n a : A$}
+\AxiomC{$\Gamma \vdash_n b : B[x := a]$}
+\AxiomC{$\Gamma, x : A \vdash_n B$}
+\TrinaryInfC{$\Gamma \vdash_n a, b : \Sigma (x : A) B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash_n p : \Sigma (x : A) B$}
+\UnaryInfC{$\Gamma \vdash_n proj_1\ p : A$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash a : A$}
-\AxiomC{$\Gamma \vdash b : B[a]$}
-\AxiomC{$\Gamma, A \vdash B : U_\beta$}
-\TrinaryInfC{$\Gamma \vdash a, b : \Sigma\,A\,B$}
+\AxiomC{$\Gamma \vdash_n p : \Sigma (x : A) B$}
+\UnaryInfC{$\Gamma \vdash_n proj_2\ p : B[x := proj_1\ p]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash p : \Sigma\,A\,B$}
-\UnaryInfC{$\Gamma \vdash proj_1\ p : A$}
-\DisplayProof
-\quad
-\AxiomC{$\Gamma \vdash p : \Sigma\,A\,B$}
-\UnaryInfC{$\Gamma \vdash proj_2\ p : B[proj_1\ p]$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash p : A = B \,|\, idp\ U_\alpha$}
-\AxiomC{$\Gamma \vdash a : A$}
-\AxiomC{$\Gamma \vdash b : B$}
-\TrinaryInfC{$\Gamma \vdash a = b \,|\, p : U_\alpha$}
-\DisplayProof
-\quad
-\AxiomC{$\Gamma \vdash a : A$}
-\UnaryInfC{$\Gamma \vdash idp\ a : a = a\,|\, idp\ A$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash b : b_0 = b_1\,|\,\Pi_1\,A\,B$}
-\AxiomC{$\Gamma \vdash a : a_0 = a_1\,|\,A$}
-\BinaryInfC{$\Gamma \vdash pmap\ b\ a : b_0\ a_0 = b_1\ a_1\,|\,B[a]$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash p : A = B \,|\, idp\ U_\alpha$}
-\AxiomC{$\Gamma \vdash a : A$}
-\BinaryInfC{$\Gamma \vdash coe\ 0\ p\ a : B$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash a : A$}
-\AxiomC{$\Gamma \vdash B : U_\beta$}
-\RightLabel{, $\mathsf{reify}(|\Gamma|, 0, \llbracket A \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega)) = \mathsf{reify}(|\Gamma|, 0, \llbracket B \rrbracket^{\rho_\Gamma}_0, \mathsf{U}(\omega))$}
-\BinaryInfC{$\Gamma \vdash a : B$}
+\AxiomC{$\Gamma \vdash_n a : A$}
+\AxiomC{$\Gamma \vdash_n B$}
+\RightLabel{, $A =_c B$}
+\BinaryInfC{$\Gamma \vdash_n a : B$}
 \DisplayProof
 \end{center}
 
