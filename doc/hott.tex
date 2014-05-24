@@ -97,6 +97,7 @@ These maps satisfy the following equations:
             \partial^\alpha_{i-1} \Gamma^\beta_j & \text{if $i > j + 1$}.
     \end{array} \right. \]
 
+A map in the category $\Box$ is \emph{injective} (resp., \emph{surjective}) if it is a composition of maps of the form $\partial^\alpha_i$ (resp., $\epsilon_i$ and $\Gamma^\alpha_i$).
 A cubical set is a presheaf on the category $\Box$.
 
 \section{Cubical syntax}
@@ -107,80 +108,99 @@ Later, we will extend the syntax by adding path types, (univalent) universes, an
 
 Let $Vars$ be a countably infinite set of variables.
 Then we define the sets of raw terms and contexts as follows:
-\[ Tm ::= x\ |\ \Pi (x : A) B\ |\ \lambda x. b\ |\ f\ a\ |\ \Sigma (x : A) B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p, \]
+\[ Tm ::= \alpha^* x\ |\ \Pi (x : A) B\ |\ \lambda x. b\ |\ f\ a\ |\ \Sigma (x : A) B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p, \]
 \[ Ctx ::= \varnothing\ |\ \Gamma, x : A, \]
-where $x \in Vars$, $\Gamma \in Ctx$, and $a, b, f, p, A, B \in Tm$.
+where $x \in Vars$, $\Gamma \in Ctx$, $a, b, f, p, A, B \in Tm$, and $\alpha$ is a map in the category $\Box$.
+
+For each $\alpha : k \to n$ and term $t$, we define a term $\alpha^* t$ as follows:
+\begin{itemize}
+\item[] $\alpha^* (\beta^* x) = \left\{\begin{array}{l l}
+            (\beta \alpha)^* x  & \text{if $x \in FV(t)$} \\
+            \beta^* x           & \text{otherwise,}
+        \end{array} \right.$
+\item[] $\alpha^* (\Pi (x : A) B) = \Pi (x : \alpha^* A) (\alpha^* B)$
+\item[] $\alpha^* (\lambda x. b) = \lambda x. \alpha^* b$
+\item[] $\alpha^* (f\ a) = \alpha^* f\ \alpha^* a$
+\item[] $\alpha^* (\Sigma (x : A) B) = \Sigma (x : \alpha^* A) (\alpha^* B)$
+\item[] $\alpha^* (a , b) = \alpha^* a , \alpha^* b$
+\item[] $\alpha^* (proj_1\ p) = proj_1 (\alpha^* p)$
+\item[] $\alpha^* (proj_2\ p) = proj_2 (\alpha^* p)$
+\end{itemize}
 
 \centerAlignProof
 
 \begin{table}
 \begin{center}
 \AxiomC{}
-\UnaryInfC{$\varnothing \vdash_n$}
+\UnaryInfC{$\varnothing \vdash$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash_n A$}
+\AxiomC{$\Gamma \vdash A : Type_n$}
 \RightLabel{, $x \notin \Gamma$}
-\UnaryInfC{$\Gamma, x : A \vdash_n$}
+\UnaryInfC{$\Gamma, x : A \vdash$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash_n$}
-\RightLabel{, $x : A \in \Gamma$}
-\UnaryInfC{$\Gamma \vdash_n x : A$}
+\AxiomC{$\Gamma \vdash A : Type_n$}
+\RightLabel{, $x : A \in \Gamma, \alpha : k \to n$}
+\UnaryInfC{$\Gamma \vdash \alpha^* x : \alpha^* A$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash_n A$}
-\AxiomC{$\Gamma, x : A \vdash_n B$}
-\BinaryInfC{$\Gamma \vdash_n \Pi (x : A) B$}
+\AxiomC{$\Gamma \vdash A : Type_n$}
+\AxiomC{$\Gamma, x : A \vdash B : Type_n$}
+\BinaryInfC{$\Gamma \vdash \Pi (x : A) B : Type_n$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash_n A$}
-\AxiomC{$\Gamma, A \vdash_n B$}
-\BinaryInfC{$\Gamma \vdash_n \Sigma (x : A) B$}
+\AxiomC{$\Gamma \vdash f : \Pi (x : A) B$}
+\AxiomC{$\Gamma \vdash a : A$}
+\BinaryInfC{$\Gamma \vdash f\ a : B[x := a]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma, x : A \vdash_n b : B$}
-\UnaryInfC{$\Gamma \vdash_n \lambda x. b : \Pi (x : A) B$}
+\AxiomC{$\alpha^* \Gamma, x : \alpha^* A \vdash b : \alpha^* B$ for all injective $\alpha : k \to n$}
+\AxiomC{$\Gamma \vdash A : Type_n$}
+\BinaryInfC{$\Gamma \vdash \lambda x. b : \Pi (x : A) B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : Type_n$}
+\AxiomC{$\Gamma, x : A \vdash B : Type_n$}
+\BinaryInfC{$\Gamma \vdash \Sigma (x : A) B : Type_n$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash a : A$}
+\AxiomC{$\Gamma \vdash b : B[x := a]$}
+\AxiomC{$\Gamma \vdash \Sigma (x : A) B : Type_n$}
+\TrinaryInfC{$\Gamma \vdash a, b : \Sigma (x : A) B$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash p : \Sigma (x : A) B$}
+\UnaryInfC{$\Gamma \vdash proj_1\ p : A$}
 \DisplayProof
 \quad
-\AxiomC{$\Gamma \vdash_n f : \Pi (x : A) B$}
-\AxiomC{$\Gamma \vdash_n a : A$}
-\BinaryInfC{$\Gamma \vdash_n f\ a : B[x := a]$}
+\AxiomC{$\Gamma \vdash p : \Sigma (x : A) B$}
+\UnaryInfC{$\Gamma \vdash proj_2\ p : B[x := proj_1\ p]$}
 \DisplayProof
 \end{center}
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash_n a : A$}
-\AxiomC{$\Gamma \vdash_n b : B[x := a]$}
-\AxiomC{$\Gamma, x : A \vdash_n B$}
-\TrinaryInfC{$\Gamma \vdash_n a, b : \Sigma (x : A) B$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash_n p : \Sigma (x : A) B$}
-\UnaryInfC{$\Gamma \vdash_n proj_1\ p : A$}
-\DisplayProof
-\quad
-\AxiomC{$\Gamma \vdash_n p : \Sigma (x : A) B$}
-\UnaryInfC{$\Gamma \vdash_n proj_2\ p : B[x := proj_1\ p]$}
-\DisplayProof
-\end{center}
-
-\medskip
-\begin{center}
-\AxiomC{$\Gamma \vdash_n a : A$}
-\AxiomC{$\Gamma \vdash_n B$}
+\AxiomC{$\Gamma \vdash a : A$}
+\AxiomC{$\Gamma \vdash B : Type_n$}
 \RightLabel{, $A =_c B$}
-\BinaryInfC{$\Gamma \vdash_n a : B$}
+\BinaryInfC{$\Gamma \vdash a : B$}
 \DisplayProof
 \end{center}
 
