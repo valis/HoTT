@@ -108,13 +108,13 @@ Later, we will extend the syntax by adding path types, (univalent) universes, an
 
 Let $Vars$ be a countably infinite set of variables.
 Then we define the sets of raw terms and contexts as follows:
-\[ Tm ::= \alpha^* x\ |\ \Pi (x : A) B\ |\ \lambda x. b\ |\ f\ a\ |\ \Sigma (x : A) B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p \]
-\[ |\ Id\ A\ a\ a'\ |\ path\ a\ |\ path^{-1}\ a\ a'\ p, \]
+\[ Tm ::= \alpha^* x\ |\ \Pi (x : A) B\ |\ \lambda x. b\ |\ f\ a\ |\ \Sigma (x : A) B\ |\ a , b\ |\ proj_1\ p\ |\ proj_2\ p\ | \]
+\[ Id\ A\ a\ a'\ |\ path\ a\ |\ J\ d\ p\ |\ coe\ A\ a\ |\ lift\ A\ a\ |\ comp\ A\ a\ a'\ a''\ |\ fill\ A\ a\ a'\ a'', \]
 \[ Ctx ::= \varnothing\ |\ \Gamma, x :_k A, \]
-where $x \in Vars$, $\Gamma \in Ctx$, $k \in \Z$, $a, a', b, f, p, A, B \in Tm$, and $\alpha$ is a map in the category $\Box$.
+where $x \in Vars$, $\Gamma \in Ctx$, $k \in \Z$, $a, a', a'', b, f, p, A, B \in Tm$, and $\alpha$ is a map in the category $\Box$.
 
 Now, for each $\alpha : k \to n$ and term $t$, we define a term $\alpha^* t$.
-Assuming that the sets of bounded and free variables of $t$ are disjoint, we can define $\alpha* t$ as follows:
+Assuming that the sets of bounded and free variables of $t$ are disjoint, we can define $\alpha^* t$ as follows:
 \begin{itemize}
 \item[] $\alpha^* (\beta^* x) = \left\{\begin{array}{l l}
             (\beta \alpha)^* x  & \text{if $x \in FV(t)$} \\
@@ -129,7 +129,11 @@ Assuming that the sets of bounded and free variables of $t$ are disjoint, we can
 \item[] $\alpha^* (proj_2\ p) = proj_2\ (\alpha^* p)$
 \item[] $\alpha^* (Id\ A\ a\ a') = Id\ (\alpha_{+1}^* A)\ (\alpha^* a)\ (\alpha^* a')$
 \item[] $\alpha^* (path\ a) = path\ (\alpha_{+1}^* a)$
-\item[] $\alpha^* (path^{-1}\ a\ a'\ p) = path^{-1}\ (\alpha^* a)\ (\alpha^* a')\ (\alpha_{-1}^* p)$
+\item[] $\alpha^* (J\ d\ p) = J\ (\alpha^* d)\ (\alpha^* p)$
+\item[] $\alpha^* (coe\ A\ a) = coe\ (\alpha_{+1}^* A)\ (\alpha^* a)$
+\item[] $\alpha^* (lift\ A\ a) = lift\ (\alpha_{+1}^* A)\ (\alpha^* a)$
+\item[] $\alpha^* (comp\ A\ a\ a'\ a'') = comp\ (\alpha_{+1}^* A)\ (\alpha^* a)\ (\alpha^* a')\ (\alpha^* a'')$
+\item[] $\alpha^* (fill\ A\ a\ a'\ a'') = fill\ (\alpha_{+1}^* A)\ (\alpha^* a)\ (\alpha^* a')\ (\alpha^* a'')$
 \end{itemize}
 
 \centerAlignProof
@@ -137,8 +141,8 @@ Assuming that the sets of bounded and free variables of $t$ are disjoint, we can
 \begin{table}
 
 Structural rules
-\bigskip
 
+\medskip
 \begin{center}
 \AxiomC{}
 \UnaryInfC{$\varnothing \vdash$}
@@ -166,8 +170,8 @@ Structural rules
 
 \bigskip
 Pi types
-\bigskip
 
+\medskip
 \begin{center}
 \AxiomC{$\Gamma \vdash A : Type_n$}
 \AxiomC{$\Gamma, x :_0 A \vdash B : Type_n$}
@@ -190,8 +194,8 @@ Pi types
 
 \bigskip
 Sigma types
-\bigskip
 
+\medskip
 \begin{center}
 \AxiomC{$\Gamma \vdash A : Type_n$}
 \AxiomC{$\Gamma, x :_0 A \vdash B : Type_n$}
@@ -221,10 +225,10 @@ Sigma types
 
 \bigskip
 Path types
-\bigskip
 
+\medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash A : Type_{n+1}$}
+\AxiomC{$\Gamma_{+1} \vdash A : Type_{n+1}$}
 \AxiomC{$\Gamma \vdash a : {\partial^-_0}^* A$}
 \AxiomC{$\Gamma \vdash a' : {\partial^+_0}^* A$}
 \TrinaryInfC{$\Gamma \vdash Id\ A\ a\ a' : Type_n$}
@@ -233,7 +237,7 @@ Path types
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma \vdash A : Type_{n+1}$}
+\AxiomC{$\Gamma_{+1} \vdash A : Type_{n+1}$}
 \AxiomC{$\Gamma_{+1} \vdash a : A$}
 \AxiomC{$\Gamma \vdash {\partial^\alpha_0}^* a : {\partial^\alpha_0}^* A$ for $\alpha = \pm$}
 \TrinaryInfC{$\Gamma \vdash path\ a : Id\ A\ ({\partial^-_0}^* a)\ ({\partial^+_0}^* a)$}
@@ -242,8 +246,49 @@ Path types
 
 \medskip
 \begin{center}
-\AxiomC{$\Gamma_{-1} \vdash p : Id\ A\ a\ a'$}
-\UnaryInfC{$\Gamma \vdash path^{-1}\ a\ a'\ p : A$}
+\Axiom$\fCenter \Gamma, a :_0 A, a' :_0 A, p :_0 Id\ (\epsilon_0^* A)\ a\ a' \vdash C : Type_n$
+\noLine
+\def\extraVskip{1pt}
+\UnaryInf$\fCenter \Gamma \vdash d : \Pi (a : A) C[a' := a, p := idp\ a]$
+\AxiomC{$\Gamma \vdash p : Id\ (\epsilon_0^* A)\ a\ a'$}
+\def\extraVskip{2pt}
+\BinaryInfC{$\Gamma \vdash J\ d\ p : C\ a\ a'\ p$}
+\DisplayProof
+\end{center}
+
+\bigskip
+Liftings
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma_{+1} \vdash A : Type_1$}
+\AxiomC{$\Gamma \vdash a : {\partial^-_0}^* A$}
+\BinaryInfC{$\Gamma \vdash coe\ A\ a : {\partial^+_0}^* A$}
+\DisplayProof
+\quad
+\AxiomC{$\Gamma \vdash A : Type_1$}
+\AxiomC{$\Gamma \vdash a : {\partial^-_0}^* A$}
+\BinaryInfC{$\Gamma \vdash lift\ A\ a : A$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : Type_{n+2}$}
+\AxiomC{$\Gamma \vdash a : {\partial^-_1}^* A$}
+\AxiomC{$\Gamma \vdash a' : {\partial^-_0}^* A$}
+\AxiomC{$\Gamma \vdash a'' : {\partial^+_1}^* A$}
+\QuaternaryInfC{$\Gamma \vdash comp\ A\ a\ a'\ a'' : {\partial^+_0}^* A$}
+\DisplayProof
+\end{center}
+
+\medskip
+\begin{center}
+\AxiomC{$\Gamma \vdash A : Type_{n+2}$}
+\AxiomC{$\Gamma \vdash a : {\partial^-_1}^* A$}
+\AxiomC{$\Gamma \vdash a' : {\partial^-_0}^* A$}
+\AxiomC{$\Gamma \vdash a'' : {\partial^+_1}^* A$}
+\QuaternaryInfC{$\Gamma \vdash fill\ A\ a\ a'\ a'' : A$}
 \DisplayProof
 \end{center}
 
